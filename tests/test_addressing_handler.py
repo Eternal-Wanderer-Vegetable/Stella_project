@@ -5,10 +5,22 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from core.transport.models import UserRef
 from memory.addressing_intent import (
     SET_SELF_ADDRESS,
     AddressingRequest,
 )
+
+
+def _preference(gateway, space: str, user_id: str | int):
+    raw_user_id = str(user_id)
+    user = UserRef("qq:client", raw_user_id)
+    return gateway.addressing.get_preference(
+        space,
+        raw_user_id,
+        subject_key=user.subject_key,
+        legacy_user_id=raw_user_id,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -93,7 +105,7 @@ async def test_self_set_is_persisted_and_finishes_handler(handler_env):
 
     await gateway.handle_addressing(bot, event)
 
-    preference = gateway.addressing.get_preference("space_a", 111)
+    preference = _preference(gateway, "space_a", 111)
     assert preference is not None
     assert preference.address_term == "哥哥"
     gateway.addressing_handler.finish.assert_awaited_once()
@@ -107,7 +119,7 @@ async def test_admin_can_set_address_for_explicit_at_target(handler_env):
 
     await gateway.handle_addressing(bot, event)
 
-    preference = gateway.addressing.get_preference("space_a", 1002)
+    preference = _preference(gateway, "space_a", 1002)
     assert preference is not None
     assert preference.address_term == "哥哥"
     assert preference.updated_by_user_id == "111"
@@ -121,7 +133,7 @@ async def test_non_admin_cannot_set_address_for_other_user(handler_env):
 
     await gateway.handle_addressing(bot, event)
 
-    assert gateway.addressing.get_preference("space_a", 1002) is None
+    assert _preference(gateway, "space_a", 1002) is None
     gateway.addressing_handler.finish.assert_awaited_once()
 
 
@@ -138,5 +150,5 @@ async def test_other_address_without_target_is_clarified(handler_env):
 
     await gateway.handle_addressing(bot, event)
 
-    assert gateway.addressing.get_preference("space_a", 111) is None
+    assert _preference(gateway, "space_a", 111) is None
     gateway.addressing_handler.finish.assert_awaited_once()

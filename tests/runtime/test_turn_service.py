@@ -75,7 +75,7 @@ def _ctx(message: str = "在吗", **kwargs) -> ChatContext:
 
 def test_prepare_returns_typed_generate_and_stashes_prompt():
     reply = (
-        '<response version="2026-10-08.1"><thought></thought>'
+        '<response version="2026-10-21.1"><thought></thought>'
         "<action>NONE</action><reply kind=\"social\"><current>好</current>"
         "</reply></response>"
     )
@@ -119,7 +119,7 @@ def test_old_persona_protocol_is_replaced_before_budget_and_generation(monkeypat
     assert "## 特殊语气\n可以叫用户 Ain。" in actual_system
     assert "<reply>台词</reply>" not in actual_system
     assert "## 统一输出格式" not in actual_system
-    assert actual_system.count('<response version="2026-10-08.1">') == 1
+    assert actual_system.count('<response version="2026-10-21.1">') == 1
     assert ctx.system_prompt_len == len(actual_system)
     out = asyncio.run(svc.generate_reply(ctx))
     out = asyncio.run(svc.finalize_turn(out))
@@ -216,7 +216,7 @@ def test_projection_excludes_handles_and_roundtrips_json():
     # v2：社交闭环身份（trace_id/turn_id）进投影（计划 §6.1）；
     # v3：会话身份字段（conversation_kind/key/bot_id/peer/storage）进投影；
     # v4：消息身份信封；v6：typed reply、DeliveryDraft/Plan 与 runtime fence。
-    assert proj["projection_schema_version"] == 6
+    assert proj["projection_schema_version"] == 7
     assert "reply_to_msg_id" in proj and "logical_message_id" in proj
     assert "identity_capsule" in proj
     assert "delivery_draft" in proj and "delivery_plan" in proj

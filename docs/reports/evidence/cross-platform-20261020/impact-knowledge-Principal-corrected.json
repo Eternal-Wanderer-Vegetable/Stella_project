@@ -1,0 +1,154 @@
+{
+  "target": {
+    "id": "Class:knowledge/acl.py:Principal",
+    "name": "Principal",
+    "type": "Class",
+    "filePath": "knowledge/acl.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 13,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 4,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 4,
+    "2": 6,
+    "3": 3
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:capability/providers/knowledge.py",
+        "name": "knowledge.py",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:knowledge/service.py",
+        "name": "service.py",
+        "filePath": "knowledge/service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:knowledge/store.py",
+        "name": "store.py",
+        "filePath": "knowledge/store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/kb.py",
+        "name": "kb.py",
+        "filePath": "webui/services/kb.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:capability/adapters/knowledge.py",
+        "name": "knowledge.py",
+        "filePath": "capability/adapters/knowledge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/hooks.py",
+        "name": "hooks.py",
+        "filePath": "capability/hooks.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:knowledge/embedding.py",
+        "name": "embedding.py",
+        "filePath": "knowledge/embedding.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:knowledge/ingest.py",
+        "name": "ingest.py",
+        "filePath": "knowledge/ingest.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:knowledge/retrieval.py",
+        "name": "retrieval.py",
+        "filePath": "knowledge/retrieval.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/manage.py",
+        "name": "manage.py",
+        "filePath": "webui/routers/manage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:bot.py",
+        "name": "bot.py",
+        "filePath": "bot.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/app.py",
+        "name": "app.py",
+        "filePath": "webui/app.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  }
+}

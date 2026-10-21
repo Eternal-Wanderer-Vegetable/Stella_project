@@ -1,0 +1,118 @@
+{
+  "target": {
+    "id": "Class:stella_project/plugins/bot_main/scheduling/models.py:Task",
+    "name": "Task",
+    "type": "Class",
+    "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 9,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 4,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 4,
+    "2": 2,
+    "3": 3
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/delivery.py",
+        "name": "delivery.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/runtime.py",
+        "name": "runtime.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/service.py",
+        "name": "service.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/store.py",
+        "name": "store.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/services/sched.py",
+        "name": "sched.py",
+        "filePath": "webui/services/sched.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:stella_project/plugins/bot_main/__init__.py",
+        "name": "__init__.py",
+        "filePath": "stella_project/plugins/bot_main/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/routers/manage.py",
+        "name": "manage.py",
+        "filePath": "webui/routers/manage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  }
+}

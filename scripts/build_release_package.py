@@ -19,6 +19,7 @@ from deploy.install_contract import (
     write_payload_mode,
     write_release_metadata,
 )
+from deploy.manifest import write_manifest
 from deploy.profiles import PROFILE_IDS, load_profile
 
 COMMON_FILES = (
@@ -208,6 +209,9 @@ def build_standalone(
             target = output / "wheels" / wheel.name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(wheel, target)
+    # The manifest is built from the final packaged defaults, not copied from the
+    # source checkout (which may not have run the release manifest step).
+    write_manifest(output)
     _assert_clean(output)
     archive = output.parent / profile["artifact"]["filename"]
     if archive.exists():
@@ -384,6 +388,8 @@ def stage_installer_resources(
         (output / VERSIONED_LAYOUT_FILENAME).write_text(
             "1\n", encoding="utf-8"
         )
+    # Keep upgrade metadata alongside the exact defaults shipped in this payload.
+    write_manifest(output)
     return output
 
 

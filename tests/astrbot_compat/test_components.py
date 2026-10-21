@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 from astrbot_compat.components import (
     At,
@@ -22,6 +23,7 @@ from astrbot_compat.components import (
     Reply,
     Video,
     from_onebot_dicts,
+    from_platform_message,
     split_forward_nodes,
     to_onebot_message,
 )
@@ -88,6 +90,21 @@ def test_from_onebot_dicts_roundtrip():
         "Face",
         "Unknown",
     ]
+
+
+def test_platform_neutral_message_chain_conversion():
+    chain = from_platform_message(
+        [
+            "hello",
+            SimpleNamespace(type="image", data={"url": "https://example.test/a.png"}),
+            {"type": "plain", "text": "world"},
+            {"type": "mention", "data": {"id": "42"}},
+        ],
+    )
+    assert isinstance(chain[0], Plain) and chain[0].text == "hello"
+    assert isinstance(chain[1], Image) and chain[1].file == "https://example.test/a.png"
+    assert isinstance(chain[2], Plain) and chain[2].text == "world"
+    assert isinstance(chain[3], At) and chain[3].qq == "42"
 
 
 def test_reply_segment_parses_nested_sender():

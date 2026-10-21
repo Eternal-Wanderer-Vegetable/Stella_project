@@ -53,23 +53,89 @@ _TOOL_DESCRIPTION = (
 )
 
 
-def _principal_of(event: Any) -> tuple[str, str, str, bool]:
-    """从聊天事件推导 ACL 主体 ``(user_id, group_id, space, in_group)``。
+def _principal_of(event: Any) -> tuple[str, str, str, bool, str, tuple[str, ...], tuple[str, ...]]:
+    """Derive namespaced ACL IDs and explicit legacy QQ aliases from the event.
 
     防御式取值：任何一层拿不到就降级（空 user_id = 无权限，检索自然为空），
     绝不抛异常——工具层的异常会被 execute_tool 转成 error 字符串回喂模型。
     """
-    user_id = str(getattr(event, "get_sender_id", lambda: "")() or "")
-    group_id = str(getattr(event, "get_group_id", lambda: "")() or "")
+    from core.transport.models import BotRef, SceneRef, UserRef
+
+    user_id = ""
+    identity_domain = ""
+    legacy_user_ids: tuple[str, ...] = ()
+    legacy_group_ids: tuple[str, ...] = ()
+    raw_user_id = str(getattr(event, "get_sender_id", lambda: "")() or "")
+    raw_group_id = str(getattr(event, "get_group_id", lambda: "")() or "")
+    user_ref = getattr(event, "user_ref", None)
+    if isinstance(user_ref, UserRef):
+        user_id = user_ref.subject_key
+        identity_domain = user_ref.identity_domain
+        if identity_domain == "qq:client":
+            legacy_user_ids = (user_ref.raw_user_id,)
+    else:
+        # The only legacy platform inference retained here is the concrete
+        # OneBot v11 event type, whose user ID is the QQ client account domain.
+        try:
+            from nonebot.adapters.onebot.v11 import (
+                GroupMessageEvent,
+                PrivateMessageEvent,
+            )
+
+            is_qq_event = isinstance(event, (GroupMessageEvent, PrivateMessageEvent))
+        except ImportError:
+            is_qq_event = False
+        explicit_domain = str(getattr(event, "identity_domain", "") or "").strip()
+        if is_qq_event:
+            identity_domain = "qq:client"
+        elif explicit_domain:
+            identity_domain = explicit_domain
+        if identity_domain and raw_user_id:
+            user_ref = UserRef(identity_domain, raw_user_id)
+            user_id = user_ref.subject_key
+            if identity_domain == "qq:client":
+                legacy_user_ids = (raw_user_id,)
+
     space = ""
-    if group_id:
+    group_id = ""
+    in_group = bool(raw_group_id)
+    scene_ref = getattr(event, "scene_ref", None)
+    bot_ref = getattr(event, "bot_ref", None)
+    if isinstance(scene_ref, SceneRef):
+        in_group = scene_ref.kind not in {"private", "webchat"}
+    if isinstance(scene_ref, SceneRef) and isinstance(bot_ref, BotRef):
+        try:
+            from core.transport.keys import conversation_key_v2
+
+            if in_group:
+                group_id = conversation_key_v2(bot_ref, scene_ref)
+        except Exception:
+            group_id = ""
+    elif identity_domain == "qq:client" and raw_group_id:
+        legacy_group_ids = (raw_group_id,)
         try:
             from config.spaces import resolve_space
 
-            space = resolve_space(int(group_id))
+            space = resolve_space(int(raw_group_id))
         except Exception:
             space = ""
-    return user_id, group_id, space, bool(group_id)
+        if not group_id:
+            self_id = str(getattr(event, "self_id", "") or "")
+            group_id = f"qq:{self_id}:group:{raw_group_id}" if self_id else ""
+    elif identity_domain and raw_group_id:
+        # Never promote a bare group ID to a cross-connection ACL key.
+        group_id = ""
+    if not space:
+        space = str(getattr(event, "memory_space", "") or "")
+    return (
+        user_id,
+        group_id,
+        space,
+        in_group,
+        identity_domain,
+        legacy_user_ids,
+        legacy_group_ids,
+    )
 
 
 class KnowledgeSearchTool(FunctionTool):
@@ -88,7 +154,15 @@ class KnowledgeSearchTool(FunctionTool):
 
     async def call(self, context: Any, **kwargs: Any) -> str:
         event = getattr(context, "context", None)
-        user_id, group_id, space, in_group = _principal_of(event)
+        (
+            user_id,
+            group_id,
+            space,
+            in_group,
+            user_identity_domain,
+            legacy_user_ids,
+            legacy_group_ids,
+        ) = _principal_of(event)
         query = str(kwargs.get("query") or "").strip()
         kb_ids = kwargs.get("kb_ids") or None
         if isinstance(kb_ids, str):
@@ -105,7 +179,14 @@ class KnowledgeSearchTool(FunctionTool):
 
             result = await get_service().search(
                 query,
-                Principal(user_id=user_id, group_id=group_id, space=space),
+                Principal(
+                    user_id=user_id,
+                    group_id=group_id,
+                    space=space,
+                    user_identity_domain=user_identity_domain,
+                    legacy_user_ids=legacy_user_ids,
+                    legacy_group_ids=legacy_group_ids,
+                ),
                 in_group=in_group,
                 kb_ids=[str(k) for k in kb_ids] if kb_ids else None,
             )

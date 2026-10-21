@@ -1,0 +1,158 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:memory_rust/backend.py:RetrievalRequest",
+    "name": "RetrievalRequest",
+    "kind": "Class",
+    "filePath": "memory_rust/backend.py",
+    "startLine": 41,
+    "endLine": 66
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:docs/development/contracts.en.md",
+        "name": "contracts.en.md",
+        "filePath": "docs/development/contracts.en.md"
+      },
+      {
+        "uid": "File:docs/development/contracts.md",
+        "name": "contracts.md",
+        "filePath": "docs/development/contracts.md"
+      },
+      {
+        "uid": "File:memory/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "memory/benchmark.py"
+      },
+      {
+        "uid": "File:memory/memory_manager.py",
+        "name": "memory_manager.py",
+        "filePath": "memory/memory_manager.py"
+      },
+      {
+        "uid": "File:memory/retrieval_v2.py",
+        "name": "retrieval_v2.py",
+        "filePath": "memory/retrieval_v2.py"
+      },
+      {
+        "uid": "File:memory_rust/__init__.py",
+        "name": "__init__.py",
+        "filePath": "memory_rust/__init__.py"
+      },
+      {
+        "uid": "File:memory_rust/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "memory_rust/benchmark.py"
+      },
+      {
+        "uid": "File:memory_rust/python_backend.py",
+        "name": "python_backend.py",
+        "filePath": "memory_rust/python_backend.py"
+      },
+      {
+        "uid": "File:memory_rust/selector.py",
+        "name": "selector.py",
+        "filePath": "memory_rust/selector.py"
+      },
+      {
+        "uid": "File:scripts/validate_rust_fullchain.py",
+        "name": "validate_rust_fullchain.py",
+        "filePath": "scripts/validate_rust_fullchain.py"
+      },
+      {
+        "uid": "File:tests/test_benchmark_and_log.py",
+        "name": "test_benchmark_and_log.py",
+        "filePath": "tests/test_benchmark_and_log.py"
+      },
+      {
+        "uid": "File:tests/test_memory_rust_benchmark.py",
+        "name": "test_memory_rust_benchmark.py",
+        "filePath": "tests/test_memory_rust_benchmark.py"
+      },
+      {
+        "uid": "File:tests/test_memory_rust_promotion.py",
+        "name": "test_memory_rust_promotion.py",
+        "filePath": "tests/test_memory_rust_promotion.py"
+      },
+      {
+        "uid": "File:tests/test_memory_rust_selector.py",
+        "name": "test_memory_rust_selector.py",
+        "filePath": "tests/test_memory_rust_selector.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:memory_rust/backend.py:RetrievalRequest.has_person_scope#0",
+        "name": "has_person_scope",
+        "filePath": "memory_rust/backend.py"
+      }
+    ],
+    "has_property": [
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.db_path",
+        "name": "db_path",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.group_shared_space",
+        "name": "group_shared_space",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.mode",
+        "name": "mode",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.pool_limit",
+        "name": "pool_limit",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.query",
+        "name": "query",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.scope_person_audiences",
+        "name": "scope_person_audiences",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.scope_person_owner_key",
+        "name": "scope_person_owner_key",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.scope_space_key",
+        "name": "scope_space_key",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.scope_subject_key",
+        "name": "scope_subject_key",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.semantic_scores",
+        "name": "semantic_scores",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.trigger",
+        "name": "trigger",
+        "filePath": "memory_rust/backend.py"
+      },
+      {
+        "uid": "Property:memory_rust/backend.py:RetrievalRequest.user_id",
+        "name": "user_id",
+        "filePath": "memory_rust/backend.py"
+      }
+    ]
+  },
+  "processes": []
+}

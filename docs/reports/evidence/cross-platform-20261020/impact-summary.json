@@ -1,0 +1,2541 @@
+[
+  {
+    "evidence": "impact-ChatContext-core_context_py.json",
+    "target": {
+      "id": "Class:core/context.py:ChatContext",
+      "name": "ChatContext",
+      "type": "Class",
+      "filePath": "core/context.py"
+    },
+    "risk": "MEDIUM",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 11,
+    "impacted_count": 22,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:capability/delegation.py",
+        "name": "delegation.py",
+        "filePath": "capability/delegation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/hooks.py",
+        "name": "hooks.py",
+        "filePath": "capability/hooks.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/planner.py",
+        "name": "planner.py",
+        "filePath": "core/planner.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/runtime/facade.py",
+        "name": "facade.py",
+        "filePath": "core/runtime/facade.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/runtime/turn_service.py",
+        "name": "turn_service.py",
+        "filePath": "core/runtime/turn_service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/conversation_identity.py",
+        "name": "conversation_identity.py",
+        "filePath": "memory/conversation_identity.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/post_processors.py",
+        "name": "post_processors.py",
+        "filePath": "memory/post_processors.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/pre_processors.py",
+        "name": "pre_processors.py",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:scripts/evaluate_dialogue_attribution.py",
+        "name": "evaluate_dialogue_attribution.py",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-ConversationRef-core_conversation_py.json",
+    "target": {
+      "id": "Class:core/conversation.py:ConversationRef",
+      "name": "ConversationRef",
+      "type": "Class",
+      "filePath": "core/conversation.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 9,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:memory/conversation_registry.py",
+        "name": "conversation_registry.py",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-DeliveryService-stella_project_plugins_bot_main_scheduling_delivery_py.json",
+    "target": {
+      "id": "Class:stella_project/plugins/bot_main/scheduling/delivery.py:DeliveryService",
+      "name": "DeliveryService",
+      "type": "Class",
+      "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 6,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/runtime.py",
+        "name": "runtime.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-Origin-cometa_models_py.json",
+    "target": {
+      "id": "Class:cometa/models.py:Origin",
+      "name": "Origin",
+      "type": "Class",
+      "filePath": "cometa/models.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 19,
+    "impacted_count": 31,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:capability/delegation.py",
+        "name": "delegation.py",
+        "filePath": "capability/delegation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/artifacts.py",
+        "name": "artifacts.py",
+        "filePath": "cometa/artifacts.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/backends/base.py",
+        "name": "base.py",
+        "filePath": "cometa/backends/base.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/backends/codex.py",
+        "name": "codex.py",
+        "filePath": "cometa/backends/codex.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/backends/codex_events.py",
+        "name": "codex_events.py",
+        "filePath": "cometa/backends/codex_events.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/backends/fake.py",
+        "name": "fake.py",
+        "filePath": "cometa/backends/fake.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/config.py",
+        "name": "config.py",
+        "filePath": "cometa/config.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/delivery.py",
+        "name": "delivery.py",
+        "filePath": "cometa/delivery.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/executor.py",
+        "name": "executor.py",
+        "filePath": "cometa/executor.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/policy.py",
+        "name": "policy.py",
+        "filePath": "cometa/policy.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/presentation.py",
+        "name": "presentation.py",
+        "filePath": "cometa/presentation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/service.py",
+        "name": "service.py",
+        "filePath": "cometa/service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/store.py",
+        "name": "store.py",
+        "filePath": "cometa/store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/supervisor.py",
+        "name": "supervisor.py",
+        "filePath": "cometa/supervisor.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/worker.py",
+        "name": "worker.py",
+        "filePath": "cometa/worker.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:cometa/workspace.py",
+        "name": "workspace.py",
+        "filePath": "cometa/workspace.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/cometa_bridge.py",
+        "name": "cometa_bridge.py",
+        "filePath": "stella_project/plugins/bot_main/cometa_bridge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/routers/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/routers/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/services/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-RetrievalRequest-memory_rust_backend_py.json",
+    "target": {
+      "id": "Class:memory_rust/backend.py:RetrievalRequest",
+      "name": "RetrievalRequest",
+      "type": "Class",
+      "filePath": "memory_rust/backend.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 10,
+    "impacted_count": 108,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:docs/development/contracts.en.md",
+        "name": "contracts.en.md",
+        "filePath": "docs/development/contracts.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/development/contracts.md",
+        "name": "contracts.md",
+        "filePath": "docs/development/contracts.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "memory/benchmark.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/memory_manager.py",
+        "name": "memory_manager.py",
+        "filePath": "memory/memory_manager.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/retrieval_v2.py",
+        "name": "retrieval_v2.py",
+        "filePath": "memory/retrieval_v2.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory_rust/__init__.py",
+        "name": "__init__.py",
+        "filePath": "memory_rust/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory_rust/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "memory_rust/benchmark.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory_rust/python_backend.py",
+        "name": "python_backend.py",
+        "filePath": "memory_rust/python_backend.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory_rust/selector.py",
+        "name": "selector.py",
+        "filePath": "memory_rust/selector.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:scripts/validate_rust_fullchain.py",
+        "name": "validate_rust_fullchain.py",
+        "filePath": "scripts/validate_rust_fullchain.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-RuntimeFacade-core_runtime_facade_py.json",
+    "target": {
+      "id": "Class:core/runtime/facade.py:RuntimeFacade",
+      "name": "RuntimeFacade",
+      "type": "Class",
+      "filePath": "core/runtime/facade.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 3,
+    "impacted_count": 9,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/status_api.py",
+        "name": "status_api.py",
+        "filePath": "stella_project/plugins/bot_main/status_api.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-TurnService-core_runtime_turn_service_py.json",
+    "target": {
+      "id": "Class:core/runtime/turn_service.py:TurnService",
+      "name": "TurnService",
+      "type": "Class",
+      "filePath": "core/runtime/turn_service.py"
+    },
+    "risk": "MEDIUM",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 5,
+    "impacted_count": 15,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Class:core/pipeline.py:Pipeline",
+        "name": "Pipeline",
+        "filePath": "core/pipeline.py",
+        "relationType": "EXTENDS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Class:scripts/evaluate_dialogue_attribution.py:EvaluationTurnService",
+        "name": "EvaluationTurnService",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "EXTENDS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/pipeline.py",
+        "name": "pipeline.py",
+        "filePath": "core/pipeline.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/runtime/facade.py",
+        "name": "facade.py",
+        "filePath": "core/runtime/facade.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:scripts/evaluate_dialogue_attribution.py",
+        "name": "evaluate_dialogue_attribution.py",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-_proactive_at_user-stella_project_plugins_bot_main_ai_gateway_py.json",
+    "target": {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_at_user",
+      "name": "_proactive_at_user",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 1,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:proactive_speak_job",
+        "name": "proactive_speak_job",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_415_proactive_speak_job",
+            "label": "Proactive_speak_job → Next_seq",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_619_proactive_speak_job",
+            "label": "Proactive_speak_job → _new_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_614_proactive_speak_job",
+            "label": "Proactive_speak_job → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_727_proactive_speak_job",
+            "label": "Proactive_speak_job → _register",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_414_proactive_speak_job",
+            "label": "Proactive_speak_job → Sanitize_text",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_616_proactive_speak_job",
+            "label": "Proactive_speak_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_728_proactive_speak_job",
+            "label": "Proactive_speak_job → Dropped",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "evidence": "impact-_scheduling_sender-stella_project_plugins_bot_main_ai_gateway_py.json",
+    "target": {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_scheduling_sender",
+      "name": "_scheduling_sender",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "risk": "UNKNOWN",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 0,
+    "impacted_count": 0,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": []
+  },
+  {
+    "evidence": "impact-assess_candidate-memory_evidence_contract_py.json",
+    "target": {
+      "id": "Function:memory/evidence_contract.py:assess_candidate",
+      "name": "assess_candidate",
+      "type": "Function",
+      "filePath": "memory/evidence_contract.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 3,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._write_memory_candidates#8",
+        "name": "_write_memory_candidates",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-build_event-astrbot_compat_events_py.json",
+    "target": {
+      "id": "Function:astrbot_compat/events.py:build_event",
+      "name": "build_event",
+      "type": "Function",
+      "filePath": "astrbot_compat/events.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 5,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:astrbot_compat/pipeline.py:dispatch",
+        "name": "dispatch",
+        "filePath": "astrbot_compat/pipeline.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:capability/hooks.py:_build_astr_event",
+        "name": "_build_astr_event",
+        "filePath": "capability/hooks.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-build_origin-stella_project_plugins_bot_main_cometa_bridge_py.json",
+    "target": {
+      "id": "Function:stella_project/plugins/bot_main/cometa_bridge.py:build_origin",
+      "name": "build_origin",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/cometa_bridge.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 2,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+        "name": "handle_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_810_handle_chat",
+            "label": "Handle_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_809_handle_chat",
+            "label": "Handle_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_271_handle_chat",
+            "label": "Handle_chat → Bump_topic_revision",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_270_handle_chat",
+            "label": "Handle_chat → _state_for",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_554_handle_private_chat",
+            "label": "Handle_private_chat → Decision",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_815_handle_private_chat",
+            "label": "Handle_private_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_816_handle_private_chat",
+            "label": "Handle_private_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "evidence": "impact-coerce_platform_message_id-core_social_delivery_py.json",
+    "target": {
+      "id": "Function:core/social/delivery.py:coerce_platform_message_id",
+      "name": "coerce_platform_message_id",
+      "type": "Function",
+      "filePath": "core/social/delivery.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 10,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:core/social/delivery.py:deliver_lines",
+        "name": "deliver_lines",
+        "filePath": "core/social/delivery.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-deliver_lines-core_social_delivery_py.json",
+    "target": {
+      "id": "Function:core/social/delivery.py:deliver_lines",
+      "name": "deliver_lines",
+      "type": "Function",
+      "filePath": "core/social/delivery.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 6,
+    "impacted_count": 10,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_at_user",
+        "name": "_proactive_at_user",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_proactive_speak_impl",
+        "name": "_proactive_speak_impl",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+        "name": "handle_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_810_handle_chat",
+            "label": "Handle_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_809_handle_chat",
+            "label": "Handle_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_271_handle_chat",
+            "label": "Handle_chat → Bump_topic_revision",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_270_handle_chat",
+            "label": "Handle_chat → _state_for",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat._send_cometa_ack@1657:8",
+        "name": "_send_cometa_ack",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_554_handle_private_chat",
+            "label": "Handle_private_chat → Decision",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_815_handle_private_chat",
+            "label": "Handle_private_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_816_handle_private_chat",
+            "label": "Handle_private_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat._send_cometa_ack@2129:8",
+        "name": "_send_cometa_ack",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-exact-_principal_of.json",
+    "target": {
+      "id": "Function:capability/providers/knowledge.py:_principal_of",
+      "name": "_principal_of",
+      "type": "Function",
+      "filePath": "capability/providers/knowledge.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 1,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Method:capability/providers/knowledge.py:KnowledgeSearchTool.call",
+        "name": "call",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-exact-conversation-key.json",
+    "target": {
+      "id": "Function:core/conversation.py:conversation_key",
+      "name": "conversation_key",
+      "type": "Function",
+      "filePath": "core/conversation.py"
+    },
+    "risk": "CRITICAL",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 6,
+    "impacted_count": 14,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:core/conversation.py:qq_private_ref",
+        "name": "qq_private_ref",
+        "filePath": "core/conversation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:_register_with_allocated_storage",
+        "name": "_register_with_allocated_storage",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:get_or_register_group",
+        "name": "get_or_register_group",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:get_or_register_private",
+        "name": "get_or_register_private",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:get_or_register_webchat",
+        "name": "get_or_register_webchat",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_registry.py:lookup_by_identity",
+        "name": "lookup_by_identity",
+        "filePath": "memory/conversation_registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-exact-promote.json",
+    "target": {
+      "id": "Function:memory_rust/native/src/promotion.rs:promote",
+      "name": "promote",
+      "type": "Function",
+      "filePath": "memory_rust/native/src/promotion.rs"
+    },
+    "risk": "MEDIUM",
+    "epistemic": "lower-bound",
+    "boundaries": [
+      "1 call site invoking `promote` was dropped at index time because the receiver's type could not be established (e.g. an unresolved constructor, factory or chained expression). Those callers are absent from this result — actual impact may be higher."
+    ],
+    "direct": 9,
+    "impacted_count": 9,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/lib.rs:promote",
+        "name": "promote",
+        "filePath": "memory_rust/native/src/lib.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.duplicate_invocation_is_a_noop",
+        "name": "duplicate_invocation_is_a_noop",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.high_confidence_without_evidence_is_rejected",
+        "name": "high_confidence_without_evidence_is_rejected",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.lower_confidence_conflict_stays_observing_without_new_memory",
+        "name": "lower_confidence_conflict_stays_observing_without_new_memory",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.malformed_fts_rolls_back_the_entire_transaction",
+        "name": "malformed_fts_rolls_back_the_entire_transaction",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.promotion_commits_memory_and_candidate_atomically",
+        "name": "promotion_commits_memory_and_candidate_atomically",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.quota_archives_the_weakest_memory_and_removes_fts",
+        "name": "quota_archives_the_weakest_memory_and_removes_fts",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.scope_mismatch_is_rejected_before_writing",
+        "name": "scope_mismatch_is_rejected_before_writing",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.similar_candidate_merges_and_refreshes_fts_once",
+        "name": "similar_candidate_merges_and_refreshes_fts_once",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-exact-rust-retrieval-request.json",
+    "target": {
+      "id": "Struct:memory_rust/native/src/retrieval.rs:RetrievalRequest",
+      "name": "RetrievalRequest",
+      "type": "",
+      "filePath": "memory_rust/native/src/retrieval.rs"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 4,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/retrieval.rs:tests.test_request",
+        "name": "test_request",
+        "filePath": "memory_rust/native/src/retrieval.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-exact-verify_candidate_evidence.json",
+    "target": {
+      "id": "Function:memory_rust/native/src/promotion.rs:verify_candidate_evidence",
+      "name": "verify_candidate_evidence",
+      "type": "Function",
+      "filePath": "memory_rust/native/src/promotion.rs"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 11,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:promote_inner",
+        "name": "promote_inner",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-extract_image_sources-core_vision_py.json",
+    "target": {
+      "id": "Function:core/vision.py:extract_image_sources",
+      "name": "extract_image_sources",
+      "type": "Function",
+      "filePath": "core/vision.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 5,
+    "impacted_count": 5,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+        "name": "handle_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_809_handle_chat",
+            "label": "Handle_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_810_handle_chat",
+            "label": "Handle_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_271_handle_chat",
+            "label": "Handle_chat → Bump_topic_revision",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_270_handle_chat",
+            "label": "Handle_chat → _state_for",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_554_handle_private_chat",
+            "label": "Handle_private_chat → Decision",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_815_handle_private_chat",
+            "label": "Handle_private_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_816_handle_private_chat",
+            "label": "Handle_private_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:is_chat_trigger",
+        "name": "is_chat_trigger",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:is_private_trigger",
+        "name": "is_private_trigger",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:record_group_chat",
+        "name": "record_group_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_275_record_group_chat",
+            "label": "Record_group_chat → Clear_proactive_skips",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_642_record_group_chat",
+            "label": "Record_group_chat → Decision",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "evidence": "impact-file-feature_list.json.json",
+    "target": {
+      "id": "File:feature_list.json",
+      "name": "feature_list.json",
+      "type": "File",
+      "filePath": "feature_list.json"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 19,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/agent/workflow.md",
+        "name": "workflow.md",
+        "filePath": "docs/agent/workflow.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-file-progress.md.json",
+    "target": {
+      "id": "File:progress.md",
+      "name": "progress.md",
+      "type": "File",
+      "filePath": "progress.md"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 3,
+    "impacted_count": 26,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/agent/workflow.md",
+        "name": "workflow.md",
+        "filePath": "docs/agent/workflow.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/reports/2026-10-10-documentation-restructure.md",
+        "name": "2026-10-10-documentation-restructure.md",
+        "filePath": "docs/reports/2026-10-10-documentation-restructure.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-file-session-handoff-retry.json",
+    "target": {
+      "id": "File:session-handoff.md",
+      "name": "session-handoff.md",
+      "type": "File",
+      "filePath": "session-handoff.md"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 19,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/agent/workflow.md",
+        "name": "workflow.md",
+        "filePath": "docs/agent/workflow.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-file-session-handoff.md.json",
+    "target": {
+      "id": "File:session-handoff.md",
+      "name": "session-handoff.md",
+      "type": "File",
+      "filePath": "session-handoff.md"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 2,
+    "partial": true,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/agent/workflow.md",
+        "name": "workflow.md",
+        "filePath": "docs/agent/workflow.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-get_or_register_group-memory_conversation_registry_py.json",
+    "target": {
+      "id": "Function:memory/conversation_registry.py:get_or_register_group",
+      "name": "get_or_register_group",
+      "type": "Function",
+      "filePath": "memory/conversation_registry.py"
+    },
+    "risk": "UNKNOWN",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 0,
+    "impacted_count": 0,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": []
+  },
+  {
+    "evidence": "impact-get_or_register_private-memory_conversation_registry_py.json",
+    "target": {
+      "id": "Function:memory/conversation_registry.py:get_or_register_private",
+      "name": "get_or_register_private",
+      "type": "Function",
+      "filePath": "memory/conversation_registry.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 4,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_register_private_conversation",
+        "name": "_register_private_conversation",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-handle_chat-stella_project_plugins_bot_main_ai_gateway_py.json",
+    "target": {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+      "name": "handle_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "risk": "UNKNOWN",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 0,
+    "impacted_count": 0,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": []
+  },
+  {
+    "evidence": "impact-handle_private_chat-stella_project_plugins_bot_main_ai_gateway_py.json",
+    "target": {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+      "name": "handle_private_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "risk": "UNKNOWN",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 0,
+    "impacted_count": 0,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": []
+  },
+  {
+    "evidence": "impact-knowledge-Principal-corrected.json",
+    "target": {
+      "id": "Class:knowledge/acl.py:Principal",
+      "name": "Principal",
+      "type": "Class",
+      "filePath": "knowledge/acl.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 4,
+    "impacted_count": 13,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:capability/providers/knowledge.py",
+        "name": "knowledge.py",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:knowledge/service.py",
+        "name": "service.py",
+        "filePath": "knowledge/service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:knowledge/store.py",
+        "name": "store.py",
+        "filePath": "knowledge/store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/kb.py",
+        "name": "kb.py",
+        "filePath": "webui/services/kb.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-platform_link-webui_services_runtime_py.json",
+    "target": {
+      "id": "Function:webui/services/runtime.py:platform_link",
+      "name": "platform_link",
+      "type": "Function",
+      "filePath": "webui/services/runtime.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 1,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:webui/routers/platform.py:platform_link",
+        "name": "platform_link",
+        "filePath": "webui/routers/platform.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_134_platform_link",
+            "label": "Platform_link → _extract_ws_url",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_135_platform_link",
+            "label": "Platform_link → _port_in_use",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_137_platform_link",
+            "label": "Platform_link → _tcp_reachable",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_136_platform_link",
+            "label": "Platform_link → _token_facts",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "evidence": "impact-record_group_chat-stella_project_plugins_bot_main_ai_gateway_py.json",
+    "target": {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:record_group_chat",
+      "name": "record_group_chat",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "risk": "UNKNOWN",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 0,
+    "impacted_count": 0,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": []
+  },
+  {
+    "evidence": "impact-record_message-memory_pre_processors_py.json",
+    "target": {
+      "id": "Function:memory/pre_processors.py:record_message",
+      "name": "record_message",
+      "type": "Function",
+      "filePath": "memory/pre_processors.py"
+    },
+    "risk": "CRITICAL",
+    "epistemic": "lower-bound",
+    "boundaries": [
+      "3 call sites invoking `record_message` were dropped at index time because the receiver's type could not be established (e.g. an unresolved constructor, factory or chained expression). Those callers are absent from this result — actual impact may be higher."
+    ],
+    "direct": 4,
+    "impacted_count": 18,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_record_bot_lines",
+        "name": "_record_bot_lines",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_464_handle_toggle",
+            "label": "Handle_toggle → Parse_platform_message_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_185_handle_toggle",
+            "label": "Handle_toggle → Storage_key",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_272_handle_reload",
+            "label": "Handle_reload → Parse_platform_message_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_439_handle_toggle",
+            "label": "Handle_toggle → Decision",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_181_handle_reload",
+            "label": "Handle_reload → Decision",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_184_handle_toggle",
+            "label": "Handle_toggle → Normalize_source_kind",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_183_handle_toggle",
+            "label": "Handle_toggle → _has_column",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_554_handle_private_chat",
+            "label": "Handle_private_chat → Decision",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_815_handle_private_chat",
+            "label": "Handle_private_chat → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_816_handle_private_chat",
+            "label": "Handle_private_chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:record_group_chat",
+        "name": "record_group_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_275_record_group_chat",
+            "label": "Record_group_chat → Clear_proactive_skips",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_642_record_group_chat",
+            "label": "Record_group_chat → Decision",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:webui/chat_ingress.py:run_turn",
+        "name": "run_turn",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-resolve_space-config_spaces_py.json",
+    "target": {
+      "id": "Function:config/spaces.py:resolve_space",
+      "name": "resolve_space",
+      "type": "Function",
+      "filePath": "config/spaces.py"
+    },
+    "risk": "CRITICAL",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 13,
+    "impacted_count": 28,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:capability/providers/knowledge.py:_principal_of",
+        "name": "_principal_of",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:config/spaces.py:list_spaces",
+        "name": "list_spaces",
+        "filePath": "config/spaces.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:core/conversation.py:qq_group_ref",
+        "name": "qq_group_ref",
+        "filePath": "core/conversation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/pre_processors.py:_build_user_context_v2",
+        "name": "_build_user_context_v2",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/pre_processors.py:build_user_context",
+        "name": "build_user_context",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/proactive_target.py:pick_target",
+        "name": "pick_target",
+        "filePath": "memory/proactive_target.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:scripts/eval_memory_replay.py:_evaluate_metrics._run_qa@303:4",
+        "name": "_run_qa",
+        "filePath": "scripts/eval_memory_replay.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_space_system_prompt",
+        "name": "_space_system_prompt",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_addressing",
+        "name": "handle_addressing",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_179_handle_addressing",
+            "label": "Handle_addressing → Create_user_address_preferences_table",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_267_handle_addressing",
+            "label": "Handle_addressing → _scope",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_269_handle_addressing",
+            "label": "Handle_addressing → Normalize_address_term",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_268_handle_addressing",
+            "label": "Handle_addressing → _from_row",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Function:webui/services/groups.py:list_groups",
+        "name": "list_groups",
+        "filePath": "webui/services/groups.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_573_groups_list",
+            "label": "Groups_list → _memory_db",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_124_groups_list",
+            "label": "Groups_list → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_126_groups_list",
+            "label": "Groups_list → Save_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_85_groups_list",
+            "label": "Groups_list → Load_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_125_groups_list",
+            "label": "Groups_list → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Method:core/context.py:ChatContext.__post_init__#0",
+        "name": "__post_init__",
+        "filePath": "core/context.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:core/planner.py:RestrictedPlanner._query_memory#2",
+        "name": "_query_memory",
+        "filePath": "core/planner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_419_maybe_plan",
+            "label": "Maybe_plan → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_399_maybe_plan",
+            "label": "Maybe_plan → Load_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_420_maybe_plan",
+            "label": "Maybe_plan → Save_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_149_maybe_plan",
+            "label": "Maybe_plan → Space_owner_key",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_418_maybe_plan",
+            "label": "Maybe_plan → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 1,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+        "name": "_consolidate_group_core",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-run_turn-webui_chat_ingress_py.json",
+    "target": {
+      "id": "Function:webui/chat_ingress.py:run_turn",
+      "name": "run_turn",
+      "type": "Function",
+      "filePath": "webui/chat_ingress.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 2,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:webui/routers/chat.py:chat.stream@137:4",
+        "name": "stream",
+        "filePath": "webui/routers/chat.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_543_chat",
+            "label": "Chat → Next_seq",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_685_chat",
+            "label": "Chat → _new_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_683_chat",
+            "label": "Chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_726_stream",
+            "label": "Stream → _new_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_725_stream",
+            "label": "Stream → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_542_chat",
+            "label": "Chat → Sanitize_text",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_633_stream",
+            "label": "Stream → Next_seq",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_681_chat",
+            "label": "Chat → Alive",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_723_stream",
+            "label": "Stream → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_696_stream",
+            "label": "Stream → Utc_now",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "evidence": "impact-scheduling-Task.json",
+    "target": {
+      "id": "Class:stella_project/plugins/bot_main/scheduling/models.py:Task",
+      "name": "Task",
+      "type": "Class",
+      "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 4,
+    "impacted_count": 9,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/delivery.py",
+        "name": "delivery.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/runtime.py",
+        "name": "runtime.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/service.py",
+        "name": "service.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/scheduling/store.py",
+        "name": "store.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-scope_for_chat_context-memory_ownership_py.json",
+    "target": {
+      "id": "Function:memory/ownership.py:scope_for_chat_context",
+      "name": "scope_for_chat_context",
+      "type": "Function",
+      "filePath": "memory/ownership.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 5,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:memory/pre_processors.py:_build_user_context_v2",
+        "name": "_build_user_context_v2",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:core/planner.py:RestrictedPlanner._query_memory#2",
+        "name": "_query_memory",
+        "filePath": "core/planner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_419_maybe_plan",
+            "label": "Maybe_plan → Load_explicit_spaces",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_399_maybe_plan",
+            "label": "Maybe_plan → Load_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_420_maybe_plan",
+            "label": "Maybe_plan → Save_ledger",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_149_maybe_plan",
+            "label": "Maybe_plan → Space_owner_key",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_418_maybe_plan",
+            "label": "Maybe_plan → Allocate_space_name",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "evidence": "impact-scope_for_conversation-memory_ownership_py.json",
+    "target": {
+      "id": "Function:memory/ownership.py:scope_for_conversation",
+      "name": "scope_for_conversation",
+      "type": "Function",
+      "filePath": "memory/ownership.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 5,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:memory/ownership.py:scope_for_chat_context",
+        "name": "scope_for_chat_context",
+        "filePath": "memory/ownership.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_149_maybe_plan",
+            "label": "Maybe_plan → Space_owner_key",
+            "processType": "cross_community",
+            "step": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "evidence": "impact-should_dispatch-astrbot_compat_pipeline_py.json",
+    "target": {
+      "id": "Function:astrbot_compat/pipeline.py:should_dispatch",
+      "name": "should_dispatch",
+      "type": "Function",
+      "filePath": "astrbot_compat/pipeline.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 1,
+    "impacted_count": 1,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:is_plugin_trigger",
+        "name": "is_plugin_trigger",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-to_onebot_message-astrbot_compat_components_py.json",
+    "target": {
+      "id": "Function:astrbot_compat/components.py:to_onebot_message",
+      "name": "to_onebot_message",
+      "type": "Function",
+      "filePath": "astrbot_compat/components.py"
+    },
+    "risk": "LOW",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 11,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Method:astrbot_compat/context.py:Context._deliver#4",
+        "name": "_deliver",
+        "filePath": "astrbot_compat/context.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:astrbot_compat/events.py:AstrMessageEvent._send_components#1",
+        "name": "_send_components",
+        "filePath": "astrbot_compat/events.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_154_run_provider_request",
+            "label": "Run_provider_request → Split_forward_nodes",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_107_run_provider_request",
+            "label": "Run_provider_request → Get_group_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_155_run_provider_request",
+            "label": "Run_provider_request → To_onebot_message",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_108_run_provider_request",
+            "label": "Run_provider_request → Get_sender_id",
+            "processType": "cross_community",
+            "step": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "evidence": "impact-verify_source_snapshot-memory_evidence_contract_py.json",
+    "target": {
+      "id": "Function:memory/evidence_contract.py:verify_source_snapshot",
+      "name": "verify_source_snapshot",
+      "type": "Function",
+      "filePath": "memory/evidence_contract.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 4,
+    "impacted_count": 10,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:memory/memory_manager.py:MemoryManager._process_new_candidates_python._has_current_accepted_evidence@645:8#1",
+        "name": "_has_current_accepted_evidence",
+        "filePath": "memory/memory_manager.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/proactive_contract.py:validate_contract_consistency",
+        "name": "validate_contract_consistency",
+        "filePath": "memory/proactive_contract.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/proactive_target.py:_fetch_observing_candidate",
+        "name": "_fetch_observing_candidate",
+        "filePath": "memory/proactive_target.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_build_proactive_contract",
+        "name": "_build_proactive_contract",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-parse-reply-envelope.json",
+    "target": {
+      "id": "Function:core/dialogue_attribution.py:parse_reply_envelope",
+      "name": "parse_reply_envelope",
+      "type": "Function",
+      "filePath": "core/dialogue_attribution.py"
+    },
+    "risk": "HIGH",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 6,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:core/dialogue_attribution.py:apply_attribution_guard",
+        "name": "apply_attribution_guard",
+        "filePath": "core/dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory/post_processors.py:parse_output",
+        "name": "parse_output",
+        "filePath": "memory/post_processors.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  },
+  {
+    "evidence": "impact-parse-platform-message-id.json",
+    "target": {
+      "id": "Function:memory/conversation_projection.py:parse_platform_message_id",
+      "name": "parse_platform_message_id",
+      "type": "Function",
+      "filePath": "memory/conversation_projection.py"
+    },
+    "risk": "CRITICAL",
+    "epistemic": "exact",
+    "boundaries": [],
+    "direct": 2,
+    "impacted_count": 22,
+    "partial": false,
+    "truncated": false,
+    "direct_dependencies": [
+      {
+        "depth": 1,
+        "id": "Function:memory/conversation_projection.py:canonical_message_id_text",
+        "name": "canonical_message_id_text",
+        "filePath": "memory/conversation_projection.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_record_bot_lines",
+        "name": "_record_bot_lines",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_464_handle_toggle",
+            "label": "Handle_toggle → Parse_platform_message_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_185_handle_toggle",
+            "label": "Handle_toggle → Storage_key",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_272_handle_reload",
+            "label": "Handle_reload → Parse_platform_message_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_439_handle_toggle",
+            "label": "Handle_toggle → Decision",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_181_handle_reload",
+            "label": "Handle_reload → Decision",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_184_handle_toggle",
+            "label": "Handle_toggle → Normalize_source_kind",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_183_handle_toggle",
+            "label": "Handle_toggle → _has_column",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -16,7 +16,11 @@ import sqlite3
 from collections.abc import Mapping
 from typing import Any
 
-ASSESSMENT_VERSION = "2026-10-08.1"
+LEGACY_ASSESSMENT_VERSION = "2026-10-08.1"
+ASSESSMENT_VERSION = "2026-10-21.1"
+SUPPORTED_ASSESSMENT_VERSIONS = frozenset(
+    {LEGACY_ASSESSMENT_VERSION, ASSESSMENT_VERSION}
+)
 EVIDENCE_STATUSES = frozenset(
     {"accepted", "rejected", "unknown", "legacy_unverified", "superseded"}
 )
@@ -39,6 +43,8 @@ _SOURCE_COLUMNS = (
     "part_index",
     "origin_msg_id",
     "reply_recipient_user_id",
+    "subject_key",
+    "connection_id",
 )
 _ACCEPTED_KINDS = frozenset({"self_report", "explicit_preference"})
 _CONDITIONAL = re.compile(
@@ -147,11 +153,79 @@ def _snapshot(row: Mapping[str, Any]) -> dict[str, Any]:
         if column not in row:
             continue
         value = row[column]
+        # Additive identity columns must not rewrite historical snapshot digests.
+        if column in {"subject_key", "connection_id"} and not str(value or "").strip():
+            continue
         if column in {"id", "part_index"}:
             result[column] = int(value or 0)
         else:
             result[column] = str(value or "")
     return result
+
+
+def supports_assessment_version(value: Any) -> bool:
+    """Whether a stored assessment has a validator for its version."""
+    return str(value or "") in SUPPORTED_ASSESSMENT_VERSIONS
+
+
+def _source_subject(rows: list[dict[str, Any]], *, bot_id: str) -> tuple[str, str, str]:
+    """Resolve identity from source rows only; proposal fields cannot set identity."""
+    from core.transport.keys import decode_subject_key_v2
+
+    subjects = {str(row.get("subject_key") or "").strip() for row in rows}
+    connections = {str(row.get("connection_id") or "").strip() for row in rows}
+    authors = {str(row.get("user_id") or "").strip() for row in rows}
+    if len(authors) != 1 or "" in authors:
+        return "", "", "source_author_mismatch"
+    author = next(iter(authors))
+    if subjects == {""} and connections == {""}:
+        conversations = {str(row.get("conversation_key") or "") for row in rows}
+        if (
+            len(conversations) == 1
+            and next(iter(conversations)).startswith("qq:")
+            and author.isdecimal()
+            and int(author) > 0
+        ):
+            return f"qq:{author}", f"legacy-qq:{bot_id}" if bot_id else "", ""
+        return "", "", "source_subject_unknown"
+    if "" in subjects or "" in connections or len(subjects) != 1 or len(connections) != 1:
+        return "", "", "source_identity_mismatch"
+    subject = next(iter(subjects))
+    connection = next(iter(connections))
+    if not subject.startswith("u2."):
+        return "", "", "source_subject_invalid"
+    try:
+        _domain, subject_author = decode_subject_key_v2(subject)
+    except (TypeError, ValueError):
+        return "", "", "source_subject_invalid"
+    if subject_author != author:
+        return "", "", "source_author_mismatch"
+    conversation_keys = {str(row.get("conversation_key") or "") for row in rows}
+    conversation_key = next(iter(conversation_keys), "")
+    if conversation_key.startswith("c2."):
+        from core.transport.keys import decode_conversation_key_v2
+
+        try:
+            source_bot, _scene = decode_conversation_key_v2(conversation_key)
+        except (TypeError, ValueError):
+            return "", "", "source_conversation_invalid"
+        if source_bot.connection_id != connection or source_bot.self_id != bot_id:
+            return "", "", "source_connection_mismatch"
+    return subject, connection, ""
+
+
+def _source_owner_key(
+    subject_key: str, connection_id: str, bot_id: str, raw_user_id: str
+) -> str:
+    if subject_key.startswith("u2.") and connection_id:
+        from memory.ownership import person_owner_key_for_subject
+
+        return person_owner_key_for_subject(connection_id, subject_key)
+    if subject_key.startswith("qq:") and bot_id and raw_user_id.isdecimal():
+        from memory.ownership import person_owner_key
+
+        return person_owner_key("qq", bot_id, raw_user_id)
+    return ""
 
 
 def source_digest(snapshot: Mapping[str, Any]) -> str:
@@ -256,20 +330,32 @@ def assess_candidate(
         status, reason = source_error.split(":", 1)
         return {"status": status, "reason": reason, "sources": []}
 
-    def unassessed(status: str, reason: str, subject_key: str = "") -> dict[str, Any]:
+    resolved_subject, resolved_connection, identity_error = _source_subject(
+        rows, bot_id=bot_id
+    )
+
+    def unassessed(
+        status: str, reason: str, subject_override: str | None = None
+    ) -> dict[str, Any]:
         sources = []
         for row in rows:
             author_id = str(row.get("user_id") or "").strip()
-            if not subject_key and author_id and author_id == str(candidate.get("user_id") or ""):
-                subject = f"qq:{author_id}"
-            else:
-                subject = subject_key
+            subject = (
+                subject_override
+                if subject_override is not None
+                else resolved_subject
+                if author_id and author_id == str(candidate.get("user_id") or "")
+                else ""
+            )
             snapshot_hash = source_digest(row)
             provenance = {
                 "assessment_version": ASSESSMENT_VERSION,
+                "source_snapshot_version": 2
+                if row.get("subject_key") and row.get("connection_id")
+                else 1,
                 "verification_status": status,
                 "assessment_reason": reason,
-                "recording_author_key": f"qq:{author_id}" if author_id.isdecimal() else "",
+                "recording_author_key": subject,
                 "fact_object_key": subject,
                 "conversation_key": conversation_key,
                 "bot_id": bot_id,
@@ -287,14 +373,26 @@ def assess_candidate(
                     "snapshot": row,
                 }
             )
-        return {"status": status, "reason": reason, "sources": sources}
+        return {
+            "status": status,
+            "reason": reason,
+            "fact_subject_key": resolved_subject,
+            "owner_key": _source_owner_key(
+                resolved_subject, resolved_connection, bot_id, str(candidate.get("user_id") or "")
+            ),
+            "sources": sources,
+        }
 
     if expected_bot_id and any(not str(row.get("bot_id") or "").strip() for row in rows):
         return unassessed("unknown", "source_bot_missing")
 
     uid = str(candidate.get("user_id") or "").strip()
-    if not uid.isdecimal():
+    if not uid:
         return unassessed("rejected", "subject_id_invalid")
+    if identity_error:
+        return unassessed("unknown", identity_error)
+    if resolved_subject.startswith("qq:") and (not uid.isdecimal() or int(uid) <= 0):
+        return unassessed("unknown", "legacy_subject_id_invalid")
     contract = candidate.get("verification_contract")
     if not isinstance(contract, dict):
         return unassessed("unknown", "contract_missing")
@@ -360,7 +458,18 @@ def assess_candidate(
     if canonical_value not in content:
         return unassessed("unknown", "canonical_value_not_supported")
 
-    subject_key = f"qq:{uid}"
+    subject_key = resolved_subject
+    if subject_key.startswith("qq:") and subject_key != f"qq:{uid}":
+        return unassessed("unknown", "source_subject_mismatch", subject_key)
+    if subject_key.startswith("u2."):
+        from core.transport.keys import decode_subject_key_v2
+
+        try:
+            _identity_domain, source_user_id = decode_subject_key_v2(subject_key)
+        except (TypeError, ValueError):
+            return unassessed("unknown", "source_subject_invalid")
+        if source_user_id != uid:
+            return unassessed("unknown", "source_subject_mismatch", subject_key)
     source_records: list[dict[str, Any]] = []
     assessment_reasons: list[str] = []
     for row in rows:
@@ -419,6 +528,9 @@ def assess_candidate(
 
     provenance_base = {
         "assessment_version": ASSESSMENT_VERSION,
+        "source_snapshot_version": 2
+        if all(row.get("subject_key") and row.get("connection_id") for row in rows)
+        else 1,
         "verification_status": status,
         "recording_author_key": subject_key,
         "fact_object_key": subject_key,
@@ -459,6 +571,7 @@ def assess_candidate(
         "status": status,
         "reason": ";".join(sorted(set(assessment_reasons))) or "accepted",
         "fact_subject_key": subject_key,
+        "owner_key": _source_owner_key(subject_key, resolved_connection, bot_id, uid),
         "claim_key": claim_key,
         "conversation_key": conversation_key,
         "bot_id": bot_id,

@@ -1,0 +1,9 @@
+{
+  "error": "Target 'Principal' not found",
+  "target": {
+    "name": "Principal"
+  },
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN"
+}

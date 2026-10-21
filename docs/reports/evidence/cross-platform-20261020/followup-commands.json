@@ -1,0 +1,200 @@
+[
+  {
+    "id": "context-exact-conversation-key",
+    "tool": "context",
+    "args": {
+      "uid": "Function:core/conversation.py:conversation_key"
+    },
+    "elapsedMs": 437
+  },
+  {
+    "id": "impact-exact-conversation-key",
+    "tool": "impact",
+    "args": {
+      "target_uid": "Function:core/conversation.py:conversation_key",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 131
+  },
+  {
+    "id": "context-exact-rust-retrieval-request",
+    "tool": "context",
+    "args": {
+      "uid": "Struct:memory_rust/native/src/retrieval.rs:RetrievalRequest"
+    },
+    "elapsedMs": 56
+  },
+  {
+    "id": "impact-exact-rust-retrieval-request",
+    "tool": "impact",
+    "args": {
+      "target_uid": "Struct:memory_rust/native/src/retrieval.rs:RetrievalRequest",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 85
+  },
+  {
+    "id": "context-exact-verify_candidate_evidence",
+    "tool": "context",
+    "args": {
+      "name": "verify_candidate_evidence",
+      "file_path": "memory_rust/native/src/promotion.rs"
+    },
+    "elapsedMs": 61
+  },
+  {
+    "id": "impact-exact-verify_candidate_evidence",
+    "tool": "impact",
+    "args": {
+      "target": "verify_candidate_evidence",
+      "file_path": "memory_rust/native/src/promotion.rs",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 101
+  },
+  {
+    "id": "context-exact-promote",
+    "tool": "context",
+    "args": {
+      "name": "promote",
+      "file_path": "memory_rust/native/src/promotion.rs"
+    },
+    "elapsedMs": 59
+  },
+  {
+    "id": "impact-exact-promote",
+    "tool": "impact",
+    "args": {
+      "target": "promote",
+      "file_path": "memory_rust/native/src/promotion.rs",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 83
+  },
+  {
+    "id": "context-exact-_principal_of",
+    "tool": "context",
+    "args": {
+      "name": "_principal_of",
+      "file_path": "capability/providers/knowledge.py"
+    },
+    "elapsedMs": 57
+  },
+  {
+    "id": "impact-exact-_principal_of",
+    "tool": "impact",
+    "args": {
+      "target": "_principal_of",
+      "file_path": "capability/providers/knowledge.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 77
+  },
+  {
+    "id": "impact-file-session-handoff-retry",
+    "tool": "impact",
+    "args": {
+      "target": "session-handoff.md",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 103
+  },
+  {
+    "id": "query-memory-retry",
+    "tool": "query",
+    "args": {
+      "search_query": "assess_candidate promote verify_source_snapshot",
+      "limit": 12
+    },
+    "elapsedMs": 1169
+  },
+  {
+    "id": "graph-label-counts",
+    "tool": "cypher",
+    "args": {
+      "statement": "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS count ORDER BY count DESC"
+    },
+    "elapsedMs": 5
+  },
+  {
+    "id": "graph-relation-counts",
+    "tool": "cypher",
+    "args": {
+      "statement": "MATCH ()-[r:CodeRelation]->() RETURN r.type AS type, count(*) AS count ORDER BY count DESC"
+    },
+    "elapsedMs": 22
+  },
+  {
+    "id": "pdg-evidence-slice",
+    "tool": "impact",
+    "args": {
+      "target": "assess_candidate",
+      "file_path": "memory/evidence_contract.py",
+      "mode": "pdg",
+      "direction": "upstream",
+      "line": 363
+    },
+    "elapsedMs": 158,
+    "truncated": true
+  },
+  {
+    "id": "process-proc_464_handle_toggle",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/proc_464_handle_toggle"
+    },
+    "elapsedMs": 4
+  },
+  {
+    "id": "process-proc_185_handle_toggle",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/proc_185_handle_toggle"
+    },
+    "elapsedMs": 3
+  },
+  {
+    "id": "process-proc_272_handle_reload",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/proc_272_handle_reload"
+    },
+    "elapsedMs": 2
+  },
+  {
+    "id": "process-proc_439_handle_toggle",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/proc_439_handle_toggle"
+    },
+    "elapsedMs": 2
+  },
+  {
+    "id": "process-proc_181_handle_reload",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/proc_181_handle_reload"
+    },
+    "elapsedMs": 2
+  },
+  {
+    "id": "process-proc_184_handle_toggle",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/process/proc_184_handle_toggle"
+    },
+    "elapsedMs": 2
+  }
+]

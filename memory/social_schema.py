@@ -32,7 +32,7 @@ from nonebot import logger
 
 from memory.timeutil import log_sqlite_error, utc_now
 
-SOCIAL_SCHEMA_VERSION = 3
+SOCIAL_SCHEMA_VERSION = 5
 
 # schema 2（修复计划 §6.3）：social_deliveries 追加规范会话身份与群学习
 # 资格列。保留 bot_id/platform/trace_id/turn_id/part_index 原状；旧行以
@@ -51,6 +51,15 @@ _V3_DELIVERY_COLUMNS: tuple[str, ...] = (
     "decision_digest TEXT NOT NULL DEFAULT ''",
 )
 
+_V4_SCOPE_COLUMNS: tuple[tuple[str, str], ...] = tuple(
+    (table, "connection_id TEXT NOT NULL DEFAULT ''")
+    for table in ("social_events", "social_deliveries", "social_effects", "social_assets")
+)
+
+_V5_DELIVERY_COLUMNS: tuple[str, ...] = (
+    "platform_message_ids_json TEXT NOT NULL DEFAULT '[]'",
+)
+
 # ---- 表清单（单事务创建；字段与索引的最小集，见计划 §6.2 表格） ----
 _TABLES = (
     # 组件版本表：事务成功才提升版本（迁移步骤与 memory/migrations.py 同一原则）
@@ -67,6 +76,7 @@ _TABLES = (
         event_id TEXT PRIMARY KEY,
         platform TEXT NOT NULL,
         bot_id TEXT NOT NULL DEFAULT '',
+        connection_id TEXT NOT NULL DEFAULT '',
         group_id TEXT NOT NULL,
         platform_message_id TEXT,
         user_id TEXT NOT NULL DEFAULT '',
@@ -91,6 +101,7 @@ _TABLES = (
         epoch INTEGER NOT NULL DEFAULT 0,
         platform TEXT NOT NULL DEFAULT '',
         bot_id TEXT NOT NULL DEFAULT '',
+        connection_id TEXT NOT NULL DEFAULT '',
         group_id TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'pending',
         platform_message_id TEXT,
@@ -130,6 +141,7 @@ _TABLES = (
         trace_id TEXT NOT NULL DEFAULT '',
         platform TEXT NOT NULL DEFAULT '',
         bot_id TEXT NOT NULL DEFAULT '',
+        connection_id TEXT NOT NULL DEFAULT '',
         group_id TEXT NOT NULL DEFAULT '',
         target_user_id TEXT,
         trigger TEXT NOT NULL DEFAULT 'reply',
@@ -167,6 +179,7 @@ _TABLES = (
         kind TEXT NOT NULL,
         platform TEXT NOT NULL DEFAULT '',
         bot_id TEXT NOT NULL DEFAULT '',
+        connection_id TEXT NOT NULL DEFAULT '',
         group_id TEXT NOT NULL DEFAULT '',
         legacy_scope TEXT NOT NULL DEFAULT '',
         owner_user TEXT,
@@ -245,16 +258,16 @@ _TABLES = (
 
 _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_social_events_scope_time "
-    "ON social_events (platform, bot_id, group_id, received_at_utc)",
+    "ON social_events (platform, bot_id, connection_id, group_id, received_at_utc)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_social_events_platform_msg "
-    "ON social_events (platform, bot_id, group_id, platform_message_id) "
+        "ON social_events (platform, bot_id, connection_id, group_id, platform_message_id) "
     "WHERE platform_message_id IS NOT NULL AND platform_message_id != ''",
     "CREATE INDEX IF NOT EXISTS idx_social_deliveries_ack_id "
     "ON social_deliveries (platform_message_id)",
     "CREATE INDEX IF NOT EXISTS idx_social_effects_window "
     "ON social_effects (status, window_end_utc)",
     "CREATE INDEX IF NOT EXISTS idx_social_assets_scope "
-    "ON social_assets (platform, bot_id, group_id, kind, status)",
+    "ON social_assets (platform, bot_id, connection_id, group_id, kind, status)",
     "CREATE INDEX IF NOT EXISTS idx_social_jobs_due "
     "ON social_jobs (status, not_before_utc)",
     # 效果证据按事件反查（一条群消息关联到哪些 effect）
@@ -594,6 +607,43 @@ def _migrate_social_v3(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE social_deliveries ADD COLUMN {col_def}")
 
 
+def _migrate_social_v4(conn: sqlite3.Connection) -> None:
+    """Add connection-scoped social identities; history stays unbound."""
+    for table, column_def in _V4_SCOPE_COLUMNS:
+        existing = {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})")}
+        if not existing:
+            continue
+        column = column_def.split()[0]
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+    # Rebuild scope indexes so the connection is part of both lookup and dedupe.
+    for name in (
+        "idx_social_events_scope_time",
+        "uq_social_events_platform_msg",
+        "idx_social_assets_scope",
+    ):
+        conn.execute(f"DROP INDEX IF EXISTS {name}")
+
+
+def _migrate_social_v5(conn: sqlite3.Connection) -> None:
+    """Preserve every platform ID returned for one physical delivery part."""
+    existing = {str(row[1]) for row in conn.execute("PRAGMA table_info(social_deliveries)")}
+    for column_def in _V5_DELIVERY_COLUMNS:
+        column = column_def.split()[0]
+        if column not in existing:
+            conn.execute(f"ALTER TABLE social_deliveries ADD COLUMN {column_def}")
+    rows = conn.execute(
+        "SELECT delivery_id, platform_message_id FROM social_deliveries "
+        "WHERE platform_message_id IS NOT NULL AND platform_message_id != '' "
+        "AND platform_message_ids_json = '[]'"
+    ).fetchall()
+    for delivery_id, platform_message_id in rows:
+        conn.execute(
+            "UPDATE social_deliveries SET platform_message_ids_json = ? WHERE delivery_id = ?",
+            (json.dumps([str(platform_message_id)], ensure_ascii=False), str(delivery_id)),
+        )
+
+
 def ensure_social_schema(
     db_path: Path | str | None = None, *, backup: bool = True
 ) -> dict[str, int]:
@@ -624,6 +674,10 @@ def ensure_social_schema(
         _migrate_social_v2(conn)
         # 组件内增量迁移（v2→v3）：decision digest + receipt linkage。
         _migrate_social_v3(conn)
+        # 组件内增量迁移（v3→v4）：connection-scoped social identity.
+        _migrate_social_v4(conn)
+        # 组件内增量迁移（v4→v5）：complete platform receipt IDs per part.
+        _migrate_social_v5(conn)
         for ddl in _INDEXES:
             conn.execute(ddl)
         # 旧库导入只在这台库有旧表达系统数据时才有行可导

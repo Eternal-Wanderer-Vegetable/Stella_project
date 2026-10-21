@@ -178,15 +178,21 @@ class NotificationPump:
             return self._retry_later(claimed, str(e))
         except Exception as e:
             return self._unknown(claimed, f"send_error: {type(e).__name__}")
+        server_emitted = receipt == "server_emitted"
         self.store.mark_notification(
             claimed.notification_id,
-            state=NotificationState.SENT,
+            state=(
+                NotificationState.SERVER_EMITTED
+                if server_emitted
+                else NotificationState.SENT
+            ),
             receipt=str(receipt or ""),
         )
         _LOGGER.info(
-            "notification %s（%s）已投递 task=%s",
+            "notification %s（%s）%s task=%s",
             claimed.notification_id[:8],
             claimed.kind.value,
+            "服务端已发出" if server_emitted else "已投递",
             claimed.task_id[:8],
         )
         return True

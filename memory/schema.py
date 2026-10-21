@@ -59,8 +59,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v20：FTS 存量索引按新分词全量重灌，见 migrate_v20）。
-SCHEMA_VERSION = 20
+# 当前 Schema 版本（v22：连接身份、地址偏好与分享授权作用域，见 migrate_v22）。
+SCHEMA_VERSION = 22
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -178,6 +178,11 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "personal_memory_sharing",
         "subject_key",
         "ALTER TABLE personal_memory_sharing ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "personal_memory_sharing",
+        "connection_id",
+        "ALTER TABLE personal_memory_sharing ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''",
     ),
     # memories（主表）：补上 v2 记忆字段
     (
@@ -344,6 +349,23 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "parser_version",
         "ALTER TABLE conversation_identity_claims ADD COLUMN parser_version TEXT DEFAULT '2026-09-27'",
     ),
+    # v21：外部平台消息 ID / 规范主体键。旧 msg_id INTEGER 保留给 QQ 图像回写和
+    # 兼容引用查询；新字段不做整数转换。subject_key 空串表示历史来源不足，不能猜。
+    (
+        "group_messages",
+        "platform_message_id",
+        "ALTER TABLE group_messages ADD COLUMN platform_message_id TEXT",
+    ),
+    (
+        "group_messages",
+        "subject_key",
+        "ALTER TABLE group_messages ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "group_messages",
+        "connection_id",
+        "ALTER TABLE group_messages ADD COLUMN connection_id TEXT NOT NULL DEFAULT ''",
+    ),
 ]
 
 # 新增索引：按检索高频字段建索引，避免 SQLite 全表扫描
@@ -457,6 +479,18 @@ _INDEXES: list[tuple[str, str, str]] = [
         "group_messages",
         "CREATE INDEX IF NOT EXISTS idx_group_messages_logical "
         "ON group_messages (conversation_key, logical_message_id, part_index)",
+    ),
+    (
+        "idx_group_messages_platform_ref",
+        "group_messages",
+        "CREATE INDEX IF NOT EXISTS idx_group_messages_platform_ref "
+        "ON group_messages (conversation_key, bot_id, platform_message_id)",
+    ),
+    (
+        "idx_group_messages_subject",
+        "group_messages",
+        "CREATE INDEX IF NOT EXISTS idx_group_messages_subject "
+        "ON group_messages (conversation_key, subject_key, id)",
     ),
 ]
 
@@ -606,6 +640,27 @@ def create_user_address_preferences_table(conn: sqlite3.Connection) -> None:
     conn.execute(USER_ADDRESS_PREFERENCES_TABLE_DDL)
 
 
+# v22：规范主体地址偏好与旧 QQ 表分开存储。旧表保留原样，来源不充分的旧行
+# 不自动绑定到 QQ 或其他身份域；仅经可信入口验证的 UserRef 使用此表。
+USER_ADDRESS_PREFERENCES_V2_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS user_address_preferences_v2 (
+    group_shared_space TEXT NOT NULL,
+    subject_key TEXT NOT NULL,
+    raw_user_id TEXT NOT NULL DEFAULT '',
+    address_term TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'natural_language',
+    updated_by_user_id TEXT NOT NULL DEFAULT '',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_shared_space, subject_key)
+)
+"""
+
+
+def create_user_address_preferences_v2_table(conn: sqlite3.Connection) -> None:
+    """Ensure identity-domain scoped address preferences exist."""
+    conn.execute(USER_ADDRESS_PREFERENCES_V2_TABLE_DDL)
+
+
 # 记忆候选表（v8 起）：以 group_shared_space 归属。
 # 此前在 consolidator 与 memory_manager 各手抄一份（字段易漂移），v8 起以本处为
 # 单一真相源，建表一律从这里走。
@@ -707,10 +762,39 @@ CREATE TABLE IF NOT EXISTS conversation_registry (
 )
 """
 
+# Transport identities use their own table until the legacy QQ/WebChat consumers
+# migrate to the V2 contract. Keeping the registries separate prevents raw SQL
+# maintenance tools from interpreting opaque keys as legacy bot/user identifiers.
+CONVERSATION_REGISTRY_V2_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS conversation_registry_v2 (
+    conversation_key TEXT PRIMARY KEY,
+    storage_session_id INTEGER NOT NULL UNIQUE CHECK (storage_session_id < -1),
+    memory_space TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+# V2 会话可有多个旧运行时/会话键。映射按 (alias, canonical key) 存储，允许
+# 同一旧 alias 对应多个连接；读取时必须带 Bot/Scene 上下文或拒绝歧义。
+CONVERSATION_ALIASES_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS conversation_aliases (
+    alias_key TEXT NOT NULL,
+    conversation_key TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(alias_key, conversation_key)
+)
+"""
+
 
 def create_conversation_registry_table(conn: sqlite3.Connection) -> None:
-    """确保 conversation_registry 表存在（幂等）。"""
+    """确保旧/V2 会话注册表及其 alias 索引表存在（幂等）。"""
     conn.execute(CONVERSATION_REGISTRY_TABLE_DDL)
+    conn.execute(CONVERSATION_REGISTRY_V2_TABLE_DDL)
+    conn.execute(CONVERSATION_ALIASES_TABLE_DDL)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversation_aliases_key "
+        "ON conversation_aliases(alias_key)"
+    )
 
 
 # 记忆证据去重表（v15 起，计划 §6.5）：同一条 (owner, audience, fact) 对同一
@@ -1137,6 +1221,7 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
     if not dry_run:
         with contextlib.suppress(sqlite3.OperationalError):
             conn.execute(USER_ADDRESS_PREFERENCES_TABLE_DDL)
+            conn.execute(USER_ADDRESS_PREFERENCES_V2_TABLE_DDL)
     # v7：用户画像表（新表，不属于 additive column 范畴；规范 DDL 与
     # consolidator 建表共用，避免手抄两份造成字段漂移）
     if not dry_run:

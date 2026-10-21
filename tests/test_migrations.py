@@ -1012,3 +1012,187 @@ def test_v19_to_v20_rebuilds_fts_index_with_new_tokenization(tmp_path):
         assert migrations.run_migrations(conn, 20, 20, None) == []
     finally:
         conn.close()
+
+
+def _create_v20_message_db(path, *, interrupt=False):
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE schema_meta (
+            k TEXT PRIMARY KEY,
+            version INTEGER,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO schema_meta (k, version) VALUES ('version', 20);
+        CREATE TABLE group_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_id TEXT,
+            user_id TEXT,
+            msg_id INTEGER,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO group_messages (group_id, user_id, msg_id)
+        VALUES ('777', '2001', 123), ('777', '2002', -44), ('777', '2003', 0),
+               ('777', '2004', NULL), ('777', '2005', 'opaque-old');
+        """
+    )
+    if interrupt:
+        conn.execute(
+            """CREATE TRIGGER interrupt_v21_backfill
+               BEFORE UPDATE ON group_messages
+               BEGIN SELECT RAISE(ABORT, 'injected v21 interruption'); END"""
+        )
+    conn.commit()
+    conn.close()
+
+
+def _isolated_migration_context():
+    return migrations.MigrationContext(
+        resolver=lambda group_id: f"space_{group_id}",
+        known_groups=frozenset(),
+        known_spaces=frozenset(),
+    )
+
+
+def test_v20_to_v21_preserves_legacy_ids_and_adds_transport_identity(tmp_path):
+    """v21 keeps INTEGER msg_id, copies nonzero receipt IDs as text, and leaves identity unknown."""
+    path = tmp_path / "v20-message-identities.db"
+    _create_v20_message_db(path)
+    ctx = _isolated_migration_context()
+
+    preview = schema.migrate_to_latest(path, ctx=ctx, dry_run=True)
+    assert preview.ok
+    assert preview.from_version == 20
+    assert preview.to_version == 22
+    conn = sqlite3.connect(path)
+    assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (20,)
+    assert "platform_message_id" not in {
+        row[1] for row in conn.execute("PRAGMA table_info(group_messages)")
+    }
+    conn.close()
+
+    report = schema.migrate_to_latest(path, ctx=ctx)
+    assert report.ok, report.to_markdown()
+    assert [step.version for step in report.steps] == [21, 22]
+
+    conn = sqlite3.connect(path)
+    try:
+        assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (22,)
+        rows = conn.execute(
+            "SELECT id, msg_id, platform_message_id, subject_key "
+            "FROM group_messages ORDER BY id"
+        ).fetchall()
+        assert rows == [
+            (1, 123, "123", ""),
+            (2, -44, "-44", ""),
+            (3, 0, None, ""),
+            (4, None, None, ""),
+            (5, "opaque-old", None, ""),
+        ]
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(group_messages)")}
+        assert "idx_group_messages_platform_ref" in indexes
+        assert "idx_group_messages_subject" in indexes
+        assert "connection_id" in {
+            row[1] for row in conn.execute("PRAGMA table_info(group_messages)")
+        }
+    finally:
+        conn.close()
+
+    second = schema.migrate_to_latest(path, ctx=ctx)
+    assert second.ok
+    assert second.steps == []
+    assert second.additive_changes == 0
+
+
+def test_v20_to_v21_interruption_rolls_back_columns_and_version(tmp_path):
+    """A failed data backfill leaves both DDL and schema_meta at v20."""
+    path = tmp_path / "v20-message-identities-interrupted.db"
+    _create_v20_message_db(path, interrupt=True)
+    report = schema.migrate_to_latest(path, ctx=_isolated_migration_context())
+
+    assert not report.ok
+    assert "injected v21 interruption" in (report.error or "")
+    conn = sqlite3.connect(path)
+    try:
+        assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (20,)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(group_messages)")}
+        assert "platform_message_id" not in columns
+        assert "subject_key" not in columns
+        assert conn.execute("SELECT msg_id FROM group_messages WHERE id=1").fetchone() == (123,)
+    finally:
+        conn.close()
+
+
+def test_v21_to_v22_preserves_legacy_grants_and_scopes_new_identity(tmp_path, monkeypatch):
+    """v22 keeps old grants unknown and permits same raw IDs in separate scopes."""
+    path = tmp_path / "v21-sharing.db"
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER, "
+            "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
+        conn.execute("INSERT INTO schema_meta (k, version) VALUES ('version', 21)")
+        conn.execute(
+            "CREATE TABLE group_messages (id INTEGER PRIMARY KEY, msg_id INTEGER)"
+        )
+        conn.execute(
+            """CREATE TABLE personal_memory_sharing (
+                grant_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bot_id TEXT NOT NULL, user_id TEXT NOT NULL,
+                platform TEXT NOT NULL DEFAULT 'qq', owner_key TEXT NOT NULL DEFAULT '',
+                subject_key TEXT NOT NULL DEFAULT '', fact_key TEXT NOT NULL,
+                source_conversation_key TEXT NOT NULL DEFAULT '',
+                source_message_row_id INTEGER NOT NULL DEFAULT 0,
+                audience TEXT NOT NULL DEFAULT 'USER_SHARED',
+                status TEXT NOT NULL DEFAULT 'pending', granted_at TEXT NOT NULL,
+                revoked_at TEXT, scope_version INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(bot_id, user_id, fact_key)
+            )"""
+        )
+        conn.execute(
+            "INSERT INTO personal_memory_sharing "
+            "(bot_id, user_id, owner_key, subject_key, fact_key, status, granted_at) "
+            "VALUES ('bot', '100', 'person:qq:bot:100', 'qq:100', 'fact-a', 'active', 't0')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setattr(schema, "backup_database", lambda _path: None)
+    monkeypatch.setattr(schema, "backup_before_migration", lambda _path, _version: None)
+    ctx = _isolated_migration_context()
+    report = schema.migrate_to_latest(path, ctx=ctx)
+    assert report.ok, report.to_markdown()
+    assert report.to_version == 22
+
+    conn = sqlite3.connect(path)
+    try:
+        assert "connection_id" in {
+            r[1] for r in conn.execute("PRAGMA table_info(personal_memory_sharing)")
+        }
+        legacy = conn.execute(
+            "SELECT owner_key, subject_key, connection_id, fact_key, status "
+            "FROM personal_memory_sharing"
+        ).fetchone()
+        assert legacy == ("person:qq:bot:100", "qq:100", "", "fact-a", "active")
+        for domain, connection_id in (("service:a", "connection-a"),
+                                      ("service:b", "connection-b")):
+            conn.execute(
+                "INSERT INTO personal_memory_sharing "
+                "(bot_id, user_id, platform, owner_key, subject_key, connection_id, "
+                "fact_key, granted_at) VALUES ('bot', '100', ?, ?, ?, ?, 'fact-a', 't1')",
+                (domain, f"owner:{domain}", f"subject:{domain}", connection_id),
+            )
+        conn.commit()
+        assert conn.execute(
+            "SELECT COUNT(*) FROM personal_memory_sharing WHERE bot_id='bot' "
+            "AND user_id='100' AND fact_key='fact-a'"
+        ).fetchone() == (3,)
+    finally:
+        conn.close()
+
+    second = schema.migrate_to_latest(path, ctx=ctx)
+    assert second.ok, second.to_markdown()
+    assert second.steps == []
+    assert second.additive_changes == 0

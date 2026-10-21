@@ -24,12 +24,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+from core.transport.models import BotRef, SceneRef
+from core.transport.outbound import DeliveryTarget
+
 UTC = timezone.utc
 
 SCHEMA_VERSION = 1
-# Origin 独立的 schema 版本（计划 §6.8）：新增 conversation_kind/peer_id/
-# conversation_key 时升到 2。**不**随动全包 SCHEMA_VERSION——那会影响所有 DTO。
-ORIGIN_SCHEMA_VERSION = 2
+# Origin 独立的 schema 版本（计划 §6.8）：v3 持久化可信 BotRef/DeliveryTarget。
+# **不**随动全包 SCHEMA_VERSION——那会影响所有 DTO。
+ORIGIN_SCHEMA_VERSION = 3
 
 
 # ============================================================
@@ -300,7 +303,10 @@ class Origin:
     # 校验失败——不猜默认群。
     conversation_kind: str = ""  # group | private | webchat
     peer_id: str = ""
-    conversation_key: str = ""  # 规范键 qq:<bot_id>:group:<gid> / qq:<bot_id>:private:<uid>
+    conversation_key: str = ""
+    # Origin v3: durable delivery identity; process-local Bot/event handles never persist.
+    bot_ref: BotRef | None = None
+    target: DeliveryTarget | None = None
 
     def __post_init__(self) -> None:
         if self.conversation_kind and self.conversation_kind not in (
@@ -309,6 +315,44 @@ class Origin:
             "webchat",
         ):
             raise ValueError(f"非法 conversation_kind: {self.conversation_kind!r}")
+        if self.target is not None:
+            if self.bot_ref is None or self.target.bot != self.bot_ref:
+                raise ValueError("Origin v3 BotRef must match its DeliveryTarget")
+            if self.target.scene.kind != self.conversation_kind:
+                raise ValueError("Origin v3 scene kind does not match conversation_kind")
+            if self.target.scene.scene_id != self.peer_id:
+                raise ValueError("Origin v3 scene ID does not match peer_id")
+            if self.bot_ref.self_id != self.bot_id:
+                raise ValueError("Origin v3 BotRef does not match bot_id")
+            if self.platform != self.target.bot.platform_scope:
+                raise ValueError("Origin platform does not match its BotRef")
+
+    def delivery_target(self) -> DeliveryTarget | None:
+        """Return the v3 target or bind a historical QQ/WebChat route explicitly."""
+        if self.target is not None:
+            return self.target
+        kind = self.conversation_kind
+        peer = self.peer_id
+        if not kind:
+            kind = "webchat" if self.platform == "webchat" else "group"
+            peer = self.conversation_id
+        if not peer:
+            return None
+        if self.platform == "qq":
+            if (
+                kind not in {"group", "private"}
+                or not self.bot_id.isdigit()
+                or int(self.bot_id) <= 0
+                or not peer.isdigit()
+                or int(peer) <= 0
+            ):
+                return None
+            bot = BotRef(f"legacy-qq:{self.bot_id}", "onebot-v11", "qq", self.bot_id)
+            return DeliveryTarget(bot=bot, scene=SceneRef(kind, peer))
+        if self.platform == "webchat" and kind == "webchat":
+            bot = BotRef("webchat-local", "webchat", "webchat", self.bot_id or "webui")
+            return DeliveryTarget(bot=bot, scene=SceneRef("webchat", peer))
+        return None
 
     def to_dict(self) -> dict:
         data = {
@@ -322,11 +366,24 @@ class Origin:
             "reply_to_message_id": self.reply_to_message_id,
             "conversation_generation": self.conversation_generation,
         }
-        if not self.conversation_kind:
-            # 部分 v1 形状（无 kind）：序列化为 legacy dict，读回时按平台解释
-            # （QQ→群 / webchat→webchat）。可信入口构造的 Origin 必须带 kind。
+        target = self.delivery_target()
+        if target is not None:
+            data["origin_schema_version"] = ORIGIN_SCHEMA_VERSION
+            data["conversation_kind"] = target.scene.kind
+            data["peer_id"] = target.scene.scene_id
+            data["conversation_key"] = self.conversation_key
+            data["bot_ref"] = {
+                "connection_id": target.bot.connection_id,
+                "adapter": target.bot.adapter,
+                "platform_scope": target.bot.platform_scope,
+                "self_id": target.bot.self_id,
+            }
+            data["delivery_target"] = target.dump()
             return data
-        data["origin_schema_version"] = ORIGIN_SCHEMA_VERSION
+        if not self.conversation_kind:
+            # Preserve an unbindable v1 record for inspection; delivery refuses it.
+            return data
+        data["origin_schema_version"] = 2
         data["conversation_kind"] = self.conversation_kind
         data["peer_id"] = self.peer_id
         data["conversation_key"] = self.conversation_key
@@ -338,31 +395,73 @@ class Origin:
         peer = str(data.get("peer_id", "") or "")
         conv_key = str(data.get("conversation_key", "") or "")
         version = int(data.get("origin_schema_version", 0) or 0)
-        if not kind:
-            if version >= ORIGIN_SCHEMA_VERSION:
-                # v2 起缺 kind 是数据损坏，不猜默认群（计划 §6.8）
+        platform = str(data.get("platform", ""))
+        bot_id = str(data.get("bot_id", ""))
+        conversation_id = str(data.get("conversation_id", ""))
+        if version > ORIGIN_SCHEMA_VERSION:
+            raise ValueError(f"unsupported Origin schema version: {version}")
+        if version >= ORIGIN_SCHEMA_VERSION:
+            if not kind:
+                raise ValueError("Origin v3 缺少 conversation_kind，拒绝解析")
+            raw_bot = data.get("bot_ref")
+            raw_target = data.get("delivery_target")
+            if not isinstance(raw_bot, dict) or not isinstance(raw_target, dict):
+                raise ValueError("Origin v3 缺少 BotRef 或 DeliveryTarget，拒绝解析")
+            bot_ref = BotRef(**raw_bot)
+            target = DeliveryTarget.load(raw_target)
+            if target.bot != bot_ref:
+                raise ValueError("Origin v3 BotRef 与 DeliveryTarget 不一致")
+            if (
+                target.bot.self_id != bot_id
+                or target.scene.kind != kind
+                or target.bot.platform_scope != platform
+            ):
+                raise ValueError("Origin v3 route 与来源身份不一致")
+            if not peer:
+                raise ValueError("Origin v3 缺少 peer_id，拒绝解析")
+            if target.scene.scene_id != peer:
+                raise ValueError("Origin v3 peer_id 与 DeliveryTarget 不一致")
+        else:
+            if version >= 2 and not kind:
                 raise ValueError("Origin v2 缺少 conversation_kind，拒绝解析")
-            # v1 兼容：旧 QQ Origin 全部按历史群解释；webchat 按其平台解释。
-            kind = "webchat" if str(data.get("platform", "")) == "webchat" else "group"
-            peer = str(data.get("conversation_id", "") or "")
-        if not peer:
-            raise ValueError("Origin 缺少 peer_id，拒绝解析")
+            if not kind:
+                # v1 兼容：旧 QQ Origin 全部按历史群解释；webchat 按其平台解释。
+                kind = "webchat" if platform == "webchat" else "group"
+                peer = conversation_id
+            target = None
+            bot_ref = None
+            if not peer:
+                raise ValueError("Origin 缺少 peer_id，拒绝解析")
+            if not conv_key:
+                # conversation_key 是旧字段的规范函数，不用于路由恢复。
+                if kind == "webchat":
+                    conv_key = f"webchat:{peer}"
+                else:
+                    conv_key = f"{platform or 'qq'}:{bot_id}:{kind}:{peer}"
+            legacy = cls(
+                instance_id=str(data.get("instance_id", "")),
+                platform=platform,
+                bot_id=bot_id,
+                conversation_id=conversation_id,
+                requester_id=str(data.get("requester_id", "")),
+                source_request_id=str(data.get("source_request_id", "")),
+                reply_to_message_id=str(data.get("reply_to_message_id", "")),
+                conversation_generation=int(data.get("conversation_generation", 1)),
+                conversation_kind=kind,
+                peer_id=peer,
+                conversation_key=conv_key,
+            )
+            target = legacy.delivery_target()
+            if target is None:
+                raise ValueError("Origin legacy route is not verifiable; refusing to guess")
+            bot_ref = target.bot
         if not conv_key:
-            # conversation_key 是其余字段的规范函数（非猜测）：v1 遗留行与
-            # 「legacy 解析后再持久化」的 roundtrip 都在这里补齐。kind/peer
-            # 缺失没有规范推导，仍然拒绝。
-            if kind == "webchat":
-                conv_key = f"webchat:{peer}"
-            else:
-                conv_key = (
-                    f"{data.get('platform', 'qq')}:{data.get('bot_id', '')}"
-                    f":{kind}:{peer}"
-                )
+            conv_key = f"{platform or 'qq'}:{bot_id}:{kind}:{peer}"
         return cls(
             instance_id=str(data.get("instance_id", "")),
-            platform=str(data.get("platform", "")),
-            bot_id=str(data.get("bot_id", "")),
-            conversation_id=str(data.get("conversation_id", "")),
+            platform=platform,
+            bot_id=bot_id,
+            conversation_id=conversation_id,
             requester_id=str(data.get("requester_id", "")),
             source_request_id=str(data.get("source_request_id", "")),
             reply_to_message_id=str(data.get("reply_to_message_id", "")),
@@ -370,6 +469,8 @@ class Origin:
             conversation_kind=kind,
             peer_id=peer,
             conversation_key=conv_key,
+            bot_ref=bot_ref,
+            target=target,
         )
 
 

@@ -45,6 +45,7 @@ def _task_dict(task) -> dict:
     return {
         "task_id": task.task_id,
         "group_id": int(task.group_id),
+        "bot_id": str(getattr(task, "bot_id", "") or ""),
         "mode": getattr(task, "mode", "").value if hasattr(task, "mode") else str(getattr(task, "mode", "")),
         "objective": getattr(task, "objective", ""),
         "cron_expr": task.cron_expr,
@@ -58,6 +59,36 @@ def _task_dict(task) -> dict:
 def _ensure_enabled(*, write: bool) -> None:
     if write and not getattr(settings, "SCHEDULING_ENABLED", False):
         raise ApiError("定时任务未启用（SCHEDULING_ENABLED=false），请在配置页开启", status_code=409)
+
+
+def _active_onebot_bots() -> list[dict[str, str]]:
+    """Return the exact connected OneBot V11 identities scheduling can target."""
+    try:
+        from nonebot import get_bots
+
+        bots = get_bots().values()
+    except Exception as e:
+        raise ApiError(
+            "定时任务目标列表需要 Bot 运行环境（独立 dev server 不可用）",
+            status_code=503,
+        ) from e
+
+    available: dict[str, dict[str, str]] = {}
+    for bot in bots:
+        try:
+            bot_id = str(bot.self_id)
+            adapter_name = str(bot.adapter.get_name())
+        except Exception:
+            continue
+        if adapter_name != "OneBot V11" or not bot_id.isdecimal() or int(bot_id) <= 0:
+            continue
+        available[bot_id] = {"bot_id": bot_id, "adapter": adapter_name}
+    return [available[key] for key in sorted(available, key=lambda value: (int(value), value))]
+
+
+def list_bots() -> dict:
+    """Expose only connected OneBot V11 accounts accepted by SchedulingService."""
+    return {"bots": _active_onebot_bots()}
 
 
 def list_tasks(group_id: str | None = None, *, include_cancelled: bool = False) -> dict:
@@ -90,10 +121,21 @@ def _all_groups_with_tasks(service) -> list[str]:
 def create_task(payload: dict) -> dict:
     _ensure_enabled(write=True)
     service = _service()
+    bot_id = str(payload.get("bot_id") or "").strip()
+    available_bot_ids = {item["bot_id"] for item in _active_onebot_bots()}
+    if bot_id not in available_bot_ids:
+        raise ApiError("请选择当前已连接的 OneBot V11 机器人账号", status_code=409)
+    group_id = int(payload["group_id"])
+    from stella_project.plugins.bot_main.scheduling.targets import legacy_qq_target
+
+    target = legacy_qq_target(bot_id, group_id)
+    if target is None:
+        raise ApiError("群或机器人账号不是有效的 QQ 投递目标")
     task = service.create_task(
         actor_id=_ACTOR,
-        group_id=int(payload["group_id"]),
-        bot_id="self",
+        group_id=group_id,
+        bot_id=bot_id,
+        target=target,
         is_group_admin=True,
         mode=payload.get("mode", "reminder"),
         objective=payload.get("objective", ""),

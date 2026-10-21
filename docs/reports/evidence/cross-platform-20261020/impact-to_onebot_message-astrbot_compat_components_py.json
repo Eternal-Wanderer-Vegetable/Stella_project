@@ -1,0 +1,238 @@
+{
+  "target": {
+    "id": "Function:astrbot_compat/components.py:to_onebot_message",
+    "name": "to_onebot_message",
+    "type": "Function",
+    "filePath": "astrbot_compat/components.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 11,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 1,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 2,
+    "3": 7
+  },
+  "affected_processes": [
+    {
+      "name": "run_provider_request",
+      "type": "Function",
+      "filePath": "astrbot_compat/pipeline.py",
+      "affected_process_count": 5,
+      "total_hits": 14,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Astrbot_compat",
+      "hits": 10,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Method:astrbot_compat/context.py:Context._deliver#4",
+        "name": "_deliver",
+        "filePath": "astrbot_compat/context.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:astrbot_compat/events.py:AstrMessageEvent._send_components#1",
+        "name": "_send_components",
+        "filePath": "astrbot_compat/events.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_154_run_provider_request",
+            "label": "Run_provider_request → Split_forward_nodes",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_107_run_provider_request",
+            "label": "Run_provider_request → Get_group_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_155_run_provider_request",
+            "label": "Run_provider_request → To_onebot_message",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_108_run_provider_request",
+            "label": "Run_provider_request → Get_sender_id",
+            "processType": "cross_community",
+            "step": 3
+          }
+        ]
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Method:astrbot_compat/context.py:Context.send_message#2",
+        "name": "send_message",
+        "filePath": "astrbot_compat/context.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Method:astrbot_compat/events.py:AstrMessageEvent.send#1",
+        "name": "send",
+        "filePath": "astrbot_compat/events.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_108_run_provider_request",
+            "label": "Run_provider_request → Get_sender_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_235_run_provider_request",
+            "label": "Run_provider_request → _normalize_chain",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_107_run_provider_request",
+            "label": "Run_provider_request → Get_group_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_155_run_provider_request",
+            "label": "Run_provider_request → To_onebot_message",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_154_run_provider_request",
+            "label": "Run_provider_request → Split_forward_nodes",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Function:astrbot_compat/pipeline.py:_emit",
+        "name": "_emit",
+        "filePath": "astrbot_compat/pipeline.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Function:astrbot_compat/pipeline.py:_flush_result",
+        "name": "_flush_result",
+        "filePath": "astrbot_compat/pipeline.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Function:astrbot_compat/pipeline.py:collect_handlers",
+        "name": "collect_handlers",
+        "filePath": "astrbot_compat/pipeline.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Function:astrbot_compat/pipeline.py:run_provider_request",
+        "name": "run_provider_request",
+        "filePath": "astrbot_compat/pipeline.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_108_run_provider_request",
+            "label": "Run_provider_request → Get_sender_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_235_run_provider_request",
+            "label": "Run_provider_request → _normalize_chain",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_107_run_provider_request",
+            "label": "Run_provider_request → Get_group_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_155_run_provider_request",
+            "label": "Run_provider_request → To_onebot_message",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_154_run_provider_request",
+            "label": "Run_provider_request → Split_forward_nodes",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Method:astrbot_compat/base.py:StarTools.send_message#2",
+        "name": "send_message",
+        "filePath": "astrbot_compat/base.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Method:astrbot_compat/events.py:AstrMessageEvent.react#1",
+        "name": "react",
+        "filePath": "astrbot_compat/events.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "Method:astrbot_compat/events.py:AstrMessageEvent.send_streaming#2",
+        "name": "send_streaming",
+        "filePath": "astrbot_compat/events.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  }
+}

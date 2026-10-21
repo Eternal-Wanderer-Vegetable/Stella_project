@@ -1,0 +1,670 @@
+{
+  "mode": "pdg",
+  "pdgResultVersion": 3,
+  "target": {
+    "id": "Function:memory/evidence_contract.py:assess_candidate",
+    "name": "assess_candidate",
+    "type": "Function",
+    "filePath": "memory/evidence_contract.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 4,
+  "risk": "UNKNOWN",
+  "epistemic": "pdg-intra-procedural",
+  "note": "mode:'pdg' — intra-procedural slice from line 363 of 'assess_candidate'. 14 statements are upstream-dependent on it (over CDG + REACHING_DEF). Inter-procedural symbol reach is attached by impact mode's unified PDG dispatcher in interproceduralByDepth/byDepth. Inter-procedural symbol reach is included using the resolved symbol graph; statement-level PDG reach remains in affectedStatements. The symbol reach is labeled as a PDG evidence bridge, not as pure statement-level dependence.",
+  "pdgEvidence": {
+    "statements": "local-dependence",
+    "localSymbols": "owner-projection",
+    "localSymbolCount": 1,
+    "unresolvedBlockCount": 0,
+    "ambiguousProjectionCount": 0,
+    "interprocedural": "callgraph-bridge",
+    "interproceduralEvidenceCounts": {
+      "callgraph-bridge": 3
+    }
+  },
+  "criterionLine": 363,
+  "affectedStatements": [
+    {
+      "line": 229,
+      "filePath": "memory/evidence_contract.py",
+      "text": "",
+      "scope": "intra"
+    },
+    {
+      "line": 247,
+      "filePath": "memory/evidence_contract.py",
+      "text": "rows, conversation_key, bot_id, source_error = _resolve_sources(",
+      "scope": "intra"
+    },
+    {
+      "line": 255,
+      "filePath": "memory/evidence_contract.py",
+      "text": "source_error",
+      "scope": "intra"
+    },
+    {
+      "line": 292,
+      "filePath": "memory/evidence_contract.py",
+      "text": "expected_bot_id and any(not str(row.get(\"bot_id\") or \"\").strip() for row in rows)",
+      "scope": "intra"
+    },
+    {
+      "line": 295,
+      "filePath": "memory/evidence_contract.py",
+      "text": "uid = str(candidate.get(\"user_id\") or \"\").strip()",
+      "scope": "intra"
+    },
+    {
+      "line": 298,
+      "filePath": "memory/evidence_contract.py",
+      "text": "contract = candidate.get(\"verification_contract\")",
+      "scope": "intra"
+    },
+    {
+      "line": 311,
+      "filePath": "memory/evidence_contract.py",
+      "text": "set(contract) != allowed_contract_keys",
+      "scope": "intra"
+    },
+    {
+      "line": 314,
+      "filePath": "memory/evidence_contract.py",
+      "text": "predicate = contract.get(\"predicate_key\")",
+      "scope": "intra"
+    },
+    {
+      "line": 336,
+      "filePath": "memory/evidence_contract.py",
+      "text": "support_by_id: dict[int, str] = {}",
+      "scope": "intra"
+    },
+    {
+      "line": 350,
+      "filePath": "memory/evidence_contract.py",
+      "text": "span = support.get(\"exact_support_span\")",
+      "scope": "intra"
+    },
+    {
+      "line": 354,
+      "filePath": "memory/evidence_contract.py",
+      "text": "set(support_by_id) != set(source_ids)",
+      "scope": "intra"
+    },
+    {
+      "line": 357,
+      "filePath": "memory/evidence_contract.py",
+      "text": "content = str(candidate.get(\"content\") or \"\").strip()",
+      "scope": "intra"
+    },
+    {
+      "line": 358,
+      "filePath": "memory/evidence_contract.py",
+      "text": "not content or any(span != content for span in support_by_id.values())",
+      "scope": "intra"
+    },
+    {
+      "line": 360,
+      "filePath": "memory/evidence_contract.py",
+      "text": "canonical_value not in content",
+      "scope": "intra"
+    }
+  ],
+  "affectedStatementCount": 14,
+  "reachableBlocks": [
+    "BasicBlock:memory/evidence_contract.py:229:0:0",
+    "BasicBlock:memory/evidence_contract.py:229:0:10",
+    "BasicBlock:memory/evidence_contract.py:229:0:12",
+    "BasicBlock:memory/evidence_contract.py:229:0:15",
+    "BasicBlock:memory/evidence_contract.py:229:0:19",
+    "BasicBlock:memory/evidence_contract.py:229:0:21",
+    "BasicBlock:memory/evidence_contract.py:229:0:24",
+    "BasicBlock:memory/evidence_contract.py:229:0:35",
+    "BasicBlock:memory/evidence_contract.py:229:0:39",
+    "BasicBlock:memory/evidence_contract.py:229:0:41",
+    "BasicBlock:memory/evidence_contract.py:229:0:42",
+    "BasicBlock:memory/evidence_contract.py:229:0:44",
+    "BasicBlock:memory/evidence_contract.py:229:0:5",
+    "BasicBlock:memory/evidence_contract.py:229:0:6"
+  ],
+  "intraReachableBlocks": [
+    "BasicBlock:memory/evidence_contract.py:229:0:0",
+    "BasicBlock:memory/evidence_contract.py:229:0:10",
+    "BasicBlock:memory/evidence_contract.py:229:0:12",
+    "BasicBlock:memory/evidence_contract.py:229:0:15",
+    "BasicBlock:memory/evidence_contract.py:229:0:19",
+    "BasicBlock:memory/evidence_contract.py:229:0:21",
+    "BasicBlock:memory/evidence_contract.py:229:0:24",
+    "BasicBlock:memory/evidence_contract.py:229:0:35",
+    "BasicBlock:memory/evidence_contract.py:229:0:39",
+    "BasicBlock:memory/evidence_contract.py:229:0:41",
+    "BasicBlock:memory/evidence_contract.py:229:0:42",
+    "BasicBlock:memory/evidence_contract.py:229:0:44",
+    "BasicBlock:memory/evidence_contract.py:229:0:5",
+    "BasicBlock:memory/evidence_contract.py:229:0:6"
+  ],
+  "seedBlocks": [
+    "BasicBlock:memory/evidence_contract.py:229:0:46"
+  ],
+  "blockCount": 14,
+  "depthReached": 3,
+  "unresolvedBlockCount": 0,
+  "ambiguousProjectionCount": 0,
+  "truncated": true,
+  "truncatedBy": "depth",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 2,
+    "modules_affected": 3
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 1,
+    "3": 1
+  },
+  "affected_processes": [
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/eval_memory_replay.py",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 3
+    },
+    {
+      "name": "consolidation_drain_job",
+      "type": "Function",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 4
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Memory",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Observability",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Tests",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:memory/evidence_contract.py:assess_candidate",
+        "name": "assess_candidate",
+        "type": "Function",
+        "filePath": "memory/evidence_contract.py",
+        "startLine": 229,
+        "pdgEvidence": "owner-projection",
+        "pdgEvidenceReason": "reachable BasicBlock projected to its owning symbol",
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._write_memory_candidates#8",
+        "name": "_write_memory_candidates",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [],
+        "pdgEvidence": "callgraph-bridge",
+        "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+        "name": "_consolidate_group_core",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [],
+        "pdgEvidence": "callgraph-bridge",
+        "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+        "name": "_consolidate_with_root",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_374_consolidation_drain_",
+            "label": "Consolidation_drain_job → Alive",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_45_main",
+            "label": "Main → Alive",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_389_main",
+            "label": "Main → _new_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_72_consolidation_drain_",
+            "label": "Consolidation_drain_job → _register",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_379_main",
+            "label": "Main → _row_trace_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_390_main",
+            "label": "Main → _register",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_71_consolidation_drain_",
+            "label": "Consolidation_drain_job → _new_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_52_consolidation_drain_",
+            "label": "Consolidation_drain_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_539_main",
+            "label": "Main → Utc_now",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_391_main",
+            "label": "Main → Dropped",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_73_consolidation_drain_",
+            "label": "Consolidation_drain_job → Dropped",
+            "processType": "cross_community",
+            "step": 4
+          }
+        ],
+        "pdgEvidence": "callgraph-bridge",
+        "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+      }
+    ]
+  },
+  "interproceduralByDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._write_memory_candidates#8",
+        "name": "_write_memory_candidates",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [],
+        "pdgEvidence": "callgraph-bridge",
+        "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+        "name": "_consolidate_group_core",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [],
+        "pdgEvidence": "callgraph-bridge",
+        "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+        "name": "_consolidate_with_root",
+        "filePath": "memory/consolidator.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_374_consolidation_drain_",
+            "label": "Consolidation_drain_job → Alive",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_45_main",
+            "label": "Main → Alive",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_389_main",
+            "label": "Main → _new_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_72_consolidation_drain_",
+            "label": "Consolidation_drain_job → _register",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_379_main",
+            "label": "Main → _row_trace_id",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_390_main",
+            "label": "Main → _register",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_71_consolidation_drain_",
+            "label": "Consolidation_drain_job → _new_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_52_consolidation_drain_",
+            "label": "Consolidation_drain_job → _row_trace_id",
+            "processType": "cross_community",
+            "step": 4
+          },
+          {
+            "id": "proc_539_main",
+            "label": "Main → Utc_now",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_391_main",
+            "label": "Main → Dropped",
+            "processType": "cross_community",
+            "step": 3
+          },
+          {
+            "id": "proc_73_consolidation_drain_",
+            "label": "Consolidation_drain_job → Dropped",
+            "processType": "cross_community",
+            "step": 4
+          }
+        ],
+        "pdgEvidence": "callgraph-bridge",
+        "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+      }
+    ]
+  },
+  "interproceduralByDepthCounts": {
+    "1": 1,
+    "2": 1,
+    "3": 1
+  },
+  "interproceduralEpistemic": "exact",
+  "pdgInterprocedural": {
+    "engine": "symbol-graph",
+    "evidence": "callgraph-bridge",
+    "impactedCount": 3,
+    "byDepthCounts": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+    },
+    "byDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Method:memory/consolidator.py:MemoryConsolidator._write_memory_candidates#8",
+          "name": "_write_memory_candidates",
+          "filePath": "memory/consolidator.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [],
+          "pdgEvidence": "callgraph-bridge",
+          "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+        }
+      ],
+      "2": [
+        {
+          "depth": 2,
+          "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+          "name": "_consolidate_group_core",
+          "filePath": "memory/consolidator.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [],
+          "pdgEvidence": "callgraph-bridge",
+          "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+        }
+      ],
+      "3": [
+        {
+          "depth": 3,
+          "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+          "name": "_consolidate_with_root",
+          "filePath": "memory/consolidator.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_374_consolidation_drain_",
+              "label": "Consolidation_drain_job → Alive",
+              "processType": "cross_community",
+              "step": 4
+            },
+            {
+              "id": "proc_45_main",
+              "label": "Main → Alive",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_389_main",
+              "label": "Main → _new_id",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_72_consolidation_drain_",
+              "label": "Consolidation_drain_job → _register",
+              "processType": "cross_community",
+              "step": 4
+            },
+            {
+              "id": "proc_379_main",
+              "label": "Main → _row_trace_id",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_390_main",
+              "label": "Main → _register",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_71_consolidation_drain_",
+              "label": "Consolidation_drain_job → _new_id",
+              "processType": "cross_community",
+              "step": 4
+            },
+            {
+              "id": "proc_52_consolidation_drain_",
+              "label": "Consolidation_drain_job → _row_trace_id",
+              "processType": "cross_community",
+              "step": 4
+            },
+            {
+              "id": "proc_539_main",
+              "label": "Main → Utc_now",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_391_main",
+              "label": "Main → Dropped",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_73_consolidation_drain_",
+              "label": "Consolidation_drain_job → Dropped",
+              "processType": "cross_community",
+              "step": 4
+            }
+          ],
+          "pdgEvidence": "callgraph-bridge",
+          "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+        }
+      ]
+    },
+    "evidenceCounts": {
+      "callgraph-bridge": 3
+    },
+    "statementPreciseByDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Method:memory/consolidator.py:MemoryConsolidator._write_memory_candidates#8",
+          "name": "_write_memory_candidates",
+          "filePath": "memory/consolidator.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [],
+          "pdgEvidence": "callgraph-bridge",
+          "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+        }
+      ],
+      "2": [
+        {
+          "depth": 2,
+          "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_group_core#6",
+          "name": "_consolidate_group_core",
+          "filePath": "memory/consolidator.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [],
+          "pdgEvidence": "callgraph-bridge",
+          "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+        }
+      ],
+      "3": [
+        {
+          "depth": 3,
+          "id": "Method:memory/consolidator.py:MemoryConsolidator._consolidate_with_root#6",
+          "name": "_consolidate_with_root",
+          "filePath": "memory/consolidator.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_374_consolidation_drain_",
+              "label": "Consolidation_drain_job → Alive",
+              "processType": "cross_community",
+              "step": 4
+            },
+            {
+              "id": "proc_45_main",
+              "label": "Main → Alive",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_389_main",
+              "label": "Main → _new_id",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_72_consolidation_drain_",
+              "label": "Consolidation_drain_job → _register",
+              "processType": "cross_community",
+              "step": 4
+            },
+            {
+              "id": "proc_379_main",
+              "label": "Main → _row_trace_id",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_390_main",
+              "label": "Main → _register",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_71_consolidation_drain_",
+              "label": "Consolidation_drain_job → _new_id",
+              "processType": "cross_community",
+              "step": 4
+            },
+            {
+              "id": "proc_52_consolidation_drain_",
+              "label": "Consolidation_drain_job → _row_trace_id",
+              "processType": "cross_community",
+              "step": 4
+            },
+            {
+              "id": "proc_539_main",
+              "label": "Main → Utc_now",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_391_main",
+              "label": "Main → Dropped",
+              "processType": "cross_community",
+              "step": 3
+            },
+            {
+              "id": "proc_73_consolidation_drain_",
+              "label": "Consolidation_drain_job → Dropped",
+              "processType": "cross_community",
+              "step": 4
+            }
+          ],
+          "pdgEvidence": "callgraph-bridge",
+          "pdgEvidenceReason": "symbol reached through the resolved symbol graph compatibility bridge"
+        }
+      ]
+    },
+    "statementPreciseByDepthCounts": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+    },
+    "statementPreciseImpactedCount": 3,
+    "statementPrecision": 1,
+    "partial": false
+  }
+}

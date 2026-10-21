@@ -1,0 +1,328 @@
+{
+  "processes": [
+    {
+      "id": "proc_205_system_doctor",
+      "summary": "System_doctor → _recount_summary",
+      "priority": 0.094,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_86_system_doctor",
+      "summary": "System_doctor → _project_version",
+      "priority": 0.094,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_121_collect_status",
+      "summary": "Collect_status → Redact_value",
+      "priority": 0.092,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_387_collect_status",
+      "summary": "Collect_status → _now",
+      "priority": 0.092,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_413_collect_status",
+      "summary": "Collect_status → State_path",
+      "priority": 0.092,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_77_collect_status",
+      "summary": "Collect_status → Validate_state",
+      "priority": 0.092,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_563_platform_onebot",
+      "summary": "Platform_onebot → Parse_env",
+      "priority": 0.09,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_648_platform_onebot",
+      "summary": "Platform_onebot → Env_file",
+      "priority": 0.09,
+      "symbol_count": 2,
+      "process_type": "intra_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_592_collect_status",
+      "summary": "Collect_status → Default_manifest",
+      "priority": 0.084,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_134_platform_link",
+      "summary": "Platform_link → _extract_ws_url",
+      "priority": 0.083,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_135_platform_link",
+      "summary": "Platform_link → _port_in_use",
+      "priority": 0.083,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_136_platform_link",
+      "summary": "Platform_link → _token_facts",
+      "priority": 0.083,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/services/system.py:_reframe_port_item",
+      "name": "_reframe_port_item",
+      "filePath": "webui/services/system.py",
+      "startLine": 84,
+      "endLine": 127,
+      "module": "Routers",
+      "process_id": "proc_205_system_doctor",
+      "step_index": 3
+    },
+    {
+      "id": "Function:deploy/runtime.py:sync_onebot_status",
+      "name": "sync_onebot_status",
+      "filePath": "deploy/runtime.py",
+      "startLine": 532,
+      "endLine": 563,
+      "module": "Tests",
+      "process_id": "proc_121_collect_status",
+      "step_index": 2
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/status_api.py:collect_status",
+      "name": "collect_status",
+      "filePath": "stella_project/plugins/bot_main/status_api.py",
+      "startLine": 241,
+      "endLine": 287,
+      "module": "Bot_main",
+      "process_id": "proc_121_collect_status",
+      "step_index": 1
+    },
+    {
+      "id": "Function:webui/routers/config.py:platform_onebot",
+      "name": "platform_onebot",
+      "filePath": "webui/routers/config.py",
+      "startLine": 110,
+      "endLine": 111,
+      "module": "Services",
+      "process_id": "proc_563_platform_onebot",
+      "step_index": 1
+    },
+    {
+      "id": "Function:webui/services/platformcfg.py:onebot",
+      "name": "onebot",
+      "filePath": "webui/services/platformcfg.py",
+      "startLine": 19,
+      "endLine": 35,
+      "module": "Services",
+      "process_id": "proc_563_platform_onebot",
+      "step_index": 2
+    },
+    {
+      "id": "Function:deploy/runtime.py:default_manifest",
+      "name": "default_manifest",
+      "filePath": "deploy/runtime.py",
+      "startLine": 94,
+      "endLine": 142,
+      "module": "Deploy",
+      "process_id": "proc_592_collect_status",
+      "step_index": 5
+    },
+    {
+      "id": "Function:extensions/link_monitor/__init__.py:link_status",
+      "name": "link_status",
+      "filePath": "extensions/link_monitor/__init__.py",
+      "startLine": 194,
+      "endLine": 248,
+      "module": "Link_monitor",
+      "process_id": "proc_134_platform_link",
+      "step_index": 3
+    },
+    {
+      "id": "Function:webui/services/runtime.py:platform_link",
+      "name": "platform_link",
+      "filePath": "webui/services/runtime.py",
+      "startLine": 14,
+      "endLine": 21,
+      "module": "Link_monitor",
+      "process_id": "proc_134_platform_link",
+      "step_index": 2
+    }
+  ],
+  "definitions": [
+    {
+      "id": "File:webui/routers/config.py",
+      "name": "config.py",
+      "filePath": "webui/routers/config.py"
+    },
+    {
+      "id": "File:deploy/runtime.py",
+      "name": "runtime.py",
+      "filePath": "deploy/runtime.py"
+    },
+    {
+      "id": "Class:extensions/link_monitor/__init__.py:_State",
+      "name": "_State",
+      "filePath": "extensions/link_monitor/__init__.py",
+      "startLine": 38,
+      "endLine": 51
+    },
+    {
+      "id": "Function:extensions/link_monitor/__init__.py:link_monitor_task",
+      "name": "link_monitor_task",
+      "filePath": "extensions/link_monitor/__init__.py",
+      "startLine": 137,
+      "endLine": 191
+    },
+    {
+      "id": "Function:tests/test_deploy_cli.py:test_cmd_status_link_disconnected_no_crash",
+      "name": "test_cmd_status_link_disconnected_no_crash",
+      "filePath": "tests/test_deploy_cli.py",
+      "startLine": 56,
+      "endLine": 75,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_deploy_cli.py:test_cmd_status_link_connected",
+      "name": "test_cmd_status_link_connected",
+      "filePath": "tests/test_deploy_cli.py",
+      "startLine": 78,
+      "endLine": 97,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_deploy_cli.py:test_cmd_status_link_disabled",
+      "name": "test_cmd_status_link_disabled",
+      "filePath": "tests/test_deploy_cli.py",
+      "startLine": 100,
+      "endLine": 116,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_link_monitor.py:test_fresh_event_no_probe",
+      "name": "test_fresh_event_no_probe",
+      "filePath": "tests/test_link_monitor.py",
+      "startLine": 129,
+      "endLine": 138
+    },
+    {
+      "id": "Function:tests/test_link_monitor.py:test_disabled_does_nothing",
+      "name": "test_disabled_does_nothing",
+      "filePath": "tests/test_link_monitor.py",
+      "startLine": 205,
+      "endLine": 216
+    },
+    {
+      "id": "Function:tests/test_link_monitor.py:test_link_status_fields_and_healthy",
+      "name": "test_link_status_fields_and_healthy",
+      "filePath": "tests/test_link_monitor.py",
+      "startLine": 219,
+      "endLine": 265
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/status_api.py:build_payload",
+      "name": "build_payload",
+      "filePath": "stella_project/plugins/bot_main/status_api.py",
+      "startLine": 168,
+      "endLine": 225,
+      "module": "Bot_main"
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/status_api.py",
+      "name": "status_api.py",
+      "filePath": "stella_project/plugins/bot_main/status_api.py"
+    },
+    {
+      "id": "Function:tests/test_runtime_contract.py:test_runtime_status_has_stable_contract",
+      "name": "test_runtime_status_has_stable_contract",
+      "filePath": "tests/test_runtime_contract.py",
+      "startLine": 141,
+      "endLine": 147
+    },
+    {
+      "id": "Function:tests/test_runtime_contract.py:test_onebot_link_maps_to_degraded_without_restarting_stella",
+      "name": "test_onebot_link_maps_to_degraded_without_restarting_stella",
+      "filePath": "tests/test_runtime_contract.py",
+      "startLine": 158,
+      "endLine": 182,
+      "module": "Deploy"
+    },
+    {
+      "id": "File:tests/test_runtime_contract.py",
+      "name": "test_runtime_contract.py",
+      "filePath": "tests/test_runtime_contract.py"
+    },
+    {
+      "id": "Function:tests/test_status_api.py:test_build_payload_fields_complete",
+      "name": "test_build_payload_fields_complete",
+      "filePath": "tests/test_status_api.py",
+      "startLine": 74,
+      "endLine": 95
+    },
+    {
+      "id": "Function:tests/test_status_api.py:test_build_payload_accepts_none_link",
+      "name": "test_build_payload_accepts_none_link",
+      "filePath": "tests/test_status_api.py",
+      "startLine": 141,
+      "endLine": 146
+    },
+    {
+      "id": "File:tests/test_status_api.py",
+      "name": "test_status_api.py",
+      "filePath": "tests/test_status_api.py"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_readonly.py:test_readonly_endpoints_require_auth",
+      "name": "test_readonly_endpoints_require_auth",
+      "filePath": "tests/webui/test_webui_readonly.py",
+      "startLine": 30,
+      "endLine": 38
+    },
+    {
+      "id": "Function:tests/webui/test_webui_readonly.py:test_platform_link_degrades_to_unavailable",
+      "name": "test_platform_link_degrades_to_unavailable",
+      "filePath": "tests/webui/test_webui_readonly.py",
+      "startLine": 115,
+      "endLine": 123
+    }
+  ],
+  "timing": {
+    "vector": 1.9,
+    "bm25": 962.1,
+    "merge": 0.1,
+    "symbol_lookup": 85.6,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 1048
+  }
+}

@@ -127,6 +127,18 @@ from core.social.delivery import (
     seal_delivery_plan,
 )
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
+from core.transport import (
+    AdmissionPolicy,
+    BotRef,
+    DeliveryTarget,
+    MediaSource,
+    OutboundMessage,
+    OutboundSegment,
+    SceneRef,
+    UnsupportedEvent,
+    get_outbound_service,
+    normalize_onebot11,
+)
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
 from memory import addressing, capture_gate, expression_learning, social_store
@@ -145,6 +157,7 @@ from memory.consolidator import get_consolidator, maybe_consolidate
 from memory.conversation_projection import (
     canonical_message_id_text,
     parse_platform_message_id,
+    parse_qq_message_id,
 )
 from memory.participation import get_participation_manager
 from memory.post_processors import (
@@ -206,6 +219,25 @@ _group_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 _private_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
+def _delivery_target_for_context(ctx: ChatContext, event: Any = None) -> DeliveryTarget:
+    """Build an outbound route only from trusted context identities."""
+    bot_ref = getattr(ctx, "bot_ref", None)
+    scene_ref = getattr(ctx, "scene_ref", None)
+    if not isinstance(bot_ref, BotRef) or not isinstance(scene_ref, SceneRef):
+        raise ValueError("outbound target requires trusted BotRef and SceneRef")
+    return DeliveryTarget(bot=bot_ref, scene=scene_ref, event_handle=event)
+
+
+def _delivery_target_for_event(normalized, event: Any = None) -> DeliveryTarget:
+    if isinstance(normalized, UnsupportedEvent):
+        raise ValueError("unsupported events cannot provide outbound targets")
+    return DeliveryTarget(
+        bot=normalized.bot_ref,
+        scene=normalized.scene_ref,
+        event_handle=event,
+    )
+
+
 def _event_key(event: MessageEvent) -> str:
     """事件的去重键（计划 §6.2）：至少包含 bot、会话、message_id。
 
@@ -226,6 +258,12 @@ _reply_check_tasks: set[asyncio.Task] = set()
 # 插件已处理标记：event_key -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
 _plugin_handled_msgs: OrderedDict[str, float] = OrderedDict()
 _addressing_decisions: OrderedDict[str, AddressingRequest] = OrderedDict()
+_ingress_admission = AdmissionPolicy()
+
+
+def _normalized_onebot_event(event: Any):
+    """Normalize a trusted OneBot message without interpreting its body as identity."""
+    return normalize_onebot11(event, connection_id=f"legacy-qq:{getattr(event, 'self_id', '')}")
 
 
 # ============================================================
@@ -689,7 +727,10 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
             # DIRECT/empty generations may legitimately bypass parse_output.
             return ctx
         envelope, projection_error = reply_envelope_from_projection(
-            typed_reply
+            typed_reply,
+            allow_legacy_qq_targets=(
+                getattr(getattr(ctx, "user_ref", None), "identity_domain", "") == "qq:client"
+            ),
         )
         parse_error = typed_error or projection_error
         is_typed_special = bool(
@@ -713,6 +754,7 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
             generation_epoch=int(getattr(ctx, "generation_epoch", 0) or 0),
             risk_context=getattr(ctx, "attribution_risk_context", None),
             parse_error=parse_error,
+            turn_id=str(getattr(ctx, "turn_id", "") or ""),
         )
         record = {
             "decision": decision.decision,
@@ -723,6 +765,7 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
             "guard_mode": effective_mode,
             "identity_revision": decision.identity_revision,
             "generation_epoch": decision.generation_epoch,
+            "turn_id": str(getattr(ctx, "turn_id", "") or ""),
             "semantic_status": decision.semantic_status,
             "verified": decision.verified,
             "checked_evidence_ids": decision.checked_evidence_ids,
@@ -1107,28 +1150,33 @@ async def record_group_chat(event: GroupMessageEvent):
     # 真实控制边界（修复计划 §6.4）：监听器被调用 = 进入过滤段
     _flow_transition(fctx, from_node="ingress.receive",
                      to_node="ingress.passive.filter")
-    if event.group_id not in ALLOWED_GROUPS:
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
         _flow_decision(fctx, "ingress.passive.filter", status="skipped",
-                       reason_code="group_not_allowed")
+                       reason_code=normalized.reason_code)
         return
-    # 防止 OneBot 回显自身消息造成重复入库（自身发言会经 _record_bot_lines 单独落库）
-    if event.user_id == event.self_id:
+    needs_images = not normalized.text.strip() or (
+        PARTICIPATION_ENABLED and not normalized.is_tome
+    )
+    images = (
+        extract_image_sources(normalized)
+        if needs_images and vision_available()
+        else []
+    )
+    admission = _ingress_admission.decide(
+        normalized,
+        purpose="passive",
+        enabled=event.group_id in ALLOWED_GROUPS,
+        vision_enabled=bool(images),
+    )
+    if not admission.allowed:
         _flow_decision(fctx, "ingress.passive.filter", status="skipped",
-                       reason_code="self_echo")
+                       reason_code=(
+                           "group_not_allowed" if admission.reason_code == "disabled"
+                           else admission.reason_code
+                       ))
         return
-    text = event.get_plaintext().strip()
-    if text.startswith("/"):
-        _flow_decision(fctx, "ingress.passive.filter", status="skipped",
-                       reason_code="slash_command")
-        return
-    if not text:
-        # 纯图片消息：识图功能可用时按 [图片] 占位入库，让尾巴/整合知道
-        # 「刚才有人发过图」；不可用（默认）时照旧不落库，与旧版一致。
-        if not (vision_available() and extract_image_sources(event)):
-            _flow_decision(fctx, "ingress.passive.filter", status="skipped",
-                           reason_code="empty_text_no_vision")
-            return
-        text = "[图片]"
+    text = normalized.text.strip() or "[图片]"
     _flow_checkpoint(fctx, "ingress.passive.filter", summary="passed")
     # 采集就绪门（计划 §6.3）：资格过滤之后、落库与一切内容派生副作用之前。
     # 关闭时本条消息不落库、不排队、不回放——恢复后从下一条新消息开始采集。
@@ -1141,6 +1189,7 @@ async def record_group_chat(event: GroupMessageEvent):
             f"原因 {capture.reason_code or 'closed'}）"
         )
         return
+    ref = _register_group_conversation(event)
     _flow_transition(fctx, from_node="ingress.passive.filter",
                      to_node="ingress.passive.persist")
     # 消息关系提取（多人身份修复计划 §6.2）：无条件执行（不依赖 SOCIAL_ENABLED），
@@ -1151,7 +1200,7 @@ async def record_group_chat(event: GroupMessageEvent):
         getattr(getattr(event, "sender", None), "card", "")
         or getattr(getattr(event, "sender", None), "nickname", "")
     )
-    conversation_key = f"qq:{event.self_id}:group:{event.group_id}"
+    conversation_key = ref.conversation_key
     reply_target_uid = resolve_reply_target(
         reply_to_id or "",
         event.group_id,
@@ -1172,8 +1221,18 @@ async def record_group_chat(event: GroupMessageEvent):
         conversation_kind="group",
         conversation_key=conversation_key,
         bot_id=str(event.self_id),
-        peer_id=str(event.group_id),
-        storage_session_id=event.group_id,
+        peer_id=ref.peer_id,
+        storage_session_id=ref.storage_session_id,
+        group_shared_space=ref.memory_space,
+        user_ref=normalized.user_ref,
+        bot_ref=normalized.bot_ref,
+        scene_ref=normalized.scene_ref,
+        connection_id=normalized.bot_ref.connection_id,
+        adapter_name=normalized.bot_ref.adapter,
+        platform_scope=normalized.bot_ref.platform_scope,
+        scene_kind=normalized.scene_ref.kind,
+        scene_id=normalized.scene_ref.scene_id,
+        platform_message_id=normalized.platform_message_id,
         sender_display_name=sender_display,
         reply_to_msg_id=str(reply_to_id or ""),
         reply_target_user_id=reply_target_uid,
@@ -1206,7 +1265,9 @@ async def record_group_chat(event: GroupMessageEvent):
             # 只要还愿意跟 Bot 说话就不算「不想聊」，顺手解除退避（自愈，见 reset_no_reply）
             reset_no_reply(ctx.group_id, ctx.user_id)
         # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
-        session_touch(ctx.group_id)
+        # The registry key distinguishes same-numbered groups reached through
+        # different Bot connections. Session summaries use this key as well.
+        session_touch(ctx.storage_key())
 
     # 消息证据（计划 §6.1）：关系解析已在入库前完成（ctx 信封），这里只消费
     # 同一份结果。总开关关闭时不碰旁表；两个 matcher 重复处理同一消息由
@@ -1219,7 +1280,7 @@ async def record_group_chat(event: GroupMessageEvent):
         with contextlib.suppress(Exception), _flow_span(fctx, "ingress.passive.social"):
             social_event_id = social_store.record_event(
                 MessageEvidence(
-                    scope=ConversationScope.for_qq(event.group_id),
+                    scope=ConversationScope.from_context(ctx),
                     platform_message_id=str(event.message_id),
                     user_id=str(event.user_id),
                     source_kind=ctx.source_kind,
@@ -1237,9 +1298,12 @@ async def record_group_chat(event: GroupMessageEvent):
         _flow_transition(fctx, from_node="ingress.passive.social",
                          to_node="ingress.passive.expression")
     with _flow_span(fctx, "ingress.passive.expression"):
+        social_identity = ConversationScope.from_context(ctx)
         expression_learning.note_passive_message(
             ctx.group_shared_space, ctx.user_id, text,
             group_id=event.group_id, event_id=social_event_id,
+            bot_id=social_identity.bot_id,
+            connection_id=social_identity.connection_id,
         )
 
     if PARTICIPATION_ENABLED and ctx.source_kind == "PASSIVE":
@@ -1254,7 +1318,7 @@ async def record_group_chat(event: GroupMessageEvent):
                 reply_to=int(reply_to_id) if (reply_to_id or "").isdigit() else None,
                 mentioned_users=tuple(int(m) for m in mentioned_users if m.isdigit()),
                 is_tome=event.is_tome(),
-                has_image=bool(extract_image_sources(event)) if vision_available() else False,
+                has_image=bool(images),
                 has_emoji=bool(expression_learning._EMOJI_RE.search(text)),
                 # 消息链上的 participation 探针显式挂在消息 root（计划 §6.2：
                 # 显式传递优先于环境隐式传播），全等级决策事件随消息 trace 可查
@@ -1270,8 +1334,13 @@ async def record_group_chat(event: GroupMessageEvent):
             _flow_checkpoint(fctx, "participation.spawn",
                              summary="spawned proactive speak, not awaited",
                              metrics={"trigger_text_chars": len(text)})
-            _spawn_participation_speak(event.group_id, decision, trigger_text=text,
-                                       parent_trace_id=ctx.trace_id)
+            _spawn_participation_speak(
+                event.group_id,
+                decision,
+                bot_ref=normalized.bot_ref,
+                trigger_text=text,
+                parent_trace_id=ctx.trace_id,
+            )
 
 
 def _maybe_identity_direct_reply(ctx) -> None:
@@ -1332,15 +1401,19 @@ def _extract_reply_candidate(event) -> str | None:
     主体仍由 resolve_reply_target 按同 canonical conversation+bot 查库
     解析，平台侧信息不绕过入库校验。
     """
+    def _reply_ids(segments) -> list[str]:
+        ids = []
+        for segment in segments:
+            if _message_segment_type(segment) != "reply":
+                continue
+            raw_id = _message_segment_data(segment).get("id")
+            if raw_id is not None:
+                ids.append(str(raw_id))
+        return ids
+
     segments = _relation_segments(event)
     if segments is not None:
-        candidate = _unique_reply_candidate(
-            [
-                str(_message_segment_data(seg).get("id") or "")
-                for seg in segments
-                if _message_segment_type(seg) == "reply"
-            ]
-        )
+        candidate = _unique_reply_candidate(_reply_ids(segments))
         if candidate is not None:
             return candidate
     reply = getattr(event, "reply", None)
@@ -1352,13 +1425,7 @@ def _extract_reply_candidate(event) -> str | None:
         processed = list(event.get_message())
     except Exception:
         return None
-    return _unique_reply_candidate(
-        [
-            str(_message_segment_data(seg).get("id") or "")
-            for seg in processed
-            if _message_segment_type(seg) == "reply"
-        ]
-    )
+    return _unique_reply_candidate(_reply_ids(processed))
 
 
 def _extract_message_relations(event: GroupMessageEvent) -> tuple[str | None, tuple[str, ...]]:
@@ -1395,19 +1462,28 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
     带图片」——@ Stella + 纯图也能进对话；功能未配置（默认）时判据与
     旧版逐字一致，纯图消息照旧不触发。
     """
-    _tome = event.is_tome()
-    _txt = event.get_plaintext().strip()
-    _gid_ok = event.group_id in ALLOWED_GROUPS
-    logger.info(f"[chat_debug] is_chat_trigger gid={event.group_id} gid_ok={_gid_ok} is_tome={_tome} text={_txt!r} self_id={event.self_id} raw={event.get_message()!r}")
-    if event.group_id not in ALLOWED_GROUPS:
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
         return False
-    if not event.is_tome():
-        return False
-    if len(event.get_plaintext().strip()) > 0:
-        return True
-    # 识图功能未启用时 extract_image_sources 不取图源、直接判空，
-    # 行为与旧版一致（纯图 @ 不触发）。
-    return vision_available() and bool(extract_image_sources(event))
+    image_enabled = (
+        not normalized.text.strip()
+        and vision_available()
+        and bool(extract_image_sources(normalized))
+    )
+    admission = _ingress_admission.decide(
+        normalized,
+        purpose="group_chat",
+        enabled=event.group_id in ALLOWED_GROUPS,
+        vision_enabled=image_enabled,
+    )
+    logger.info(
+        f"[chat_debug] is_chat_trigger gid={event.group_id} "
+        f"gid_ok={event.group_id in ALLOWED_GROUPS} is_tome={normalized.is_tome} "
+        f"text={normalized.text.strip()!r} self_id={event.self_id} "
+        f"raw={event.get_message()!r} allowed={admission.allowed} "
+        f"reason={admission.reason_code}"
+    )
+    return admission.allowed
 
 
 async def is_plugin_trigger(event: MessageEvent) -> bool:
@@ -1417,6 +1493,11 @@ async def is_plugin_trigger(event: MessageEvent) -> bool:
     ``WakingCheckStage``），而这里只负责把 Stella 侧的两项配置传进去。这样那条规则
     也能被单测覆盖——ai_gateway 在测试里 import 不进来（import 期就 ``get_driver()``）。
     """
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
+        return False
+    if not _ingress_admission.decide(normalized, purpose="plugin").allowed:
+        return False
     from astrbot_compat.pipeline import should_dispatch
 
     return should_dispatch(
@@ -1465,6 +1546,12 @@ chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, b
 async def handle_chat(bot: Bot, event: GroupMessageEvent):
     """@ 触发主流程：加群锁 → 按需总结 → 跑 Pipeline → 逐条发送回复。"""
     fctx = _flow_root_or_create(event, "qq_chat")
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
+        _flow_decision(fctx, "ingress.chat.rule", status="skipped",
+                       reason_code=normalized.reason_code)
+        _flow_set_outcome(fctx, "unsupported_event")
+        return
     # matcher 命中即聊天触发规则通过（修复计划 §6.4 真实边界）
     _flow_transition(fctx, from_node="ingress.chat.rule",
                      to_node="chat.plugin_shortcut")
@@ -1490,10 +1577,11 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
             get_participation_manager().bump_topic_revision(event.group_id)
         # 纯图片 @（无文字）时给 message 一个占位文本：它是检索查询与 prompt
         # 的当前输入，空串会让整轮对话退化成「没有当前输入」。
-        message_text = event.get_plaintext().strip() or "[图片]"
+        message_text = normalized.text.strip() or "[图片]"
         # cometa 可信 Origin（方案 §6.5/§6.4.1）：只在 @ 触达路径构造；
         # 委派决策在能力钩子里读它——这里不判断要不要委派，只提供身份事实。
         with _flow_span(fctx, "chat.context"):
+            ref = _register_group_conversation(event)
             if _cometa_enabled():
                 ctx_origin = cometa_bridge.build_origin(
                     event, bot, instance_id=_cometa_instance_id()
@@ -1509,10 +1597,20 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 # v3 会话身份（计划 §6.1）：群轮次也带规范键，检索 scope 由
                 # 服务端从这组字段生成
                 conversation_kind="group",
-                conversation_key=f"qq:{event.self_id}:group:{event.group_id}",
+                conversation_key=ref.conversation_key,
                 bot_id=str(event.self_id),
-                peer_id=str(event.group_id),
-                storage_session_id=event.group_id,
+                peer_id=ref.peer_id,
+                storage_session_id=ref.storage_session_id,
+                group_shared_space=ref.memory_space,
+                user_ref=normalized.user_ref,
+                bot_ref=normalized.bot_ref,
+                scene_ref=normalized.scene_ref,
+                connection_id=normalized.bot_ref.connection_id,
+                adapter_name=normalized.bot_ref.adapter,
+                platform_scope=normalized.bot_ref.platform_scope,
+                scene_kind=normalized.scene_ref.kind,
+                scene_id=normalized.scene_ref.scene_id,
+                platform_message_id=normalized.platform_message_id,
                 # v4 当前输入信封（多人身份修复计划 §6.2）：纠正解析/预算
                 # parts 都从这里读关系，权威来自平台事件
                 sender_display_name=normalize_display_name(
@@ -1524,7 +1622,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                     _reply_to_id or "",
                     event.group_id,
                     bot_id=str(event.self_id),
-                    conversation_key=f"qq:{event.self_id}:group:{event.group_id}",
+                    conversation_key=ref.conversation_key,
                 ),
                 mentioned_user_ids=tuple(_mentioned),
                 relation_version=1,
@@ -1536,7 +1634,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 cometa_origin=ctx_origin,
                 # 图片来源（本体 + 引用）；识图未启用时保持空列表，describe_images_hook
                 # 会跳过，行为与旧版一致。
-                image_sources=extract_image_sources(event) if vision_available() else [],
+                image_sources=extract_image_sources(normalized) if vision_available() else [],
                 # 身份绑定：与流程 root 共用 trace（计划 §6.2 入口绑定）
                 trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
             )
@@ -1644,14 +1742,18 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
         logger.success(f"✨ [即将发送给 QQ 的台词]: {' | '.join(ctx.lines)}")
 
-        scope = ConversationScope.for_qq(event.group_id) if _social_delivery_enabled() else None
+        scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
-        async def _send_reply_segment(line: str, i: int) -> str | None:
-            if i == 0:
-                msg = Message([MessageSegment.reply(event.message_id), MessageSegment.text(line)])
-            else:
-                msg = Message(line)
-            return await chat_handler.send(msg)
+        async def _send_reply_segment(line: str, i: int):
+            segments = []
+            if i == 0 and normalized.platform_message_id:
+                segments.append(OutboundSegment.reply(normalized.platform_message_id))
+            segments.append(OutboundSegment.text_segment(line))
+            return await get_outbound_service().send(
+                _delivery_target_for_event(normalized, event),
+                OutboundMessage(tuple(segments)),
+                bot_handle=bot,
+            )
 
         ack_receipts = []
 
@@ -1751,6 +1853,8 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                         turn_id=ctx.turn_id,
                         trace_id=ctx.trace_id,
                         source_msg_id=event.message_id,
+                        bot_id=scope.bot_id if scope else "",
+                        connection_id=scope.connection_id if scope else "",
                     )
 
                 # Bot 台词落库（source_kind=BOT_SELF）：只记确认送达的片段，给下一轮
@@ -1801,16 +1905,22 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
 async def is_private_trigger(event: PrivateMessageEvent) -> bool:
     """私聊触发规则：开关开启、非自身回显、（可选）白名单内、非空文本。"""
-    if not PRIVATE_CHAT_ENABLED:
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
         return False
-    if event.user_id == event.self_id:
-        return False
-    if PRIVATE_CHAT_ALLOWLIST and event.user_id not in PRIVATE_CHAT_ALLOWLIST:
-        return False
-    if len(event.get_plaintext().strip()) > 0:
-        return True
-    # 纯图片私聊：与群口径一致——识图可用才算触发
-    return vision_available() and bool(extract_image_sources(event))
+    image_enabled = (
+        not normalized.text.strip()
+        and vision_available()
+        and bool(extract_image_sources(normalized))
+    )
+    admission = _ingress_admission.decide(
+        normalized,
+        purpose="private_chat",
+        enabled=PRIVATE_CHAT_ENABLED,
+        allowed_user_ids={str(user_id) for user_id in PRIVATE_CHAT_ALLOWLIST},
+        vision_enabled=image_enabled,
+    )
+    return admission.allowed
 
 
 private_chat_handler = on_message(
@@ -1827,6 +1937,22 @@ def _register_private_conversation(bot: Bot, event: PrivateMessageEvent):
         return get_or_register_private(conn, str(event.self_id), int(event.user_id))
     finally:
         conn.close()
+
+
+def _register_group_ref(bot_id: str, group_id: int):
+    """Register a QQ group by the exact Bot identity that received it."""
+    from memory.conversation_registry import get_or_register_group
+
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        return get_or_register_group(conn, str(bot_id), int(group_id))
+    finally:
+        conn.close()
+
+
+def _register_group_conversation(event: GroupMessageEvent):
+    """Register every trusted QQ group ingress before writing its message."""
+    return _register_group_ref(str(event.self_id), int(event.group_id))
 
 
 def _maybe_personal_sharing(ctx) -> None:
@@ -1858,8 +1984,22 @@ def _maybe_personal_sharing(ctx) -> None:
     key = str(getattr(ctx, "conversation_key", "") or "")
     row_id = int(getattr(ctx, "recorded_row_id", 0) or 0)
     bot_id = str(getattr(ctx, "bot_id", "") or "")
-    user_id = str(getattr(ctx, "user_id", 0) or 0)
-    if not key or not row_id or not bot_id or not user_id:
+    user_id = str(getattr(ctx, "raw_user_id", "") or getattr(ctx, "user_id", 0) or 0)
+    user_ref = getattr(ctx, "user_ref", None)
+    subject_key = str(getattr(user_ref, "subject_key", "") or "")
+    connection_id = str(
+        getattr(getattr(ctx, "bot_ref", None), "connection_id", "")
+        or getattr(ctx, "connection_id", "")
+        or ""
+    )
+    if (
+        not connection_id
+        and getattr(user_ref, "identity_domain", "") == "qq:client"
+        and bot_id
+    ):
+        connection_id = f"legacy-qq:{bot_id}"
+    platform = str(getattr(ctx, "platform_scope", "") or "qq")
+    if not key or not row_id or not bot_id or not user_id or not subject_key or not connection_id:
         return
     revoke_hit, revoke_mark = detect_revoke_intent(text)
     share_hit, share_reason = detect_sharing_intent(text, user_id, key)
@@ -1868,22 +2008,41 @@ def _maybe_personal_sharing(ctx) -> None:
 
     conn = _sqlite3.connect(DB_PATH)
     try:
-        _owner_type, owner_key, _subject_key = canonical_owner("qq", bot_id, user_id)
+        _owner_type, owner_key, _subject_key = canonical_owner(
+            platform,
+            bot_id,
+            user_id,
+            subject_key=subject_key,
+            connection_id=connection_id,
+        )
+        owner_candidates = [(owner_key, subject_key)]
+        if (
+            connection_id == f"legacy-qq:{bot_id}"
+            and getattr(user_ref, "identity_domain", "") == "qq:client"
+        ):
+            from memory.ownership import person_owner_key
+
+            owner_candidates.append(
+                (person_owner_key("qq", bot_id, user_id), f"qq:{user_id}")
+            )
         fact_key = ""
         for table in ("memory_candidates", "memories"):
-            try:
-                row = conn.execute(
-                    f"SELECT fact_key FROM {table}"
-                    " WHERE owner_key = ? AND audience = 'PRIVATE_ONLY'"
-                    " AND fact_key != ''"
-                    " AND (status IS NULL OR status != 'DEPRECATED')"
-                    " ORDER BY updated_at DESC LIMIT 1",
-                    (owner_key,),
-                ).fetchone()
-            except _sqlite3.OperationalError:
-                row = None
-            if row and row[0]:
-                fact_key = str(row[0])
+            for candidate_owner, _candidate_subject in owner_candidates:
+                try:
+                    row = conn.execute(
+                        f"SELECT fact_key FROM {table}"
+                        " WHERE owner_key = ? AND audience = 'PRIVATE_ONLY'"
+                        " AND fact_key != ''"
+                        " AND (status IS NULL OR status != 'DEPRECATED')"
+                        " ORDER BY updated_at DESC LIMIT 1",
+                        (candidate_owner,),
+                    ).fetchone()
+                except _sqlite3.OperationalError:
+                    row = None
+                if row and row[0]:
+                    fact_key = str(row[0])
+                    break
+            if fact_key:
                 break
 
         conn.execute("BEGIN")
@@ -1892,7 +2051,13 @@ def _maybe_personal_sharing(ctx) -> None:
                 conn.execute("ROLLBACK")
                 return
             ok, reason = revoke_sharing_authorization(
-                conn, "qq", bot_id, user_id, fact_key
+                conn,
+                platform,
+                bot_id,
+                user_id,
+                fact_key,
+                subject_key=subject_key,
+                connection_id=connection_id,
             )
             conn.commit() if ok else conn.execute("ROLLBACK")
             logger.info(
@@ -1908,7 +2073,15 @@ def _maybe_personal_sharing(ctx) -> None:
             )
             return
         ok, reason = grant_sharing_authorization(
-            conn, "qq", bot_id, user_id, fact_key, key, row_id
+            conn,
+            platform,
+            bot_id,
+            user_id,
+            fact_key,
+            key,
+            row_id,
+            subject_key=subject_key,
+            connection_id=connection_id,
         )
         conn.commit() if ok else conn.execute("ROLLBACK")
         logger.info(
@@ -1959,6 +2132,12 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         _flow_set_outcome(fctx, "plugin_handled")
         logger.debug(f"[chat] 私聊已由插件处理，跳过 LLM (user {event.user_id})")
         return
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
+        _flow_decision(fctx, "ingress.chat.rule", status="skipped",
+                       reason_code=normalized.reason_code)
+        _flow_set_outcome(fctx, "unsupported_event")
+        return
     bot_id = str(event.self_id)
     lock = _private_locks[f"qq:{bot_id}:private:{event.user_id}"]
     lock_span = _flow_span(fctx, "chat.conversation_lock")
@@ -1968,7 +2147,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         with _flow_span(fctx, "chat.context"):
             # 会话注册（幂等，负整数存储 ID 在这里分配）
             ref = _register_private_conversation(bot, event)
-            message_text = event.get_plaintext().strip() or "[图片]"
+            message_text = normalized.text.strip() or "[图片]"
             if _cometa_enabled():
                 ctx_origin = cometa_bridge.build_origin(
                     event, bot, instance_id=_cometa_instance_id()
@@ -1989,11 +2168,18 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 bot_id=bot_id,
                 peer_id=ref.peer_id,
                 storage_session_id=ref.storage_session_id,
+                user_ref=normalized.user_ref,
+                bot_ref=normalized.bot_ref,
+                scene_ref=normalized.scene_ref,
+                connection_id=normalized.bot_ref.connection_id,
+                adapter_name=normalized.bot_ref.adapter,
+                platform_scope=normalized.bot_ref.platform_scope,
+                scene_kind=normalized.scene_ref.kind,
+                scene_id=normalized.scene_ref.scene_id,
+                platform_message_id=normalized.platform_message_id,
                 trigger="reply",
                 # v4 当前输入信封（多人身份修复计划 §6.2）
-                sender_display_name=normalize_display_name(
-                    getattr(getattr(event, "sender", None), "nickname", "")
-                ),
+                sender_display_name=normalize_display_name(normalized.sender_display_name),
                 reply_to_msg_id=str(_reply_to_id or ""),
                 reply_target_user_id=resolve_reply_target(
                     _reply_to_id or "",
@@ -2006,7 +2192,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 raw_event=event,
                 bot=bot,
                 cometa_origin=ctx_origin,
-                image_sources=extract_image_sources(event) if vision_available() else [],
+                image_sources=extract_image_sources(normalized) if vision_available() else [],
                 trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
             )
             try:
@@ -2120,10 +2306,14 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         # 修复计划 §6.3：携带 ref 的明确身份 → 会话中立回执可查（不进群学习）
         scope = None
 
-        async def _send_reply_segment(line: str, i: int) -> str | None:
+        async def _send_reply_segment(line: str, i: int):
             # 私聊纯文本分条；reply 引用对私聊的兼容性未经真实 adapter 验证
             # （计划 §12 假设 4，M5 核验），先不构造引用段。
-            return await private_chat_handler.send(Message(line))
+            return await get_outbound_service().send(
+                _delivery_target_for_event(normalized, event),
+                OutboundMessage.text(line),
+                bot_handle=bot,
+            )
 
         ack_receipts = []
 
@@ -2401,6 +2591,9 @@ async def handle_addressing(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         space = ref.memory_space
     else:
         space = resolve_space(event.group_id)
+    from core.transport.models import UserRef
+
+    target_ref = UserRef("qq:client", str(target_user_id))
     try:
         if result.operation in (SET_SELF_ADDRESS, SET_OTHER_ADDRESS):
             preference = addressing.set_preference(
@@ -2409,16 +2602,27 @@ async def handle_addressing(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 result.address_term,
                 source="natural_language",
                 updated_by_user_id=event.user_id,
+                subject_key=target_ref.subject_key,
             )
             if target_user_id == str(event.user_id):
                 reply = f"好，以后我叫你「{preference.address_term}」。"
             else:
                 reply = f"好，以后我称呼用户 {target_user_id} 为「{preference.address_term}」。"
         elif result.operation == CLEAR_ADDRESS:
-            addressing.clear_preference(space, target_user_id)
+            addressing.clear_preference(
+                space,
+                target_user_id,
+                subject_key=target_ref.subject_key,
+                legacy_user_id=target_user_id,
+            )
             reply = "好，我不再使用这个个性化称呼了。"
         elif result.operation == QUERY_ADDRESS:
-            preference = addressing.get_preference(space, target_user_id)
+            preference = addressing.get_preference(
+                space,
+                target_user_id,
+                subject_key=target_ref.subject_key,
+                legacy_user_id=target_user_id,
+            )
             reply = (
                 f"我现在称呼你「{preference.address_term}」。"
                 if preference
@@ -2669,13 +2873,33 @@ async def handle_capability_query(bot: Bot, event: GroupMessageEvent):
     # 只把首行记进短期记忆：整段是清单，下一轮整合看到几十行工具名只会把它当群聊
     # 语境（_record_bot_lines 的用途是补「我刚说过什么」，不是存档我发过的正文）。
     head = next((ln for ln in reply.splitlines() if ln.strip()), "")
-    await _record_bot_lines(int(bot.self_id), event.group_id, [head])
-
     image = await _capability_image(reply)
-    body = MessageSegment.image(image) if image else MessageSegment.text(reply)
-    await capability_handler.finish(
-        Message([MessageSegment.reply(event.message_id), body])
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
+        return
+    content = (
+        OutboundSegment.image(
+            MediaSource("image", str(image), name=image.name, fallback_text=reply)
+        )
+        if image
+        else OutboundSegment.text_segment(reply)
     )
+    segments = []
+    if normalized.platform_message_id:
+        segments.append(OutboundSegment.reply(normalized.platform_message_id))
+    segments.append(content)
+    result = await get_outbound_service().send(
+        _delivery_target_for_event(normalized, event),
+        OutboundMessage(tuple(segments)),
+        bot_handle=bot,
+    )
+    if result.status.value == "accepted":
+        await _record_bot_lines(int(bot.self_id), event.group_id, [head])
+    else:
+        logger.warning(
+            f"[Capability] send result={result.status.value} code={result.error_code or '-'}"
+        )
+    await capability_handler.finish()
 
 
 # ============================================================
@@ -2966,6 +3190,17 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
     service = _scheduling_service
     group_id = event.group_id
     actor_id = event.user_id
+    from stella_project.plugins.bot_main.scheduling.targets import (
+        legacy_qq_target,
+        qq_subject_key,
+        target_scope_key,
+    )
+
+    target = legacy_qq_target(str(event.self_id), group_id)
+    if target is None:
+        return "当前 Bot 或群目标无效，未读取或修改定时任务。"
+    scope_key = target_scope_key(target)
+    actor_subject_key = qq_subject_key(actor_id)
     is_admin = _is_group_admin(event)
     action = cmd.action
 
@@ -2973,7 +3208,7 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
         return format_help()
 
     if action == "list":
-        tasks = service.list_tasks(group_id=group_id)
+        tasks = service.list_tasks(group_id=group_id, scope_key=scope_key)
         if not tasks:
             return "这个群还没有定时任务。发「定时添加」看看格式。"
         return "\n".join(_format_scheduling_task(t) for t in tasks)
@@ -2989,6 +3224,9 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
             actor_id=actor_id,
             group_id=group_id,
             bot_id=str(event.self_id),
+            target=target,
+            subject_key=actor_subject_key,
+            scope_key=scope_key,
             is_group_admin=is_admin,
             mode="reminder" if action == "add" else "agent",
             objective=cmd.objective,
@@ -3005,7 +3243,7 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
     if action == "show":
         task = service.show_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         detail = _format_scheduling_task(task)
         if task.policy.get("tools"):
@@ -3030,25 +3268,27 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
             return "没有要修改的字段。可用键：cron= tz= text= notify= rev="
         task = service.show_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         updated = service.edit_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
             expected_revision=cmd.expected_revision or task.revision,
-            is_group_admin=is_admin, **updates,
+            is_group_admin=is_admin, scope_key=scope_key,
+            actor_subject_key=actor_subject_key, **updates,
         )
         return f"✅ 已更新 {_scheduling_short_id(updated.task_id)}（修订 r{updated.revision}）"
 
     if action in ("pause", "resume", "cancel"):
         task = service.show_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         setter = {"pause": service.pause, "resume": service.resume, "cancel": service.cancel}[action]
         updated = setter(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
             expected_revision=cmd.expected_revision or task.revision,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
+            actor_subject_key=actor_subject_key,
         )
         verb = {"pause": "已暂停", "resume": "已恢复", "cancel": "已取消"}[action]
         return f"✅ 任务 {_scheduling_short_id(updated.task_id)} {verb}"
@@ -3056,20 +3296,21 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
     if action == "run_now":
         run = service.run_now(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         return f"✅ 已提交立即运行（{_scheduling_short_id(run.run_id)}），稍后执行。"
 
     if action == "history":
         runs = service.history(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin, limit=8,
+            is_group_admin=is_admin, limit=8, scope_key=scope_key,
+            actor_subject_key=actor_subject_key,
         )
         if not runs:
             return "这个任务还没有运行记录。"
         task = service.show_task(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
-            is_group_admin=is_admin,
+            is_group_admin=is_admin, scope_key=scope_key,
         )
         return "\n".join(_format_scheduling_run(r, task.timezone) for r in runs)
 
@@ -3094,6 +3335,7 @@ def _dispatch_scheduling_command(event: GroupMessageEvent, cmd) -> str:
         updated = service.set_policy(
             actor_id=actor_id, group_id=group_id, task_id_prefix=cmd.task_id,
             expected_revision=task.revision, is_group_admin=is_admin,
+            scope_key=scope_key, actor_subject_key=actor_subject_key,
             policy={"tools": tools, "coalesce": task.policy.get("coalesce")},
         )
         listing = ", ".join(updated.policy.get("tools") or []) or "（空）"
@@ -3171,14 +3413,14 @@ async def _scheduling_tool_resolver(name: str):
     return None
 
 
-async def _scheduling_sender(group_id: int, text: str) -> str | None:
-    """平台发送边界：返回回执（message_id）或 None（拿不到就不声称可靠）。"""
-    from nonebot import get_bot
+async def _scheduling_sender(target, text):
+    """按运行快照中的 DeliveryTarget 发送，不从全局 Bot 列表猜接收账号。"""
+    from core.transport.outbound import OutboundMessage
+    from stella_project.plugins.bot_main.transport_delivery import (
+        send_background_message,
+    )
 
-    bot = get_bot()
-    resp = await bot.send_group_msg(group_id=group_id, message=text)
-    receipt = resp.get("message_id") if isinstance(resp, dict) else getattr(resp, "message_id", None)
-    return str(receipt) if receipt is not None else None
+    return await send_background_message(target, OutboundMessage.text(text))
 
 
 def _build_scheduling_stack():
@@ -3497,15 +3739,17 @@ async def _record_bot_lines(
         # 纯标点/单字兜底行（如 "......？"）无信息量，只会占用上下文尾巴窗口
         if len(text) < 2 or not any(ch.isalnum() or "\u4e00" <= ch <= "\u9fff" for ch in text):
             continue
-        # 平台回执 message ID 可为负数（真实回执 -558868042）：统一走投影
-        # 模块的有符号解析；0/非法 = 平台 ID 缺失，不猜（归属修复计划 §6.1）
-        platform_id_num = parse_platform_message_id(platform_id) or 0
+        # DB 仍使用 legacy QQ INTEGER 列；上下文另存平台原始 ID，避免把
+        # 不透明外部 ID 转成行号或数字哨兵。
+        platform_id_text = parse_platform_message_id(platform_id) or ""
+        platform_id_num = parse_qq_message_id(platform_id) or 0
         try:
             await record_message(
                 ChatContext(
                     user_id=self_id,
                     group_id=group_id,
                     msg_id=platform_id_num,
+                    platform_message_id=platform_id_text,
                     message=text,
                     source_kind="BOT_SELF",
                     conversation_kind=getattr(origin, "conversation_kind", "") or "",
@@ -3905,6 +4149,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
             except Exception as e:
                 logger.warning(f"⚠️ [主动@] 合同构建异常（按无合同继续）: {e}")
                 contract_error = contract_error or "contract_build_error"
+        conversation_ref = _register_group_ref(str(bot.self_id), group_id)
         async with lock:
             ctx = ChatContext(
                 user_id=target.user_id,
@@ -3930,10 +4175,19 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 # 会按旧入口处理，目标的 USER_SHARED 个人事实永远进不来
                 # （多人身份修复计划 §6.1/T18）。
                 conversation_kind="group",
-                conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+                conversation_key=conversation_ref.conversation_key,
+                bot_ref=BotRef(
+                    f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id)
+                ),
+                scene_ref=SceneRef("group", str(group_id)),
+                connection_id=f"legacy-qq:{bot.self_id}",
+                adapter_name="onebot-v11",
+                platform_scope="qq",
+                scene_kind="group",
+                scene_id=str(group_id),
                 bot_id=str(bot.self_id),
                 peer_id=str(group_id),
-                storage_session_id=group_id,
+                storage_session_id=conversation_ref.storage_session_id,
                 # 复核 F1：typed 检索查询 = 候选主题（不再拿整段指令模板查询）
                 retrieval_query=(
                     str(target.candidate_content or "")[:80] if contract_data else ""
@@ -3942,7 +4196,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 trace_id=new_trace_id(),
             )
             try:
-                ctx = await _run_turn_via_engine(f"qq:{group_id}", ctx)
+                ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
             except RuntimeTurnError as e:
                 # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
                 if e.code == E_CANCELLED:
@@ -4025,14 +4279,16 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
 
             # 逐段发送 + 回执收集（计划 §6.1）：发送确认之后才记账。原实现先记账
             # 后发送，发送失败时配额/发言占用/学习全被白白消耗。
-            scope = ConversationScope.for_qq(group_id) if _social_delivery_enabled() else None
+            scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
-            async def _send_at_segment(seg_line: str, _i: int) -> str | None:
-                message = Message([
-                    MessageSegment.at(target.user_id),
-                    MessageSegment.text(" " + seg_line),
-                ])
-                return await bot.send_group_msg(group_id=group_id, message=message)
+            async def _send_at_segment(seg_line: str, _i: int):
+                message = OutboundMessage((
+                    OutboundSegment.at(str(target.user_id), target.nickname),
+                    OutboundSegment.text_segment(" " + seg_line),
+                ))
+                return await get_outbound_service().send(
+                    _delivery_target_for_context(ctx), message, bot_handle=bot,
+                )
 
             delivery_target = str(target.user_id)
             try:
@@ -4092,16 +4348,21 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                     turn_id=ctx.turn_id,
                     trace_id=ctx.trace_id,
                     intent="proactive_at",
+                    bot_id=scope.bot_id if scope else "",
+                    connection_id=scope.connection_id if scope else "",
                 )
                 logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
 
                 await _record_bot_lines(
-                    self_id, group_id, delivered, origin=ctx, receipts=receipts
+                    self_id, conversation_ref.storage_session_id, delivered,
+                    origin=ctx, receipts=receipts,
                 )
 
                 # 主动 @ 同样推进对话：回复后异步触发压缩（不阻塞本次发言）
                 if ctx.tail_start_id:
-                    schedule_compact(group_id, ctx.tail_start_id)
+                    schedule_compact(
+                        conversation_ref.storage_session_id, ctx.tail_start_id
+                    )
                     _flow_checkpoint(flow_ctx, "proactive.after",
                                      summary="compact spawned, not awaited")
 
@@ -4152,14 +4413,35 @@ async def _announce_sleep_transition(bot: Bot, group_id: int) -> None:
         return
     line = random.choice(pool)
 
+    bot_id = str(getattr(bot, "self_id", "") or "")
+    if not bot_id:
+        logger.warning(f"⚠️ [{kind}] 播报 Bot 身份缺失，跳过")
+        return
+    conversation_ref = _register_group_ref(bot_id, group_id)
+    target = DeliveryTarget(
+        BotRef(f"legacy-qq:{bot_id}", "onebot-v11", "qq", bot_id),
+        SceneRef("group", str(group_id)),
+    )
+    from stella_project.plugins.bot_main.transport_delivery import (
+        send_background_message,
+    )
+
     try:
-        await bot.send_group_msg(group_id=group_id, message=line)
+        result = await send_background_message(target, OutboundMessage.text(line))
     except Exception as e:
-        logger.warning(f"⚠️ [{kind}] 播报发送失败: {e}")
+        logger.warning(f"⚠️ [{kind}] 播报发送结果未知: {e}")
+        return
+    if result.status.value != "accepted":
+        logger.warning(
+            f"⚠️ [{kind}] 播报未确认送达: {result.status.value}/"
+            f"{result.error_code or '-'}"
+        )
         return
 
     mark_announced(group_id, kind, today)
-    await _record_bot_lines(int(bot.self_id), group_id, [line])
+    await _record_bot_lines(
+        int(bot.self_id), conversation_ref.storage_session_id, [line]
+    )
     logger.info(f"{'🌙' if kind == 'sleep' else '☀️'} [{kind}] 群 {group_id}: {line}")
 
 
@@ -4285,6 +4567,7 @@ def _spawn_participation_speak(
     group_id: int,
     decision,
     *,
+    bot_ref: BotRef | None = None,
     trigger_text: str = "",
     parent_trace_id: str = "",
 ) -> None:
@@ -4293,12 +4576,13 @@ def _spawn_participation_speak(
     任务引用必须持有（见 _reply_check_tasks 的说明），否则可能在完成前被 GC。
     """
     async def _runner() -> None:
-        try:
-            from nonebot import get_bot
+        from stella_project.plugins.bot_main.transport_delivery import (
+            resolve_background_bot,
+        )
 
-            bot = get_bot()
-        except Exception as e:
-            logger.debug(f"[参与评分] 群 {group_id} 跳过触发：无可用 Bot（{e}）")
+        bot = resolve_background_bot(bot_ref) if bot_ref is not None else None
+        if bot is None:
+            logger.debug(f"[参与评分] 群 {group_id} 跳过触发：原 Bot 已离线或身份不匹配")
             return
         try:
             manager = get_participation_manager()
@@ -4424,17 +4708,23 @@ async def _proactive_speak_impl(
             )
             return
         get_reply_gate().start(group_id, proactive=True)
+        conversation_ref = _register_group_ref(str(bot.self_id), group_id)
         # 主动发言前先确保短期记忆已更新（force 本地小批量，不打扰在线 LLM）
         try:
             consolidator = get_consolidator()
             new_count = consolidator.has_new_messages_to_consolidate(
-                group_id, threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES
+                conversation_ref.storage_session_id,
+                threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES,
             )
             if new_count > 0:
                 logger.info(f"🧠 [Proactive] 主动发言前触发短期记忆总结（新消息 {new_count} 条）")
                 _flow_checkpoint(fctx, "proactive.consolidate",
                                  summary="spawned, sleep 1s, not awaiting success")
-                maybe_consolidate(group_id, force=True, parent_trace_id=getattr(fctx, "trace_id", ""))
+                maybe_consolidate(
+                    conversation_ref=conversation_ref,
+                    force=True,
+                    parent_trace_id=getattr(fctx, "trace_id", ""),
+                )
                 await asyncio.sleep(1.0)
         except Exception as e:
             logger.warning(f"⚠️ 主动发言前总结异常（跳过）: {e}")
@@ -4456,10 +4746,19 @@ async def _proactive_speak_impl(
             gate_reasons=gate.reasons,
             trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
             conversation_kind="group",
-            conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+            conversation_key=conversation_ref.conversation_key,
+            bot_ref=BotRef(
+                f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id)
+            ),
+            scene_ref=SceneRef("group", str(group_id)),
+            connection_id=f"legacy-qq:{bot.self_id}",
+            adapter_name="onebot-v11",
+            platform_scope="qq",
+            scene_kind="group",
+            scene_id=str(group_id),
             bot_id=str(bot.self_id),
             peer_id=str(group_id),
-            storage_session_id=group_id,
+            storage_session_id=conversation_ref.storage_session_id,
         )
         try:
             from core.observability import message_flow
@@ -4481,7 +4780,7 @@ async def _proactive_speak_impl(
 
         try:
             with _flow_span(fctx, "proactive.turn"):
-                ctx = await _run_turn_via_engine(f"qq:{group_id}", ctx)
+                ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
         except RuntimeTurnError as e:
             # 取消（reset/新直接请求抢占）：无发送、无兜底、无记账
             if e.code == E_CANCELLED:
@@ -4547,10 +4846,14 @@ async def _proactive_speak_impl(
 
         # 逐段发送 + 回执收集（计划 §6.1）：确认送达后才记账。原实现先记账后
         # 发送，发送失败已被记成「说过」并进入学习——正是计划 §2 优先修复项。
-        scope = ConversationScope.for_qq(group_id) if _social_delivery_enabled() else None
+        scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
-        async def _send_proactive_segment(seg_line: str, _i: int) -> str | None:
-            return await bot.send_group_msg(group_id=group_id, message=seg_line)
+        async def _send_proactive_segment(seg_line: str, _i: int):
+            return await get_outbound_service().send(
+                _delivery_target_for_context(ctx),
+                OutboundMessage.text(seg_line),
+                bot_handle=bot,
+            )
 
         try:
             delivery_plan = _seal_ctx_delivery_plan(
@@ -4612,18 +4915,21 @@ async def _proactive_speak_impl(
                 turn_id=ctx.turn_id,
                 trace_id=ctx.trace_id,
                 intent=intent,
+                bot_id=scope.bot_id if scope else "",
+                connection_id=scope.connection_id if scope else "",
             )
             logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(delivered)}")
             # 群级主动（user_id=0）：origin 给出但无个人收件人——
             # _record_bot_lines 内部把收件人与源消息留空（unknown），不猜目标
             await _record_bot_lines(
-                int(bot.self_id), group_id, delivered, origin=ctx, receipts=receipts
+                int(bot.self_id), conversation_ref.storage_session_id, delivered,
+                origin=ctx, receipts=receipts,
             )
 
             # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
             if ctx.tail_start_id:
                 schedule_compact(
-                    group_id, ctx.tail_start_id,
+                    conversation_ref.storage_session_id, ctx.tail_start_id,
                     parent_trace_id=fctx.trace_id if fctx is not None else "")
                 _flow_checkpoint(fctx, "proactive.after",
                                  summary="compact spawned, not awaited")
@@ -4635,6 +4941,28 @@ async def _proactive_speak_impl(
 
 # 定时主动发言：每 PROACTIVE_CHECK_INTERVAL 秒检查一次所有启用群
 if scheduler is not None and PROACTIVE_ENABLED:
+    def _sole_timer_qq_bot():
+        """Return the only registered OneBot v11 connection, or its skip reason."""
+        from nonebot import get_bots
+
+        candidates = []
+        for self_id, candidate in get_bots().items():
+            adapter_getter = getattr(getattr(candidate, "adapter", None), "get_name", None)
+            adapter_name = adapter_getter() if callable(adapter_getter) else ""
+            adapter_key = "".join(
+                char.lower() for char in str(adapter_name) if char.isalnum()
+            )
+            if (
+                adapter_key == "onebotv11"
+                and str(getattr(candidate, "self_id", "")) == str(self_id)
+            ):
+                candidates.append(candidate)
+        if not candidates:
+            return None, "no_bot"
+        if len(candidates) != 1:
+            return None, "ambiguous_bots"
+        return candidates[0], ""
+
     @scheduler.scheduled_job("interval", seconds=PROACTIVE_CHECK_INTERVAL, id="proactive_speak")
     async def proactive_speak_job():
         # 计划 §6.4：root 在前置 return 之前创建——feature 开关关/无 Bot 等
@@ -4664,15 +4992,18 @@ if scheduler is not None and PROACTIVE_ENABLED:
                            reason_code="proactive_disabled")
             _timer_end("disabled")
             return
-        # 每个循环重新取 bot，避免 Bot 对象失效
-        try:
-            from nonebot import get_bot
-            bot = get_bot()
-        except Exception as e:
-            logger.debug(f"主动发言跳过：无可用 Bot（{e}）")
+        # Timer has no trusted incoming event to select an account. Run only when
+        # one OneBot connection is registered; multi-Bot routing needs an explicit
+        # group-to-connection configuration and must not fall back to a default Bot.
+        bot, reason = _sole_timer_qq_bot()
+        if bot is None:
+            logger.debug(f"主动发言跳过：QQ Bot 未唯一确定（{reason}）")
             _flow_decision(fctx, "proactive.timer.preflight", status="skipped",
-                           reason_code="no_bot")
-            _timer_end("no_bot")
+                           reason_code=(
+                               "ambiguous_bot_selection" if reason == "ambiguous_bots"
+                               else "no_bot"
+                           ))
+            _timer_end(reason)
             return
         # 逐个群尝试主动发言；单个群失败不拖垮其他群
         for group_id in ALLOWED_GROUPS:

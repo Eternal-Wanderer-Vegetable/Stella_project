@@ -104,6 +104,10 @@ def group_env(tmp_path, monkeypatch):
     """群链路隔离：临时库 + 社会关闭 + 表达/参与打间谍。"""
     db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(pre, "DB_PATH", db)
+    monkeypatch.setattr(gateway, "DB_PATH", db)
+    import config.spaces as spaces
+
+    monkeypatch.setattr(spaces, "resolve_space", lambda _group_id: "test-space")
     monkeypatch.setattr(gateway, "ALLOWED_GROUPS", {GROUP})
     monkeypatch.setattr(gateway, "_social_delivery_enabled", lambda: False)
     monkeypatch.setattr(gateway, "PARTICIPATION_ENABLED", True)
@@ -129,6 +133,10 @@ async def test_group_closed_gate_writes_nothing_derived(group_env, monkeypatch):
     _install_closed(monkeypatch)
     await gateway.record_group_chat(_group_event())
     assert _rows(group_env.db) == []
+    assert _rows(
+        group_env.db,
+        "SELECT conversation_key, storage_session_id FROM conversation_registry",
+    ) == []
     assert group_env.calls == {"expression": 0, "observe": 0}
 
 
@@ -141,6 +149,10 @@ async def test_group_ready_gate_persists_with_side_effects(group_env, monkeypatc
     assert len(rows) == 1
     assert rows[0]["source_kind"] == "PASSIVE"
     assert rows[0]["content"] == "今天天气不错"
+    assert _rows(
+        group_env.db,
+        "SELECT conversation_key, storage_session_id FROM conversation_registry",
+    ) == [{"conversation_key": f"qq:{BOT}:group:{GROUP}", "storage_session_id": GROUP}]
     assert group_env.calls["expression"] == 1
     assert group_env.calls["observe"] == 1
 
@@ -183,6 +195,8 @@ def private_env(tmp_path, monkeypatch):
     monkeypatch.setattr(gateway, "DB_PATH", db)
     monkeypatch.setattr(settings, "DB_PATH", db)
     monkeypatch.setattr(pre, "DB_PATH", db)
+    from nonebot_plugin_alconna.uniseg import UniMessage
+
     from memory import social_store
     from memory.schema import create_memory_scope_versions_table
 
@@ -199,8 +213,17 @@ def private_env(tmp_path, monkeypatch):
     monkeypatch.setattr(gateway, "get_consolidator", lambda: consolidator)
     monkeypatch.setattr(gateway, "budget_blocked", lambda role: False)
     monkeypatch.setattr(gateway, "_record_bot_lines", AsyncMock())
-    send = AsyncMock(return_value={"message_id": 777})
-    monkeypatch.setattr(gateway.private_chat_handler, "send", send)
+    sent = []
+
+    async def fake_uniseg_send(message, *, target=None, bot=None, **kwargs):
+        sent.append({"segments": tuple(message), "target": target, "bot": bot})
+        return SimpleNamespace(msg_ids=[f"reply:{len(sent)}"])
+
+    monkeypatch.setattr(UniMessage, "send", fake_uniseg_send)
+    bot = SimpleNamespace(
+        self_id=BOT,
+        adapter=SimpleNamespace(get_name=lambda: "OneBot V11"),
+    )
     finish = AsyncMock()
     monkeypatch.setattr(gateway.private_chat_handler, "finish", finish)
 
@@ -219,7 +242,7 @@ def private_env(tmp_path, monkeypatch):
     sharing = Mock()
     monkeypatch.setattr(gateway, "_maybe_personal_sharing", sharing)
     return SimpleNamespace(
-        db=db, send=send, consolidator=consolidator, sharing=sharing,
+        db=db, sent=sent, bot=bot, consolidator=consolidator, sharing=sharing,
     )
 
 
@@ -229,11 +252,15 @@ async def test_private_closed_gate_skips_persist_reply_still_works(
 ):
     """门关闭：不落库、无身份声明、无共享授权、无整合触发；回复照常。"""
     _install_closed(monkeypatch)
-    await gateway.handle_private_chat(Mock(self_id=BOT), _private_event())
+    await gateway.handle_private_chat(private_env.bot, _private_event())
     assert _rows(private_env.db) == []
     private_env.sharing.assert_not_called()
     private_env.consolidator.has_new_messages_to_consolidate.assert_not_called()
-    private_env.send.assert_awaited()  # 回复链路不受采集门影响
+    assert len(private_env.sent) == 1  # 回复链路不受采集门影响
+    assert private_env.sent[0]["bot"] is private_env.bot
+    assert private_env.sent[0]["target"].id == str(USER)
+    assert private_env.sent[0]["target"].self_id == BOT
+    assert [type(segment).__name__ for segment in private_env.sent[0]["segments"]] == ["Text"]
 
 
 @pytest.mark.asyncio
@@ -242,7 +269,7 @@ async def test_private_ready_gate_persists_with_sharing_and_trigger(
 ):
     """门开启：PRIVATE_DIRECT 行 + 共享授权 + 整合触发全部照旧。"""
     _install_ready(monkeypatch)
-    await gateway.handle_private_chat(Mock(self_id=BOT), _private_event())
+    await gateway.handle_private_chat(private_env.bot, _private_event())
     rows = _rows(private_env.db)
     assert len(rows) == 1
     assert rows[0]["source_kind"] == "PRIVATE_DIRECT"

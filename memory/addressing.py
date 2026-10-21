@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import Any
 
 from config import DB_PATH
-from memory.schema import create_user_address_preferences_table
+from memory.schema import (
+    create_user_address_preferences_table,
+    create_user_address_preferences_v2_table,
+)
 
 MAX_ADDRESS_TERM_LENGTH = 32
 DEFAULT_SOURCE = "natural_language"
@@ -32,6 +35,7 @@ class AddressPreference:
     source: str
     updated_by_user_id: str
     updated_at: str | None = None
+    subject_key: str = ""
 
 
 def normalize_address_term(value: str) -> str:
@@ -62,6 +66,7 @@ def _scope(group_shared_space: Any, user_id: Any) -> tuple[str, str]:
 def _connect(db_path: Path | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path or DB_PATH)
     create_user_address_preferences_table(conn)
+    create_user_address_preferences_v2_table(conn)
     return conn
 
 
@@ -80,12 +85,29 @@ def get_preference(
     group_shared_space: Any,
     user_id: Any,
     *,
+    subject_key: str = "",
+    legacy_user_id: Any = "",
     db_path: Path | None = None,
 ) -> AddressPreference | None:
-    """读取指定共享空间/用户的称呼偏好。"""
+    """Read a namespaced preference; bare-ID reads remain legacy-only."""
     space, uid = _scope(group_shared_space, user_id)
     conn = _connect(db_path)
     try:
+        if subject_key:
+            subject, _raw_uid = _subject_scope(subject_key, uid)
+            row = conn.execute(
+                "SELECT group_shared_space, subject_key, raw_user_id, address_term, "
+                "source, updated_by_user_id, updated_at "
+                "FROM user_address_preferences_v2 "
+                "WHERE group_shared_space = ? AND subject_key = ?",
+                (space, subject),
+            ).fetchone()
+            if row:
+                return _from_v2_row(row)
+            legacy_uid = str(legacy_user_id or "").strip()
+            if not legacy_uid:
+                return None
+            uid = legacy_uid
         row = conn.execute(
             "SELECT group_shared_space, user_id, address_term, source, "
             "updated_by_user_id, updated_at FROM user_address_preferences "
@@ -104,6 +126,7 @@ def set_preference(
     *,
     source: str = DEFAULT_SOURCE,
     updated_by_user_id: Any = "",
+    subject_key: str = "",
     db_path: Path | None = None,
 ) -> AddressPreference:
     """设置或覆盖称呼偏好，返回写入后的记录。"""
@@ -114,6 +137,28 @@ def set_preference(
     conn = _connect(db_path)
     try:
         conn.execute("BEGIN")
+        if subject_key:
+            subject, raw_uid = _subject_scope(subject_key, uid)
+            conn.execute(
+                "INSERT INTO user_address_preferences_v2 "
+                "(group_shared_space, subject_key, raw_user_id, address_term, source, "
+                "updated_by_user_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT(group_shared_space, subject_key) DO UPDATE SET "
+                "raw_user_id=excluded.raw_user_id, address_term=excluded.address_term, "
+                "source=excluded.source, updated_by_user_id=excluded.updated_by_user_id, "
+                "updated_at=CURRENT_TIMESTAMP",
+                (space, subject, raw_uid, term, source_value, operator),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT group_shared_space, subject_key, raw_user_id, address_term, "
+                "source, updated_by_user_id, updated_at FROM user_address_preferences_v2 "
+                "WHERE group_shared_space = ? AND subject_key = ?",
+                (space, subject),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("称呼偏好写入后无法读取")
+            return _from_v2_row(row)
         conn.execute(
             "INSERT INTO user_address_preferences "
             "(group_shared_space, user_id, address_term, source, updated_by_user_id, updated_at) "
@@ -146,6 +191,8 @@ def clear_preference(
     group_shared_space: Any,
     user_id: Any,
     *,
+    subject_key: str = "",
+    legacy_user_id: Any = "",
     db_path: Path | None = None,
 ) -> bool:
     """清除称呼偏好，返回是否删除了已有记录。"""
@@ -153,6 +200,24 @@ def clear_preference(
     conn = _connect(db_path)
     try:
         conn.execute("BEGIN")
+        if subject_key:
+            subject, _raw_uid = _subject_scope(subject_key, uid)
+            cursor = conn.execute(
+                "DELETE FROM user_address_preferences_v2 "
+                "WHERE group_shared_space = ? AND subject_key = ?",
+                (space, subject),
+            )
+            deleted = cursor.rowcount > 0
+            legacy_uid = str(legacy_user_id or "").strip()
+            if legacy_uid:
+                cursor = conn.execute(
+                    "DELETE FROM user_address_preferences "
+                    "WHERE group_shared_space = ? AND user_id = ?",
+                    (space, legacy_uid),
+                )
+                deleted = deleted or cursor.rowcount > 0
+            conn.commit()
+            return deleted
         cursor = conn.execute(
             "DELETE FROM user_address_preferences "
             "WHERE group_shared_space = ? AND user_id = ?",
@@ -165,3 +230,28 @@ def clear_preference(
         raise
     finally:
         conn.close()
+
+
+def _subject_scope(subject_key: str, raw_user_id: str) -> tuple[str, str]:
+    from core.transport.keys import decode_subject_key_v2
+
+    subject = str(subject_key or "").strip()
+    try:
+        _domain, subject_user_id = decode_subject_key_v2(subject)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("称呼偏好需要有效的规范主体键") from exc
+    if raw_user_id and subject_user_id != raw_user_id:
+        raise ValueError("主体键与原始用户 ID 不一致")
+    return subject, subject_user_id
+
+
+def _from_v2_row(row: tuple[Any, ...]) -> AddressPreference:
+    return AddressPreference(
+        group_shared_space=str(row[0]),
+        user_id=str(row[2]),
+        address_term=str(row[3]),
+        source=str(row[4] or DEFAULT_SOURCE),
+        updated_by_user_id=str(row[5] or ""),
+        updated_at=str(row[6]) if row[6] is not None else None,
+        subject_key=str(row[1]),
+    )

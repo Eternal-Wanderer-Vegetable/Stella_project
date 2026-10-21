@@ -2,9 +2,130 @@
 
 ## Current State
 
-**Last Updated:** 2026-10-17 (Asia/Shanghai)
-**Active Feature:** EXTRACT 契约对齐（阶段2 提示词修复）已在 `feat/memory-benchmark-suite` 落地并验收通过（4a45082 提示词+守卫、9a74b9a 证据报告，另含状态提交）；真模型 live 回放 accepted 0→4、promotion 0%→100%。分支累计待用户审阅合并（未推送）。
-**Scope:** 计划 [2026-10-17-gitnexus-plan-extract-contract-prompt.md](docs/plans/2026-10-17-gitnexus-plan-extract-contract-prompt.md) 全量实施：仅改 `EXTRACTION_PROMPT`（契约硬规则块+示例契约修正），闸门 `evidence_contract.py` 零改动。详情见 [实施报告](docs/reports/2026-10-17-extract-contract-prompt-fix.md)。
+**Last Updated:** 2026-10-21 (Asia/Shanghai)
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP10 已完成；WP11 本地矩阵、代表性夹具和全量 Python 回归已通过，但平台与发布验收仍 NOT READY。工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，WP11 初始提交 `22ce1d0`，本轮修复提交 `1f5c900`、`54c4d4c`、`7f35347`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)、[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)、[WP08记录](docs/reports/2026-10-21-wp08-astrbot-compat.md)、[WP09记录](docs/reports/2026-10-21-wp09-adapter-assembly-health.md)、[WP10记录](docs/reports/2026-10-21-wp10-control-plane-delivery.md)与[WP11记录](docs/reports/2026-10-21-wp11-platform-certification.md)。平台 live、发布与 VM 验收单独记录。
+
+## 2026-10-20 — GitNexus / Cross-platform planning
+
+- 基线索引：1,249文件、95,747节点、236,981关系、829推断流程；启用PDG，保留流程预算、动态调用和跨语言缺边限制。
+- 独立入口核验：50声明入口/9流程族，34注册扫描结果，双向差集为空。
+- 工程方案：12依赖工作包；32适配器分母；180候选文件；包含身份、权限、迁移、双后端、投递恢复、插件、控制面、部署与验收。
+- 本轮只交付计划与工具/文档；平台fixture/live、迁移、业务测试与发布均未执行。后续应从WP00开始，不能把计划完成当实施完成。
+- 文档/清单一致性、源代码零修改与影响检查已通过；索引状态和最终刷新记录见本地 `.gitnexus/verification/`，持久证据见报告目录。`detect_changes`仅覆盖3个已跟踪状态文件，新文档/证据另行完整验证。
+
+## 2026-10-20 — Cross-platform implementation (WP00)
+
+- 已从 `ba582a9` 建立 `codex/cross-platform-implementation`；规划阶段已有的计划、证据与状态修改保留在本分支。
+- 数据边界：本机 `STELLA_HOME` 未设置；回归夹具把库与空间配置放进 pytest 临时目录。未启动 Bot、未读取或迁移用户库。
+- 冻结候选组合：NoneBot 2.5.0、Alconna 0.62.1、Uninfo 0.11.2；官方包元数据声明均支持 Python >=3.10，`uv pip compile` 对 3.10/3.11/3.12 解析通过，三个版本运行时 import smoke 通过。
+- 基线：会话身份/注册表/用户隔离 79 passed；QQ/WebChat 入口/上下文 32 passed；采集门/入站限制 31 passed；文档门禁 119 files / 1199 links / 577 anchors / 0 errors。
+- WP00 完成：平台桥接依赖设为显式可选 extra，并生成跨 Python 的锁；现有回归向量作为 QQ/WebChat 冻结基线。锁定依赖解析与 3.10/3.11/3.12 导入烟测通过；定向回归 142 passed；文档/JSON/diff 检查通过。下一步 WP01。
+- 影响基线已按 UID 精确核对：`conversation_key` CRITICAL（14 impacted、6 direct、4 flows、5 modules）；`ConversationRef.conversation_key` UNKNOWN/0 edges；`get_or_register_group` UNKNOWN/0 callers，源码引用仅定义与测试；`scope_for_chat_context` HIGH/5 impacted；`record_message` CRITICAL/18 lower-bound，3 个未解析接收者。
+
+## 2026-10-21 — Cross-platform implementation (WP01)
+
+- GitNexus 1.6.11 刷新绑定 `edb8a3d`，status up-to-date、content current、覆盖 1,394 个文件（96,237 nodes / 237,994 edges / 1,012 clusters / 829 flows）。流程入口/分支截断、32 候选上限和跨语言属性缺边仍按计划限制处理。
+- 影响证据：旧 `lookup` 为 CRITICAL（10 impacted / 4 direct / 4 flows）；registry schema helper HIGH（22 / 3）；负数分配器 HIGH（7 / 3）；旧 `conversation_key` 函数 CRITICAL（14 / 6 / 4 flows / 5 modules），同名属性 UNKNOWN。文本核查发现维护工具直接读旧表，故 V2 使用独立表；`register_conversation_v2` 尚无生产调用者，留待后续入口包接线。
+- 完成 transport identity/key codecs 与 `conversation_registry_v2`、可歧义 alias 映射；V2 / V1 负数存储号在事务中统一扫描，旧 QQ/WebChat 读写 API 和表布局保持独立。未扩展 QQ-only 的整数空间配置；generic 会话默认 `transport:<canonical_key>` 独占空间，避免隐式共享。
+- 环境边界：`STELLA_HOME` 未设置；pytest 使用临时数据库和空间配置；未启动 Bot、未访问或迁移生产库。
+- 验收：身份/注册表及 QQ/WebChat 相关测试 **160 passed**，message-flow 合同测试 **14 passed**；改动 Python Ruff 通过；文档门禁 119 文件 / 1204 链接 / 577 锚点 / 0 errors；message-flow 清单已重生成，拓扑未变，`--check` 通过。暂存后 GitNexus `scope=all` 为 13 个文件 / 83 symbols / low；compare main 为 156 文件 / 111 symbols / low，无 partial/truncated。
+- 阶段提交：`ea79171`（`feat(transport): add V2 identity registry (WP01)`）。下一阶段 WP02。
+- 细节与命令见[WP01实施记录](docs/reports/2026-10-21-wp01-identity-registry.md)。
+
+## 2026-10-21 — Cross-platform implementation (WP02)
+
+- 实现提交 `8ab18ce`：ChatContext projection v7（安全读取 v6）、conversation projection v2、opaque message IDs 与旧 QQ INTEGER codec 分离；reply envelope schema 2 使用绑定 turn / identity revision / generation epoch 的 `target_ref`。
+- GitNexus 编辑前：`parse_platform_message_id` CRITICAL/22 impacted/7 flows；reply envelope 两解析锚点 HIGH；`_extract_reply_candidate` HIGH/4 impacted/3 flows；UNKNOWN 的 reset/parser hook 已文本审计。提交前 scope all 31 files/121 symbols/21 processes/critical；compare main 187 files/232 symbols/21 processes/critical，完整重跑无 partial/truncated。
+- 定向回归 310 passed；Ruff、`generate_message_flow.py --check` 与暂存 diff check 通过。全量 Python：3782 passed/29 skipped/4 failed，失败项为 Cometa stale lease、两项 WebUI Cometa 401、WebUI chat history TypeError；详见 WP02 报告，保留 NOT READY。
+- `STELLA_HOME` 未设置，pytest 临时隔离；未启动 Bot、未读写生产库。无 live 模型/平台、QQ 灰度或 clean VM 验收。
+- 下一阶段 WP03：刷新索引并先查 schema 20→21、migrations、Python/native backend 与 API 4 wheel 合同的 upstream impact；仅用临时旧库副本验证迁移。
+
+## 2026-10-21 — Cross-platform implementation (WP03)
+
+- 实现提交 `ec5cf65`：schema 21 新增 `platform_message_id` 与 `subject_key`；迁移仅从旧非零 INTEGER `msg_id` 保守复制平台回执，不猜历史主体；Python/native 检索合同升至 API 4 / schema 21，外部用户 ID 作为字符串传入。
+- 修正 flow manifest 检查，使其在所有不可变归档中查找当前源码匹配项；fullchain 验证改为走生产 evidence 写入路径，并检查双方晋升、冲突观察、提交事实和 trace integrity。
+- 定向 pytest 77 passed / 1 skipped；Rust 25 passed；隔离 release wheel 报告 API 4 / schema 21，fullchain PASS；embedding benchmark 101/101 质量与 parity 通过。Rule benchmark 两后端一致但共享一个既有 expected-ranking mismatch（100/101）。
+- Ruff、文档门禁（119 files / 1206 links / 577 anchors / 0 errors）、flow manifest 与 diff 检查通过。全量 pytest 因 `tests/cometa/test_worker.py::TestSingleOwner::test_second_worker_rejected` 451.87 秒无进展而中止（876 passed / 7 skipped）；单测 30 秒重现，集成门禁 NOT READY。WP02 已报告的其他全量失败也未关闭。
+- `STELLA_HOME` 未设置；仅使用临时 SQLite 和隔离 wheel；未启动 Bot、访问生产库或运行真实模型/平台。
+- 阶段实现提交 `ec5cf65`；具体命令、GitNexus 风险、限制及下一步见 [WP03 实施记录](docs/reports/2026-10-21-wp03-storage-backend.md)。下一阶段 WP04。
+
+## 2026-10-21 — Cross-platform implementation (WP04)
+
+- GitNexus 编辑前 upstream impact 覆盖 owner scope、evidence source、retrieval、sharing、addressing、social schema/store、knowledge ACL/schema、proactive target 与 memory manager。原始风险含 `knowledge.acl.resolve_role` CRITICAL（23 impacted / 3 direct / 7 KB flows）、`ensure_social_schema` CRITICAL（47 / 2）；ownership/retrieval/evidence/sharing/addressing 等多个 HIGH。UNKNOWN 的 `ConversationScope.from_context` 用 `rg` 补查，确认生产调用来自 `core/social/context_builder.py`；类级影响 MEDIUM（21 / 11）。
+- 实施提交 `eabec23`：PERSON owner、检索与证据核验以 `connection_id + subject_key` 隔离；旧 evidence 版本仍可验证；分享 grant/revoke、地址偏好、社交学习与 KB owner/grant ACL 增加显式身份域。memory/native schema 21→22，social schema 4，KB schema 2；旧 sharing 授权行迁移时复制保留，历史 connection 为空不猜映射。重新生成最终 message-flow archive。
+- 回归：记忆/权限组 135 passed；knowledge 与 social 学习/迁移组 203 passed；retrieval/proactive 补充组 45 passed（测试组有重叠，不汇总相加）；Python native selector/promotion/benchmark 29 passed / 1 skipped；Rust cargo 25 passed。Ruff、文档 119 files / 1209 links / 577 anchors / 0 errors、flow check、`git diff --check`、cargo fmt 通过；隔离 native wheel 报告 API 4 / schema 22。
+- GitNexus 提交前摘要：scope all 49 files / 215 symbols / 48 processes / CRITICAL；compare main 241 files / 496 symbols / 71 processes / CRITICAL（包含 WP00–WP03）。CLI 显示的名字列表有省略，摘要统计保留；图谱刷新至 `eabec23` 后继续维护状态文档。
+- 状态文档提交前复查：GitNexus all/compare 均运行成功，原始风险为 CRITICAL；索引把文档章节关联到大量流程，原始风险照录。新报告/JSON 状态文件用 diff、文档链接与 JSON 解析门禁补证。
+- `STELLA_HOME` 未设置；只使用临时测试数据，未读取/迁移生产库，未启动 Bot、真实模型或平台。全量 Python 与 live/发布认证尚未完成，整体 NOT READY；下一阶段 WP05。
+
+## 2026-10-21 — Cross-platform implementation (WP05)
+
+- 实现提交 `28b296c`：新增 `NormalizedEvent` / `UnsupportedEvent`、OneBot v11 与通用 NoneBot normalizer、共享 `AdmissionPolicy`；外部身份和消息 ID 原样字符串化，通用身份按连接域隔离，未知 session 保留 opaque。WebChat 固定管理员 ID 作为身份，用户名只作显示名。
+- QQ 群/私聊与 WebChat 上下文携带 BotRef/UserRef/SceneRef；群被动采集与 @ 对话都接入 `get_or_register_group`，使用注册表返回的 storage ID/空间。采集门关闭时被动入口先返回，注册表与内容行均不写。插件入口保留纯消息段唤醒，AstrBot 工具事件构造显式跳过非 OneBot adapter。
+- GitNexus 1.6.11 编辑前文件级影响：`ai_gateway.py` HIGH/196 impacted、WebChat ingress CRITICAL/522 impacted；vision LOW/5、capability hook LOW/6。入口 matcher 方法的 UNKNOWN/0 通过 decorator 注册和源码补证；registry 群登记方法原先仅测试调用，本阶段已接入。源码索引基于 `3075d62`，新 normalizer 文件在该索引生成后创建。
+- 回归：Normalizer/vision/群私聊/WebChat/capture gate/AstrBot/registry/context/message-flow 相关测试 214 passed；改动 Python Ruff 通过。message-flow 初检发现函数体变化后生成 `message-flow.3631d3d0ca29.json`，后续 `--check` 通过。
+- GitNexus 提交前：scope all 14 files/26 symbols/16 processes/CRITICAL；compare main 重跑后 254 files/484 symbols/76 processes/CRITICAL（包含 WP00–WP05）。首次 compare 的 process query 被中断并标 PARTIAL，重跑得到非 PARTIAL 完整摘要；CLI 名称列表仍按固定摘要折叠。
+- 状态/报告提交门禁：GitNexus all 5 files/14 symbols/0 processes/LOW；compare 首轮 PARTIAL 后重跑为 255 files/486 symbols/76 processes/CRITICAL。文档检查 119 files / 1213 links / 577 anchors / 0 errors，feature JSON 与 message-flow 检查通过。
+- `STELLA_HOME` 未设置；入口测试 DB、群空间和 WebChat home 使用 pytest 临时隔离数据。未读取/迁移用户库，未启动 Bot、真实模型或平台；未运行全量 Python suite，WP02/WP03 历史全量缺陷仍未关闭。线程/频道 adapter、QQ 灰度、clean VM 和发布认证仍待后续阶段，整体 NOT READY；下一阶段 WP06。
+
+## 2026-10-21 — Cross-platform implementation (WP06)
+
+- 实现提交 `d2270d1`：新增 transport-neutral outbound/media/capability contracts、显式 Bot/target 解析、OneBot v11 UniMessage codec、能力降级、长文本拆分及逐物理发送段结果；群/私聊、Cometa ack、主动发送和能力清单统一走 outbound service。
+- DeliveryResult 保留 opaque ID 列表和 accepted/partial/failed/unknown 等状态；unknown 不自动重投。social schema 4→5 增加 `platform_message_ids_json`，迁移只包裹旧 primary ID；effects、查询和引用归因消费 ID 列表。
+- 编辑前 GitNexus：`deliver_lines` HIGH (10/6/3)、`record_delivery` CRITICAL (12/3/4)、`seal_delivery_plan` CRITICAL (14/3/5)；封存签名/摘要未改。`find_delivery_by_platform_id` UNKNOWN/0，经 `rg` 确认有测试调用。边界见 WP06 报告。
+- 定向回归 138 passed / 1 warning；改动 Python Ruff、message-flow check 与 diff check 通过。归档 `message-flow.72cc70e6e149.json` 为 141 nodes / 139 source-resolved / 8,952 closure sites / 11,689 reachable symbols。
+- GitNexus 提交前 scope all 21 files/54 symbols/7 processes/HIGH；compare main 264 files/589 symbols/76 processes/CRITICAL，包含 WP00–WP05。状态文档 scope all 7 files/14 symbols/0 processes/LOW；compare main 265 files/591 symbols/76 processes/CRITICAL。
+- `STELLA_HOME` 未设置；只用临时测试数据。未运行全量 Python、真实 QQ/其他平台、clean VM 或发布验收；历史全量缺口仍未关闭，整体 NOT READY。下一阶段 WP07。
+
+## 2026-10-21 — Cross-platform implementation (WP07)
+
+- 实现提交 `7bea280`：后台通知和调度任务现在持久化版本化 `DeliveryTarget`、`BotRef`、主体及作用域；投递前要求精确匹配当前 Bot/连接/adapter/platform/self_id，不从模型文本或默认 Bot 推断。Proactive timer 在无 Bot 或多 Bot 歧义时跳过，主动路径以注册表会话键读取/写入上下文。
+- Scheduling SQL schema 1→2：新增目标、主体和 scope；仅当旧 Bot 与群 ID 可验证为数字且绑定无歧义时转换旧任务，其他旧任务保持不可发送；旧 quota 行保留在 legacy scope。Cometa Origin JSON 2→3，校验目标与 BotRef 一致；CAS、租约和 unknown 不重投语义保留。
+- 编辑前 GitNexus upstream impact 与源码补查见 WP07 报告；高风险 Origin 调用链未扩大其 schema 兼容边界。提交前 GitNexus 1.6.11 scope all：31 files / 162 symbols / 36 flows / CRITICAL；compare main：287 files / 908 symbols / 102 flows / CRITICAL；均未标 partial/truncated。累计 compare 风险包含 WP00–WP07。
+- 定向回归：调度/主动与上下文组合 401 passed；Cometa 目录忽略 worker 用例 194 passed / 7 skipped；身份和出站 67 passed。`tests/cometa/test_worker.py` 在全目录命令中运行超过 8 分钟无进展后被中断（此前已记录该用例 30 秒隔离重现挂起），因此全目录/全量 pytest 没有通过声明。改动 Python Ruff、`git diff --check` 与重生成后的 message-flow manifest 检查通过。
+- `STELLA_HOME` 未设置；pytest 使用临时隔离数据，未读写生产库或运行真实 Bot/模型/平台。live、发布、clean VM 及 Cometa worker 挂起缺口保留，整体 NOT READY。下一阶段 WP08。
+
+## 2026-10-21 — Cross-platform implementation (WP08)
+
+- 实现提交 `8e3466e`：AstrBot 分发与 capability 工具入口都验证 OneBot v11 Bot；其他 adapter 不进入 QQ API 插件路径。通用 `type/data` 与文本链转换加入兼容层；发送仍明确走 OneBot codec。
+- `PlatformAdapterTypeFilter` 按 platform/adapter 名称匹配，不把唯一配置实例 ID 当类型。`Context.send_message` 限定 OneBot 群/私聊，并仅在 Bot 注册表中存在唯一 OneBot 实例时投递；多 OneBot 时 fail closed。
+- 编辑前 `build_event` upstream impact 为 HIGH（5 impacted / 2 direct，命中 `handle_plugin` 流程）；其他关键事件、分发、转换与 Context 目标 LOW。filter 图为 UNKNOWN/0 静态调用，已由 pipeline 动态 `.filter()` 调用与装饰器注册源码补证。提交前 GitNexus 1.6.11 all：14 files / 60 symbols / 5 processes / MEDIUM；compare main：300 files / 971 symbols / 107 processes / CRITICAL。固定 `.gitnexus/gn` 启动器通过；仓库 `run.cjs` 指向 1.6.12 且与本地图存储版本不兼容。
+- 定向回归 373 passed；Ruff、`check_docs.py`（119 files / 1,223 links / 577 anchors / 0 errors）、message-flow 检查与 `git diff --check` 通过。新增 `message-flow.9b80952673b2.json`（141 nodes / 139 source-resolved / 8,973 closure sites / 11,899 reachable symbols）。
+- `STELLA_HOME` 未设置；测试使用临时/fixture 数据，未读写生产库或运行 Bot、真实模型和平台。插件底层 API 仿真不在范围内；QQ 灰度、其他平台 live、发布、clean VM 与全量 Python 验收缺口保留，整体 NOT READY。下一阶段 WP09。
+
+## 2026-10-21 — Cross-platform implementation (WP09)
+
+- 实现提交 `9f75ded`：新增 `STELLA_ADAPTER_MODULES` 与 `adapter_loader`，NoneBot CLI 不再静态预注册适配器；Bot 在 Driver 初始化后、插件加载前按配置顺序注册。默认仍启用 OneBot V11；第三方包需手工安装，缺包、坏模块或 Driver 不兼容时清晰失败。
+- `link_monitor` 现按 adapter type + Bot self ID 隔离连接、心跳、探活和告警。只有 OneBot V11 使用 `get_status()`；状态接口增加 `applicable`、opaque `bots` / `connections`，其他平台连接可见而健康为 unknown。`status_api` 保持原样透传结构。
+- 编辑前 GitNexus：`link_status` LOW（4 impacted / 2 direct / 2 processes）；status aggregator LOW；装饰器入口 UNKNOWN/0 已按 NoneBot/APScheduler 注册源码和扩展 loader 补证。提交前 all 为 13 files / 59 symbols / 4 processes / MEDIUM；compare main 为 314 files / 1,018 symbols / 106 processes / CRITICAL（累计 WP00–WP09）。一次 compare partial 后串行重跑；最终汇总覆盖全部变更，明细展示有上限。
+- 定向回归 73 passed；全仓 Ruff 通过；文档 119 files / 1,224 links / 577 anchors / 0 errors；message-flow `9b80952673b2` 检查通过；真实 NoneBot Driver 的默认注册 smoke 仅初始化 Driver、不运行 Bot，结果为 `OneBot V11`。全量 Python 未跑；WP07 Cometa worker 挂起、真实平台、QQ 灰度、clean VM 与发布验收仍 NOT READY。
+- 测试设 `STELLA_HOME=/tmp/stella-wp09-20261021`；未读取或修改本机生产 `.env`、数据库或配置。下一阶段 WP10。
+- 细节见[WP09 实施记录](docs/reports/2026-10-21-wp09-adapter-assembly-health.md)。
+
+## 2026-10-21 — Cross-platform implementation (WP10)
+
+- 实现提交 `a20c3a1`：平台页可配置适配器模块列表并展示配置值、生效值和进程覆盖；保留 OneBot 多正向 WS 地址与 token 不回显；平台配置写入受鉴权、审计和 restart_required 契约保护。Doctor 仅在 OneBot V11 未启用时跳过其五项 NapCat 检查；安装器状态页不再把 `applicable=false` 误报为协议端未连接。路由优先于 SPA 的原实现由既有挂载回归锁定。
+- 包装器问题在实现提交后复核发现；follow-up `b0cb052` 让 standalone 和 OneClick installer resource staging 都从最终发布树生成 `.stella-manifest.json`。这修正了 allowlist 将隐式元数据漏出包的问题。
+- 编辑前 GitNexus：`deploy.probe._probe_onebot` HIGH（10 impacted / 2 direct / 3 processes）；`check_onebot_mode` UNKNOWN/0 通过 `_ALL_CHECKS` 源码注册补证；`platformcfg.onebot` 与 `platformcfg.update` LOW。安装器内嵌 JS 文件影响 UNKNOWN/0，`rg` 确认消费者为本文件 `renderStatus` / `copyDiag`；状态 API 合同已由测试覆盖。包修复前刷新图绑定 `a20c3a1`：`build_standalone` LOW（5 / 2 direct）、`stage_installer_resources` MEDIUM（15 / 12 direct）、`write_manifest` LOW（2）。
+- GitNexus 阶段门禁：实现批次 all 16 files / 47 symbols / 8 processes / HIGH；包 follow-up all 2 files / 4 symbols / 0 processes / LOW。against-main 比较为 WP00–WP10 累计 333 files / 1,122 symbols / 106 processes / CRITICAL，重跑后无 partial；符号列表明确 capped。图已刷新并绑定 `b0cb052`；WP11 开始前会检查状态提交后的索引新鲜度。图分析记录仍包括 20 个大文件跳过、动态/跨语言属性边缺失、entry-point ranking/trace budget/branching 截断。
+- 状态证据提交前：文档门禁 119 files / 1,228 links / 577 anchors / 0 errors，JSON 与 staged diff 检查通过；GitNexus 状态 scope all 为 4 files / 11 symbols / LOW，compare main 为 334 files / 1,128 symbols / 106 processes / CRITICAL（累计；符号列表 capped）。
+- 回归：一组 Deploy/运行时/状态/WebUI 定向回归 **253 passed**；`test_platform_adapters.py` 后续更新后 **4 passed**；产品包测试 **18 passed**。全仓 Ruff 通过；文档门禁 119 files / 1,225 links / 577 anchors / 0 errors；message-flow `9b80952673b2` 检查通过。
+- Dashboard 使用 Codex bundled Node 执行 `vue-tsc --noEmit` 通过、Vitest **100 passed**、Vite production build 通过；产物有 dynamic-import 和 >500 KB chunk 警告。`run.html` 内嵌脚本 `node --check` 通过。pnpm wrapper 因本机 pnpm 11 把旧 `onlyBuiltDependencies` 配置视为 ignored build scripts 而失败；未批准额外脚本，使用已安装包的直接 Node 门禁完成验证，安装意外写入的 workspace 审批提示已还原。
+- 发布验证：standalone Python zip 已由 builder 生成并通过 `check_release_archive.py`；Standalone staging 与 OneClick resource staging 均通过 `check_release_layout.py`，其中含新 manifest、adapter loader、webui/dist 和 desktop/dashboard-dist。`pyproject.toml` 仍不静态预注册 adapter，OneBot 默认依赖仍在 `requirements.txt`。
+- 隔离：测试/构建使用 `STELLA_HOME=/tmp/stella-wp10-20261021` 与临时发布目录；本阶段未运行 Bot、读取生产库、连接模型或平台。非 OneBot live、全量 Python、QQ 灰度、clean VM 和真实 Release 仍 NOT READY。下一步 WP11。
+- 细节见[WP10 实施记录](docs/reports/2026-10-21-wp10-control-plane-delivery.md)。
+
+## 2026-10-21 — Cross-platform implementation (WP11)
+
+- 新增 `tests/platforms/adapter_matrix.json`：固定官方快照 32 项分母，逐项保留包版本/Python 范围、driver、组件、场景、权限、窗口、限流、维护状态和 L0–L3 local/fixture/live 状态。隔离 `.venv` 只观察到 OneBot V11/V12 共用发行包 `nonebot-adapter-onebot 2.4.6`（Requires-Python `>=3.9,<4.0`）；其余 30 个适配器包未安装。未知字段不推断，32 项均未认证。
+- 新增 `tests/platforms/test_adapter_matrix.py`：逐行对照冻结 inventory，并以真实 OneBot `GroupMessageEvent` 构造入站事件，验证同一 Bot/群目标经 fake `UniMessage` transport 回投。定向平台/Normalizer/Outbound 回归 **18 passed**。
+- 初始全量运行 3873 passed / 29 skipped / 6 failed；后续修复记忆 evidence source key、WebUI scheduling 的显式 Bot 目标，并修复 Cometa worker 关闭时的注册重试和相关测试隔离。CI xdist 全量复跑现为 **3879 passed / 29 skipped / 5 warnings**（112.76 秒），6 项初始失败均已关闭。记忆定向 27 passed、调度 service 176 passed、WebUI manage 12 + route 1 passed、worker 6 passed。
+- Dashboard direct Vitest 100 passed、`vue-tsc --noEmit` 通过、Vite build 成功（既有导入/大 chunk 警告）；全仓 Ruff 和 message-flow 检查通过。三个修复阶段提交为 `1f5c900`、`54c4d4c`、`7f35347`。本地 Python 回归不替代真实平台、QQ 灰度和发布验收。
+- GitNexus 1.6.11 刷新绑定 `22ce1d0`；提交前 all 为 5 tracked files / 15 symbols / LOW。compare main 首轮 partial 后串行重跑完整：336 files / 1,140 symbols / 106 processes / CRITICAL，无 partial/truncated（符号列表 capped）。
+- 真实平台/QQ灰度、L2完整链、L3完整能力、多账号 live 恢复、Python 3.10/3.11 独立运行与 Linux/Windows clean VM 未执行；32 项平台仍均未认证。
+- PR #111 CI 修复分两阶段提交：`e622c7a` 让三版本测试 job 安装包含基础与可选 Alconna/Uninfo 平台桥接依赖的 `requirements-platform.lock`，并同步缓存键和中英文 CI 指南；`97a2ea9` 修正 Cometa ack 测试把瞬态 `SENDING` 误当完成态的轮询竞态。
+- 本地验证：平台锁 dry-run 检查 95 个包、无需更改；平台失败相关测试 22 passed / 1 warning；Cometa runtime assembly 3 passed；文档检查 119 files / 1,234 links / 577 anchors / 0 errors。最终 PR CI run `39557774555` 全绿：Python 3.10/3.11/3.12 各 3,879 passed / 29 skipped，其他 CI、Dashboard 和 Docker build/push jobs 全部通过。
 
 ## What's Done
 

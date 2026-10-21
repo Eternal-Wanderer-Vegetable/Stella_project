@@ -24,26 +24,40 @@ import unicodedata
 from dataclasses import dataclass
 
 # 投影格式版本（§6.2）：随渲染格式演进递增；进尾巴段头供诊断与验收对照。
-PROJECTION_FORMAT_VERSION = 1
+PROJECTION_FORMAT_VERSION = 2
 
 # 正文太长时的护栏（防御异常大图/刷屏文本占满预算；正常消息远小于此）。
 _BUBBLE_TEXT_MAX_CHARS = 2000
 
 
-def parse_platform_message_id(value) -> int | None:
-    """解析平台 message ID：接受平台整数或规范十进制文本的**非零有符号**值。
+def parse_platform_message_id(value) -> str | None:
+    """解析不透明平台消息 ID，保留平台给出的文本和值形态。
 
-    QQ（NTQQ/AstrBot 回执）的 message ID 可以是负数（真实回执
-    ``-558868042``）。历史上三处 ``.isdigit()`` 把合法负数变成 0/unknown，
-    造成「引用查不到作者」。本函数是唯一的解析入口：
+    外部消息 ID 不保证是十进制数；``"abc"``、``"007"``、含冒号、斜杠
+    或 Unicode 的 ID 都必须原样保留。只拒绝空值、容器、浮点、bool、首尾
+    空白和控制字符。QQ 对有符号十进制回执的旧约束由
+    :func:`parse_qq_message_id` 单独处理。
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        text = str(value)
+    elif isinstance(value, str):
+        text = value
+    else:
+        return None
+    if not text or text != text.strip():
+        return None
+    if any(unicodedata.category(ch) == "Cc" for ch in text):
+        return None
+    return text
 
-    - 接受 ``int``（含负数）与形如 ``"381231377"`` / ``"-558868042"`` 的
-      **规范十进制文本**（可选正负号 + 不含前导零的数字；``"-0"`` 同样拒绝）；
-    - 拒绝 ``bool``（``True`` 是 1 不是 ID）、浮点、空串、纯空白、字母、
-      ``0``、``"+123"``、前导零（``"007"``）等一切非规范形态；
-    - 解析不了返回 ``None`` = unknown，调用方按「无平台 ID」处理，绝不猜。
 
-    注意：这只放宽 **message ID** 的符号；user_id / bot_id 的校验口径不变。
+def parse_qq_message_id(value) -> int | None:
+    """解析 QQ 旧表所用的非零有符号十进制消息 ID。
+
+    仅供目前仍以 ``group_messages.msg_id INTEGER`` 查找的 QQ 兼容路径；新
+    平台代码应使用 :func:`parse_platform_message_id`，不能丢掉前导零或文本 ID。
     """
     if isinstance(value, bool):
         return None
@@ -56,39 +70,25 @@ def parse_platform_message_id(value) -> int | None:
         return None
     sign = 1
     if text[0] in "+-":
-        # "+123" 非规范形态（平台不会发）；只接受负号
         if text[0] == "+":
             return None
         sign = -1
         text = text[1:]
-    if not text.isdigit():
+    if not text.isdigit() or (len(text) > 1 and text[0] == "0"):
         return None
-    if len(text) > 1 and text[0] == "0":
-        return None  # 前导零不是平台形态（"007" 可能是人工脏数据）
     magnitude = int(text)
-    if magnitude == 0:
-        return None  # 0 = 「平台 ID 缺失」的哨兵值，不是合法 ID
-    return sign * magnitude
+    return sign * magnitude if magnitude else None
 
 
 def canonical_message_id_text(value) -> str:
-    """平台 message ID 的规范文本（持久化/匹配统一用它）；非法返回空串。"""
+    """平台 message ID 的原样文本（持久化/匹配统一用它）；非法返回空串。"""
     parsed = parse_platform_message_id(value)
-    return str(parsed) if parsed is not None else ""
+    return parsed or ""
 
 
 def _safe_atom(value) -> str:
-    """头部落入渲染行的标量（uid/ID）：去控制字符与换行，防空隙注入。
-
-    uid/ID 来自平台或数据库，正常情况是纯数字；这里只做防御性清理，
-    不做任何语义判断。
-    """
-    text = str(value or "")
-    return "".join(
-        ch
-        for ch in text
-        if ch not in "\r\n\t" and unicodedata.category(ch) != "Cc"
-    ).strip()
+    """保留外部标识原文；渲染时用 JSON 字符串转义控制字符和分隔符。"""
+    return str(value or "")
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,8 +141,11 @@ class TranscriptRecord:
 
 
 def _quoted_uid(role: str, uid: str) -> str:
-    """「用户(uid)」形态；调用方保证 uid 非空。"""
-    return f"{role}({_safe_atom(uid)})"
+    """带 JSON 字符串边界的 ID，防止不透明标识伪造转录头字段。"""
+    text = str(uid or "")
+    if not text:
+        return f"{role}(未知)"
+    return f"{role}({json.dumps(text, ensure_ascii=False, separators=(',', ':'))})"
 
 
 def render_transcript_record(record: TranscriptRecord) -> str:
@@ -162,8 +165,7 @@ def render_transcript_record(record: TranscriptRecord) -> str:
     if not record.bubbles:
         return ""
     role = "Bot" if record.author_is_bot else "用户"
-    author_label = record.author_id or "未知"
-    header_parts: list[str] = [f"作者={role}({author_label})"]
+    header_parts: list[str] = [f"作者={_quoted_uid(role, record.author_id)}"]
     if record.author_is_bot:
         header_parts.append(
             f"回复给={_quoted_uid('用户', record.recipient_id)}"
@@ -171,9 +173,16 @@ def render_transcript_record(record: TranscriptRecord) -> str:
             else "回复给=未知"
         )
         if record.origin_msg_id:
-            header_parts.append(f"原输入={record.origin_msg_id}")
+            header_parts.append(
+                "原输入="
+                + json.dumps(record.origin_msg_id, ensure_ascii=False, separators=(",", ":"))
+            )
     else:
         if record.reply_to_msg_id:
+            header_parts.append(
+                "引用消息="
+                + json.dumps(record.reply_to_msg_id, ensure_ascii=False, separators=(",", ":"))
+            )
             if record.reply_target_user_id:
                 header_parts.append(f"回复给={_quoted_uid('用户', record.reply_target_user_id)}")
             else:

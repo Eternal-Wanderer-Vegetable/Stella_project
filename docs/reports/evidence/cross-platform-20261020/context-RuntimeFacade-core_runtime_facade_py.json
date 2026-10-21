@@ -1,0 +1,131 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:core/runtime/facade.py:RuntimeFacade",
+    "name": "RuntimeFacade",
+    "kind": "Class",
+    "filePath": "core/runtime/facade.py",
+    "startLine": 180,
+    "endLine": 490
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/status_api.py",
+        "name": "status_api.py",
+        "filePath": "stella_project/plugins/bot_main/status_api.py"
+      },
+      {
+        "uid": "File:tests/observability/test_message_flow_runtime.py",
+        "name": "test_message_flow_runtime.py",
+        "filePath": "tests/observability/test_message_flow_runtime.py"
+      },
+      {
+        "uid": "File:tests/runtime/runtime_harness.py",
+        "name": "runtime_harness.py",
+        "filePath": "tests/runtime/runtime_harness.py"
+      },
+      {
+        "uid": "File:tests/runtime/test_facade_turns.py",
+        "name": "test_facade_turns.py",
+        "filePath": "tests/runtime/test_facade_turns.py"
+      },
+      {
+        "uid": "File:tests/runtime/test_ingress_native.py",
+        "name": "test_ingress_native.py",
+        "filePath": "tests/runtime/test_ingress_native.py"
+      },
+      {
+        "uid": "File:tests/runtime/test_proactive_native.py",
+        "name": "test_proactive_native.py",
+        "filePath": "tests/runtime/test_proactive_native.py"
+      },
+      {
+        "uid": "File:tests/runtime/test_session_ownership.py",
+        "name": "test_session_ownership.py",
+        "filePath": "tests/runtime/test_session_ownership.py"
+      },
+      {
+        "uid": "File:tests/test_capture_ingress_gating.py",
+        "name": "test_capture_ingress_gating.py",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      },
+      {
+        "uid": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.__init__#3",
+        "name": "__init__",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._ensure_epoch#1",
+        "name": "_ensure_epoch",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._key_state#1",
+        "name": "_key_state",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade._record",
+        "name": "_record",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.cancel_turn#2",
+        "name": "cancel_turn",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.delivery_is_current#3",
+        "name": "delivery_is_current",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.drain#0",
+        "name": "drain",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.health#0",
+        "name": "health",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.reset_session#1",
+        "name": "reset_session",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.start#0",
+        "name": "start",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.stop#0",
+        "name": "stop",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "Method:core/runtime/facade.py:RuntimeFacade.submit_turn#4",
+        "name": "submit_turn",
+        "filePath": "core/runtime/facade.py"
+      }
+    ]
+  },
+  "processes": []
+}

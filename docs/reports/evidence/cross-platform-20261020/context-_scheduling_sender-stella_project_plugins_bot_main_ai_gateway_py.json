@@ -1,0 +1,15 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_scheduling_sender",
+    "name": "_scheduling_sender",
+    "kind": "Function",
+    "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+    "startLine": 3174,
+    "endLine": 3181
+  },
+  "epistemic": "exact",
+  "incoming": {},
+  "outgoing": {},
+  "processes": []
+}

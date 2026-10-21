@@ -30,10 +30,13 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Literal
 
+from core.transport.models import UserRef
+
 # 回复计划协议版本（与 prompt_builder 注入的指令一致）
 REPLY_PLAN_PROTOCOL_VERSION = "2026-10-05.2"
-REPLY_ENVELOPE_PROTOCOL_VERSION = "2026-10-08.1"
-_REPLY_ENVELOPE_SCHEMA_VERSION = 1
+REPLY_ENVELOPE_PROTOCOL_VERSION = "2026-10-21.1"
+_LEGACY_REPLY_ENVELOPE_PROTOCOL_VERSION = "2026-10-08.1"
+_REPLY_ENVELOPE_SCHEMA_VERSION = 2
 _MAX_REPLY_ENVELOPE_BYTES = 16 * 1024
 
 _REPLY_PLAN_BLOCK = re.compile(
@@ -67,8 +70,8 @@ class SourceEvidence:
 
     evidence_id: str
     evidence_type: Literal["message", "verified_fact", "current_correction"]
-    author_id: int
-    object_id: int | None
+    author_id: str
+    object_id: str | None
     original_text: str
     conversation_key: str
     source_row_id: int | None
@@ -76,6 +79,15 @@ class SourceEvidence:
     polarity: Literal["positive", "negative", "neutral"] = "neutral"
     is_verified: bool = False
     author_display: str = ""
+
+    def __post_init__(self) -> None:
+        if isinstance(self.author_id, bool):
+            raise ValueError("author_id must be an external identity string")
+        self.author_id = str(self.author_id or "")
+        if self.object_id is not None:
+            if isinstance(self.object_id, bool):
+                raise ValueError("object_id must be an external identity string")
+            self.object_id = str(self.object_id)
 
 
 @dataclass
@@ -106,6 +118,8 @@ class ReplyEnvelope:
     quote_evidence_ids: tuple[str, ...] = ()
     fact_evidence_ids: tuple[str, ...] = ()
     correction_ack: bool = False
+    target_ref: str = ""
+    # Read-only compatibility slot: populated only while reading old QQ output.
     target_user_id: str = ""
     thought: str = ""
     action: str = "NONE"
@@ -121,6 +135,7 @@ class ReplyEnvelope:
             "quote_evidence_ids": list(self.quote_evidence_ids),
             "fact_evidence_ids": list(self.fact_evidence_ids),
             "correction_ack": self.correction_ack,
+            "target_ref": self.target_ref,
             "target_user_id": self.target_user_id,
             "thought": self.thought,
             "action": self.action,
@@ -165,21 +180,119 @@ def _digest(text: str) -> str:
 # ── 投影序列化（复核 F1：证据表过 ctx/跨进程桥） ────────────────────────
 
 
+def build_target_ref_map(
+    users: list[UserRef] | tuple[UserRef, ...],
+    *,
+    turn_id: str,
+    identity_revision: int,
+    generation_epoch: int,
+    max_targets: int = 16,
+) -> dict:
+    """为可信用户创建有界、仅本轮有效的模型引用代号。"""
+    if not turn_id or max_targets < 1:
+        return {}
+    bindings: dict[str, dict[str, str]] = {}
+    seen: set[str] = set()
+    for user in users:
+        if not isinstance(user, UserRef) or user.subject_key in seen:
+            continue
+        token = f"U{len(bindings) + 1}"
+        bindings[token] = {
+            "identity_domain": user.identity_domain,
+            "raw_user_id": user.raw_user_id,
+            "subject_key": user.subject_key,
+        }
+        seen.add(user.subject_key)
+        if len(bindings) >= min(max_targets, 16):
+            break
+    if not bindings:
+        return {}
+    return {
+        "schema_version": 1,
+        "turn_id": str(turn_id),
+        "identity_revision": int(identity_revision),
+        "generation_epoch": int(generation_epoch),
+        "bindings": bindings,
+    }
+
+
+def _target_ref_matches_current(
+    target_ref: str,
+    risk_context: dict,
+    *,
+    turn_id: str,
+    identity_revision: int,
+    generation_epoch: int,
+) -> bool:
+    """Resolve a model token only through its exact current-turn server binding."""
+    mapping = risk_context.get("target_ref_map")
+    if not isinstance(mapping, dict) or set(mapping) != {
+        "schema_version", "turn_id", "identity_revision", "generation_epoch", "bindings"
+    }:
+        return False
+    if (
+        type(mapping.get("schema_version")) is not int
+        or mapping.get("schema_version") != 1
+        or type(mapping.get("identity_revision")) is not int
+        or type(mapping.get("generation_epoch")) is not int
+        or mapping.get("turn_id") != turn_id
+        or mapping.get("identity_revision") != identity_revision
+        or mapping.get("generation_epoch") != generation_epoch
+    ):
+        return False
+    bindings = mapping.get("bindings")
+    if not isinstance(bindings, dict) or len(bindings) > 16:
+        return False
+    raw = bindings.get(target_ref)
+    if not isinstance(raw, dict) or set(raw) != {
+        "identity_domain", "raw_user_id", "subject_key"
+    }:
+        return False
+    try:
+        user = UserRef(raw["identity_domain"], raw["raw_user_id"])
+    except (TypeError, ValueError):
+        return False
+    return bool(
+        raw.get("subject_key") == user.subject_key
+        and user.raw_user_id == risk_context.get("target_user_id")
+        and user.identity_domain == risk_context.get("target_identity_domain")
+    )
+
+
 def evidence_projection(evidence_table: dict[str, SourceEvidence]) -> dict:
     """证据表 → JSON 安全 dict（ctx.attribution_evidence）。"""
-    return {eid: vars(ev) for eid, ev in (evidence_table or {}).items()}
+    return {
+        eid: {
+            **vars(ev),
+            "author_id": str(ev.author_id or ""),
+            "object_id": None if ev.object_id is None else str(ev.object_id),
+        }
+        for eid, ev in (evidence_table or {}).items()
+    }
 
 
 def evidence_table_from_projection(data: dict | None) -> dict[str, SourceEvidence]:
     """ctx.attribution_evidence → 证据表（旧/空投影返回空表，guard 按 off 处理）。"""
     table: dict[str, SourceEvidence] = {}
-    for eid, raw in (data or {}).items():
+    if not isinstance(data, dict):
+        return table
+    for eid, raw in data.items():
         try:
+            if not isinstance(raw, dict):
+                continue
+            author_id = raw.get("author_id", "")
+            object_id = raw.get("object_id")
+            if isinstance(author_id, bool) or not isinstance(author_id, (str, int)):
+                continue
+            if object_id is not None and (
+                isinstance(object_id, bool) or not isinstance(object_id, (str, int))
+            ):
+                continue
             table[str(eid)] = SourceEvidence(
                 evidence_id=str(raw.get("evidence_id") or eid),
                 evidence_type=raw.get("evidence_type") or "message",
-                author_id=int(raw.get("author_id") or 0),
-                object_id=raw.get("object_id"),
+                author_id=str(author_id),
+                object_id=None if object_id is None else str(object_id),
                 original_text=str(raw.get("original_text") or ""),
                 conversation_key=str(raw.get("conversation_key") or ""),
                 source_row_id=raw.get("source_row_id"),
@@ -205,7 +318,7 @@ def protocol_instructions(
     ]
     lines = [
         f"本轮回复协议（只允许一个 response 根元素，禁止块外文本；版本固定为 {REPLY_ENVELOPE_PROTOCOL_VERSION}）：",
-        '<response version="2026-10-08.1">',
+        f'<response version="{REPLY_ENVELOPE_PROTOCOL_VERSION}">',
         "<thought>一句简短诊断；不作为回复发送</thought>",
         "<action>NONE</action>",
         '<reply kind="social"><current>对当前输入的正常回应</current></reply>',
@@ -214,12 +327,13 @@ def protocol_instructions(
         "current 槽只写一个；要分多段短句时在同一个 current 里用换行分隔，不要重复 current 标签或嵌套 reply。",
         "不得声称未在服务端证据中支持的历史事实。quote/fact 只能填写下方证据 ID，作者、原文、对象由服务端渲染。",
         "correction 只能输出 <ack/>；clarify 和 skip 不带其他槽。不得输出作者名、用户 ID 或引用原文作为伪造槽。",
+        "需要声明引用对象时，只能使用服务端给出的 target_ref；不得在协议中输出原始用户 ID。",
     ]
     if usable:
         lines.append("可用服务端证据（只可引用此表中预算保留的 ID）：")
     for ev in usable:
         if ev.evidence_type == "message":
-            author = ev.author_display or f"用户({ev.author_id})"
+            author = ev.author_display or "用户"
             lines.append(
                 f'- [msg] id={ev.evidence_id} 作者={html.escape(author, quote=False)}：'
                 f'{html.escape(ev.original_text, quote=False)}'
@@ -230,15 +344,21 @@ def protocol_instructions(
                 f"{html.escape(ev.original_text, quote=False)}"
             )
         else:
-            author = ev.author_display or f"用户({ev.author_id})"
+            author = ev.author_display or "用户"
             lines.append(
                 f"- [correction] id={ev.evidence_id} "
                 f"作者={html.escape(author, quote=False)}："
                 f"{html.escape(ev.original_text, quote=False)}"
             )
     risk = risk_context if isinstance(risk_context, dict) else {}
-    if risk.get("target_resolution") == "exact" and risk.get("target_user_id"):
-        lines.append(f"当前可信引用对象 ID 为 {risk['target_user_id']}；不得改写为其他对象。")
+    target_map = risk.get("target_ref_map")
+    bindings = target_map.get("bindings") if isinstance(target_map, dict) else None
+    target_refs = sorted(bindings) if isinstance(bindings, dict) else []
+    if risk.get("target_resolution") == "exact" and target_refs:
+        lines.append(
+            f"当前可信引用对象的本轮代号为 {target_refs[0]}；如需声明对象，"
+            f'使用 <reply kind="social" target_ref="{target_refs[0]}">。'
+        )
     lines.append(
         '引用示例：<reply kind="quote"><quote evidence_id="msg_3"/></reply>；'
         '事实示例：<reply kind="facts"><fact evidence_id="fact_1"/></reply>。'
@@ -425,7 +545,11 @@ def _parse_legacy_envelope(raw: str) -> tuple[ReplyEnvelope | None, str]:
     ), ""
 
 
-def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
+def parse_reply_envelope(
+    raw_output: str,
+    *,
+    allow_legacy_qq_targets: bool = False,
+) -> tuple[ReplyEnvelope | None, str]:
     """解析唯一 versioned ReplyEnvelope，拒绝 DTD、实体、额外台词与未知槽。
 
     重复的裸 ``<current>`` 槽按换行合并为多段回复（归属安全不受影响：
@@ -460,8 +584,14 @@ def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
         return _parse_legacy_envelope(raw)
     if not _tree_within_protocol_limits(root):
         return None, "protocol_limits_exceeded"
-    if root.attrib != {"version": REPLY_ENVELOPE_PROTOCOL_VERSION}:
-        version = str(root.attrib.get("version") or "")
+    version = str(root.attrib.get("version") or "")
+    legacy_qq_protocol = (
+        allow_legacy_qq_targets
+        and version == _LEGACY_REPLY_ENVELOPE_PROTOCOL_VERSION
+    )
+    if root.attrib != {"version": version} or (
+        version != REPLY_ENVELOPE_PROTOCOL_VERSION and not legacy_qq_protocol
+    ):
         return None, f"unsupported_version:{version}"
     if (root.text or "").strip():
         return None, "text_outside_reply_slots"
@@ -480,14 +610,20 @@ def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
         return None, "invalid_diagnostic_value"
 
     allowed_kinds = {"social", "quote", "facts", "correction", "clarify", "skip"}
-    if set(reply_node.attrib) - {"kind", "target_user_id"}:
+    allowed_target_attribute = "target_user_id" if legacy_qq_protocol else "target_ref"
+    if set(reply_node.attrib) - {"kind", allowed_target_attribute}:
         return None, "unknown_reply_attribute"
     kind = str(reply_node.attrib.get("kind") or "")
     target_user_id = str(reply_node.attrib.get("target_user_id") or "")
+    target_ref = str(reply_node.attrib.get("target_ref") or "")
     if kind not in allowed_kinds:
         return None, "unknown_reply_kind"
-    if target_user_id and (not target_user_id.isdigit() or len(target_user_id) > 32):
+    if target_user_id and (
+        not legacy_qq_protocol or not target_user_id.isdigit() or len(target_user_id) > 32
+    ):
         return None, "invalid_target_user_id"
+    if target_ref and not re.fullmatch(r"U(?:[1-9]|1[0-6])", target_ref):
+        return None, "invalid_target_ref"
     if (reply_node.text or "").strip():
         return None, "text_outside_typed_slots"
 
@@ -540,30 +676,44 @@ def parse_reply_envelope(raw_output: str) -> tuple[ReplyEnvelope | None, str]:
         return None, f"invalid_{kind}_slots"
 
     return ReplyEnvelope(
-        protocol_version=REPLY_ENVELOPE_PROTOCOL_VERSION,
+        protocol_version=version,
         kind=kind, current=current, quote_evidence_ids=tuple(quote_ids),
         fact_evidence_ids=tuple(fact_ids), correction_ack=correction_ack,
-        target_user_id=target_user_id, thought=thought, action=action,
+        target_ref=target_ref, target_user_id=target_user_id,
+        thought=thought, action=action,
     ), ""
 
 
-def reply_envelope_from_projection(value: object) -> tuple[ReplyEnvelope | None, str]:
+def reply_envelope_from_projection(
+    value: object,
+    *,
+    allow_legacy_qq_targets: bool = False,
+) -> tuple[ReplyEnvelope | None, str]:
     """重建并校验 JSON 投影中的 ReplyEnvelope，拒绝未知/篡改槽位。"""
-    fields = {
+    old_fields = {
         "schema_version", "protocol_version", "kind", "current",
         "quote_evidence_ids", "fact_evidence_ids", "correction_ack",
         "target_user_id", "thought", "action", "legacy",
     }
+    current_fields = old_fields | {"target_ref"}
     if not isinstance(value, dict):
+        return None, "invalid_envelope_projection"
+    schema_version = value.get("schema_version")
+    if type(schema_version) is not int:
+        return None, "invalid_envelope_projection"
+    if schema_version == 1:
+        if not allow_legacy_qq_targets:
+            return None, "unsupported_version"
+        fields = old_fields
+    elif schema_version == _REPLY_ENVELOPE_SCHEMA_VERSION:
+        fields = current_fields
+    else:
         return None, "invalid_envelope_projection"
     if set(value) != fields:
         return None, "unknown_envelope_projection_field"
-    if (
-        type(value.get("schema_version")) is not int
-        or value.get("schema_version") != _REPLY_ENVELOPE_SCHEMA_VERSION
-    ):
-        return None, "invalid_envelope_projection"
     string_fields = ("protocol_version", "kind", "current", "target_user_id", "thought", "action")
+    if schema_version == _REPLY_ENVELOPE_SCHEMA_VERSION:
+        string_fields = (*string_fields, "target_ref")
     if any(not isinstance(value.get(name), str) for name in string_fields):
         return None, "invalid_envelope_projection"
     kind = value.get("kind")
@@ -599,6 +749,7 @@ def reply_envelope_from_projection(value: object) -> tuple[ReplyEnvelope | None,
             quote_evidence_ids=tuple(str(item) for item in quote_ids),
             fact_evidence_ids=tuple(str(item) for item in fact_ids),
             correction_ack=value.get("correction_ack") is True,
+            target_ref=str(value.get("target_ref") or ""),
             target_user_id=str(value.get("target_user_id") or ""),
             thought=str(value.get("thought") or ""),
             action=str(value.get("action") or ""),
@@ -606,17 +757,47 @@ def reply_envelope_from_projection(value: object) -> tuple[ReplyEnvelope | None,
         )
     except (TypeError, ValueError):
         return None, "invalid_envelope_projection"
+    if schema_version == 1 and (
+        not allow_legacy_qq_targets
+        or envelope.protocol_version != _LEGACY_REPLY_ENVELOPE_PROTOCOL_VERSION
+    ):
+        return None, "unsupported_version"
+    if schema_version == _REPLY_ENVELOPE_SCHEMA_VERSION and (
+        envelope.protocol_version not in {
+            REPLY_ENVELOPE_PROTOCOL_VERSION,
+            _LEGACY_REPLY_ENVELOPE_PROTOCOL_VERSION,
+        }
+    ):
+        return None, "unsupported_version"
     if envelope.legacy:
         if envelope.protocol_version not in {REPLY_PLAN_PROTOCOL_VERSION, "legacy-reply-v1"}:
             return None, "unsupported_version"
-    elif envelope.protocol_version != REPLY_ENVELOPE_PROTOCOL_VERSION:
+    elif envelope.protocol_version not in {
+        REPLY_ENVELOPE_PROTOCOL_VERSION,
+        _LEGACY_REPLY_ENVELOPE_PROTOCOL_VERSION,
+    }:
+        return None, "unsupported_version"
+    if (
+        envelope.protocol_version == _LEGACY_REPLY_ENVELOPE_PROTOCOL_VERSION
+        and not allow_legacy_qq_targets
+    ):
         return None, "unsupported_version"
     if not _valid_action(envelope.action) or len(envelope.thought) > 512:
         return None, "invalid_diagnostic_value"
     if envelope.target_user_id and (
-        not envelope.target_user_id.isdigit() or len(envelope.target_user_id) > 32
+        not allow_legacy_qq_targets
+        or envelope.protocol_version != _LEGACY_REPLY_ENVELOPE_PROTOCOL_VERSION
+        or not envelope.target_user_id.isdigit()
+        or len(envelope.target_user_id) > 32
     ):
         return None, "invalid_target_user_id"
+    if envelope.target_ref and (
+        envelope.protocol_version != REPLY_ENVELOPE_PROTOCOL_VERSION
+        or not re.fullmatch(r"U(?:[1-9]|1[0-6])", envelope.target_ref)
+    ):
+        return None, "invalid_target_ref"
+    if envelope.target_ref and envelope.target_user_id:
+        return None, "conflicting_target_slots"
     if not envelope.legacy:
         valid_slots = {
             "social": bool(envelope.current)
@@ -802,8 +983,10 @@ def build_evidence_table(
         evidence_table[evidence_id] = SourceEvidence(
             evidence_id=evidence_id,
             evidence_type="current_correction",
-            author_id=corr.get("author_id", 0),
-            object_id=corr.get("object_id"),
+            author_id=str(corr.get("author_id") or ""),
+            object_id=(
+                None if corr.get("object_id") is None else str(corr.get("object_id"))
+            ),
             original_text=corr.get("text", ""),
             conversation_key=corr.get("conversation_key", ""),
             source_row_id=corr.get("source_row_id"),
@@ -823,8 +1006,10 @@ def build_evidence_table(
         evidence_table[evidence_id] = SourceEvidence(
             evidence_id=evidence_id,
             evidence_type="verified_fact",
-            author_id=fact.get("author_id", 0),
-            object_id=fact.get("object_id"),
+            author_id=str(fact.get("author_id") or ""),
+            object_id=(
+                None if fact.get("object_id") is None else str(fact.get("object_id"))
+            ),
             original_text=fact.get("content", ""),
             conversation_key=fact.get("conversation_key", ""),
             source_row_id=fact.get("source_row_id"),
@@ -844,8 +1029,10 @@ def build_evidence_table(
         evidence_table[evidence_id] = SourceEvidence(
             evidence_id=evidence_id,
             evidence_type="message",
-            author_id=msg.get("author_id", 0),
-            object_id=msg.get("object_id"),
+            author_id=str(msg.get("author_id") or ""),
+            object_id=(
+                None if msg.get("object_id") is None else str(msg.get("object_id"))
+            ),
             original_text=msg.get("text", ""),
             conversation_key=msg.get("conversation_key", ""),
             source_row_id=msg.get("row_id"),
@@ -868,6 +1055,7 @@ def _decide(
     identity_revision: int,
     generation_epoch: int = 0,
     risk_context: dict | None = None,
+    turn_id: str = "",
 ) -> tuple[ReplyPlan | None, AttributionDecision, str]:
     """guard 共同决策核（legacy/native 两条路径共用，复核 F1 的前提）。
 
@@ -920,9 +1108,22 @@ def _decide(
         target_resolution = str(risk.get("target_resolution") or "unknown")
         trusted_target = str(risk.get("target_user_id") or "")
         claimed_target = envelope.target_user_id
-        target_mismatch = bool(
-            claimed_target and (not trusted_target or claimed_target != trusted_target)
-        )
+        target_mismatch = False
+        if envelope.target_ref:
+            target_mismatch = not _target_ref_matches_current(
+                envelope.target_ref,
+                risk,
+                turn_id=turn_id,
+                identity_revision=identity_revision,
+                generation_epoch=generation_epoch,
+            )
+        if claimed_target:
+            target_mismatch = target_mismatch or bool(
+                envelope.protocol_version != _LEGACY_REPLY_ENVELOPE_PROTOCOL_VERSION
+                or risk.get("allow_legacy_qq_target_id") is not True
+                or not trusted_target
+                or claimed_target != trusted_target
+            )
         unresolved_reply_target = (
             "reply_relation" in signals
             and target_resolution in {"ambiguous", "unknown"}
@@ -1097,6 +1298,7 @@ def apply_attribution_guard(
     generation_epoch: int = 0,
     risk_context: dict | None = None,
     parse_error: str = "",
+    turn_id: str = "",
 ) -> tuple[str, AttributionDecision]:
     """应用归属守护 - 最终发送前检查（复核 F12/F1：完整管线）。
 
@@ -1123,14 +1325,27 @@ def apply_attribution_guard(
     if isinstance(raw_output, ReplyEnvelope):
         plan, error = raw_output, ""
     elif isinstance(raw_output, str):
-        plan, error = parse_reply_envelope(raw_output)
+        plan, error = parse_reply_envelope(
+            raw_output,
+            allow_legacy_qq_targets=bool(
+                isinstance(risk_context, dict)
+                and risk_context.get("allow_legacy_qq_target_id") is True
+            ),
+        )
     else:
-        plan, error = reply_envelope_from_projection(raw_output)
+        plan, error = reply_envelope_from_projection(
+            raw_output,
+            allow_legacy_qq_targets=bool(
+                isinstance(risk_context, dict)
+                and risk_context.get("allow_legacy_qq_target_id") is True
+            ),
+        )
     error = parse_error or error
     _, decision, final_output = _decide(
         plan, error, evidence_table, budget_retained_ids,
         guard_mode, identity_revision, generation_epoch,
         risk_context=risk_context,
+        turn_id=turn_id,
     )
     decision.original_output_digest = _digest(raw_text)
     decision.final_output_digest = _digest(final_output)

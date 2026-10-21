@@ -1,0 +1,826 @@
+[
+  {
+    "id": "resource-context",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/context"
+    },
+    "elapsedMs": 5
+  },
+  {
+    "id": "resource-schema",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/schema"
+    },
+    "elapsedMs": 0
+  },
+  {
+    "id": "resource-processes",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/processes"
+    },
+    "elapsedMs": 287
+  },
+  {
+    "id": "resource-clusters",
+    "tool": "resource",
+    "args": {
+      "uri": "gitnexus://repo/Stella_project/clusters"
+    },
+    "elapsedMs": 41
+  },
+  {
+    "id": "query-ingress",
+    "tool": "query",
+    "args": {
+      "search_query": "record_group_chat handle_private_chat handle_chat",
+      "limit": 12
+    },
+    "elapsedMs": 1151
+  },
+  {
+    "id": "query-runtime",
+    "tool": "query",
+    "args": {
+      "search_query": "RuntimeFacade submit_turn TurnService",
+      "limit": 12
+    },
+    "elapsedMs": 1078
+  },
+  {
+    "id": "query-identity",
+    "tool": "query",
+    "args": {
+      "search_query": "ConversationRef conversation_key scope_for_chat_context",
+      "limit": 12
+    },
+    "elapsedMs": 1069
+  },
+  {
+    "id": "query-memory",
+    "tool": "query",
+    "args": {
+      "search_query": "assess_candidate promote_candidate verify_source_snapshot",
+      "limit": 12
+    },
+    "elapsedMs": -29491
+  },
+  {
+    "id": "query-delivery",
+    "tool": "query",
+    "args": {
+      "search_query": "send_lines delivery receipt scheduling cometa",
+      "limit": 12
+    },
+    "elapsedMs": 1076
+  },
+  {
+    "id": "query-plugins",
+    "tool": "query",
+    "args": {
+      "search_query": "build_event to_onebot_message should_dispatch",
+      "limit": 12
+    },
+    "elapsedMs": 1057
+  },
+  {
+    "id": "query-platform",
+    "tool": "query",
+    "args": {
+      "search_query": "platformcfg onebot link_status",
+      "limit": 12
+    },
+    "elapsedMs": 1050
+  },
+  {
+    "id": "query-native",
+    "tool": "query",
+    "args": {
+      "search_query": "RetrievalRequest promote_candidate_atomic",
+      "limit": 12
+    },
+    "elapsedMs": 1025
+  },
+  {
+    "id": "context-ChatContext-core_context_py",
+    "tool": "context",
+    "args": {
+      "name": "ChatContext",
+      "file_path": "core/context.py"
+    },
+    "elapsedMs": 30691
+  },
+  {
+    "id": "impact-ChatContext-core_context_py",
+    "tool": "impact",
+    "args": {
+      "target": "ChatContext",
+      "file_path": "core/context.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 146
+  },
+  {
+    "id": "context-ConversationRef-core_conversation_py",
+    "tool": "context",
+    "args": {
+      "name": "ConversationRef",
+      "file_path": "core/conversation.py"
+    },
+    "elapsedMs": -30484
+  },
+  {
+    "id": "impact-ConversationRef-core_conversation_py",
+    "tool": "impact",
+    "args": {
+      "target": "ConversationRef",
+      "file_path": "core/conversation.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 123
+  },
+  {
+    "id": "context-conversation_key-core_conversation_py",
+    "tool": "context",
+    "args": {
+      "name": "conversation_key",
+      "file_path": "core/conversation.py"
+    },
+    "elapsedMs": 12
+  },
+  {
+    "id": "impact-conversation_key-core_conversation_py",
+    "tool": "impact",
+    "args": {
+      "target": "conversation_key",
+      "file_path": "core/conversation.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 48
+  },
+  {
+    "id": "context-get_or_register_group-memory_conversation_registry_py",
+    "tool": "context",
+    "args": {
+      "name": "get_or_register_group",
+      "file_path": "memory/conversation_registry.py"
+    },
+    "elapsedMs": 60
+  },
+  {
+    "id": "impact-get_or_register_group-memory_conversation_registry_py",
+    "tool": "impact",
+    "args": {
+      "target": "get_or_register_group",
+      "file_path": "memory/conversation_registry.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 26
+  },
+  {
+    "id": "context-get_or_register_private-memory_conversation_registry_py",
+    "tool": "context",
+    "args": {
+      "name": "get_or_register_private",
+      "file_path": "memory/conversation_registry.py"
+    },
+    "elapsedMs": 56
+  },
+  {
+    "id": "impact-get_or_register_private-memory_conversation_registry_py",
+    "tool": "impact",
+    "args": {
+      "target": "get_or_register_private",
+      "file_path": "memory/conversation_registry.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 101
+  },
+  {
+    "id": "context-scope_for_chat_context-memory_ownership_py",
+    "tool": "context",
+    "args": {
+      "name": "scope_for_chat_context",
+      "file_path": "memory/ownership.py"
+    },
+    "elapsedMs": 59
+  },
+  {
+    "id": "impact-scope_for_chat_context-memory_ownership_py",
+    "tool": "impact",
+    "args": {
+      "target": "scope_for_chat_context",
+      "file_path": "memory/ownership.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 104
+  },
+  {
+    "id": "context-scope_for_conversation-memory_ownership_py",
+    "tool": "context",
+    "args": {
+      "name": "scope_for_conversation",
+      "file_path": "memory/ownership.py"
+    },
+    "elapsedMs": 56
+  },
+  {
+    "id": "impact-scope_for_conversation-memory_ownership_py",
+    "tool": "impact",
+    "args": {
+      "target": "scope_for_conversation",
+      "file_path": "memory/ownership.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 103
+  },
+  {
+    "id": "context-assess_candidate-memory_evidence_contract_py",
+    "tool": "context",
+    "args": {
+      "name": "assess_candidate",
+      "file_path": "memory/evidence_contract.py"
+    },
+    "elapsedMs": 54
+  },
+  {
+    "id": "impact-assess_candidate-memory_evidence_contract_py",
+    "tool": "impact",
+    "args": {
+      "target": "assess_candidate",
+      "file_path": "memory/evidence_contract.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 107
+  },
+  {
+    "id": "context-verify_source_snapshot-memory_evidence_contract_py",
+    "tool": "context",
+    "args": {
+      "name": "verify_source_snapshot",
+      "file_path": "memory/evidence_contract.py"
+    },
+    "elapsedMs": 57
+  },
+  {
+    "id": "impact-verify_source_snapshot-memory_evidence_contract_py",
+    "tool": "impact",
+    "args": {
+      "target": "verify_source_snapshot",
+      "file_path": "memory/evidence_contract.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 113
+  },
+  {
+    "id": "context-RuntimeFacade-core_runtime_facade_py",
+    "tool": "context",
+    "args": {
+      "name": "RuntimeFacade",
+      "file_path": "core/runtime/facade.py"
+    },
+    "elapsedMs": 99
+  },
+  {
+    "id": "impact-RuntimeFacade-core_runtime_facade_py",
+    "tool": "impact",
+    "args": {
+      "target": "RuntimeFacade",
+      "file_path": "core/runtime/facade.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 125
+  },
+  {
+    "id": "context-TurnService-core_runtime_turn_service_py",
+    "tool": "context",
+    "args": {
+      "name": "TurnService",
+      "file_path": "core/runtime/turn_service.py"
+    },
+    "elapsedMs": 91
+  },
+  {
+    "id": "impact-TurnService-core_runtime_turn_service_py",
+    "tool": "impact",
+    "args": {
+      "target": "TurnService",
+      "file_path": "core/runtime/turn_service.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 125
+  },
+  {
+    "id": "context-record_message-memory_pre_processors_py",
+    "tool": "context",
+    "args": {
+      "name": "record_message",
+      "file_path": "memory/pre_processors.py"
+    },
+    "elapsedMs": 60
+  },
+  {
+    "id": "impact-record_message-memory_pre_processors_py",
+    "tool": "impact",
+    "args": {
+      "target": "record_message",
+      "file_path": "memory/pre_processors.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 136
+  },
+  {
+    "id": "context-resolve_space-config_spaces_py",
+    "tool": "context",
+    "args": {
+      "name": "resolve_space",
+      "file_path": "config/spaces.py"
+    },
+    "elapsedMs": 58
+  },
+  {
+    "id": "impact-resolve_space-config_spaces_py",
+    "tool": "impact",
+    "args": {
+      "target": "resolve_space",
+      "file_path": "config/spaces.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 145
+  },
+  {
+    "id": "context-deliver_lines-core_social_delivery_py",
+    "tool": "context",
+    "args": {
+      "name": "deliver_lines",
+      "file_path": "core/social/delivery.py"
+    },
+    "elapsedMs": 56
+  },
+  {
+    "id": "impact-deliver_lines-core_social_delivery_py",
+    "tool": "impact",
+    "args": {
+      "target": "deliver_lines",
+      "file_path": "core/social/delivery.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 111
+  },
+  {
+    "id": "context-coerce_platform_message_id-core_social_delivery_py",
+    "tool": "context",
+    "args": {
+      "name": "coerce_platform_message_id",
+      "file_path": "core/social/delivery.py"
+    },
+    "elapsedMs": 57
+  },
+  {
+    "id": "impact-coerce_platform_message_id-core_social_delivery_py",
+    "tool": "impact",
+    "args": {
+      "target": "coerce_platform_message_id",
+      "file_path": "core/social/delivery.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 111
+  },
+  {
+    "id": "context-build_origin-stella_project_plugins_bot_main_cometa_bridge_py",
+    "tool": "context",
+    "args": {
+      "name": "build_origin",
+      "file_path": "stella_project/plugins/bot_main/cometa_bridge.py"
+    },
+    "elapsedMs": 57
+  },
+  {
+    "id": "impact-build_origin-stella_project_plugins_bot_main_cometa_bridge_py",
+    "tool": "impact",
+    "args": {
+      "target": "build_origin",
+      "file_path": "stella_project/plugins/bot_main/cometa_bridge.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 88
+  },
+  {
+    "id": "context-build_event-astrbot_compat_events_py",
+    "tool": "context",
+    "args": {
+      "name": "build_event",
+      "file_path": "astrbot_compat/events.py"
+    },
+    "elapsedMs": 58
+  },
+  {
+    "id": "impact-build_event-astrbot_compat_events_py",
+    "tool": "impact",
+    "args": {
+      "target": "build_event",
+      "file_path": "astrbot_compat/events.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 103
+  },
+  {
+    "id": "context-to_onebot_message-astrbot_compat_components_py",
+    "tool": "context",
+    "args": {
+      "name": "to_onebot_message",
+      "file_path": "astrbot_compat/components.py"
+    },
+    "elapsedMs": 60
+  },
+  {
+    "id": "impact-to_onebot_message-astrbot_compat_components_py",
+    "tool": "impact",
+    "args": {
+      "target": "to_onebot_message",
+      "file_path": "astrbot_compat/components.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 113
+  },
+  {
+    "id": "context-should_dispatch-astrbot_compat_pipeline_py",
+    "tool": "context",
+    "args": {
+      "name": "should_dispatch",
+      "file_path": "astrbot_compat/pipeline.py"
+    },
+    "elapsedMs": 56
+  },
+  {
+    "id": "impact-should_dispatch-astrbot_compat_pipeline_py",
+    "tool": "impact",
+    "args": {
+      "target": "should_dispatch",
+      "file_path": "astrbot_compat/pipeline.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 72
+  },
+  {
+    "id": "context-extract_image_sources-core_vision_py",
+    "tool": "context",
+    "args": {
+      "name": "extract_image_sources",
+      "file_path": "core/vision.py"
+    },
+    "elapsedMs": 62
+  },
+  {
+    "id": "impact-extract_image_sources-core_vision_py",
+    "tool": "impact",
+    "args": {
+      "target": "extract_image_sources",
+      "file_path": "core/vision.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 98
+  },
+  {
+    "id": "context-RetrievalRequest-memory_rust_backend_py",
+    "tool": "context",
+    "args": {
+      "name": "RetrievalRequest",
+      "file_path": "memory_rust/backend.py"
+    },
+    "elapsedMs": 93
+  },
+  {
+    "id": "impact-RetrievalRequest-memory_rust_backend_py",
+    "tool": "impact",
+    "args": {
+      "target": "RetrievalRequest",
+      "file_path": "memory_rust/backend.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 208
+  },
+  {
+    "id": "context-RetrievalRequest-memory_rust_native_src_retrieval_rs",
+    "tool": "context",
+    "args": {
+      "name": "RetrievalRequest",
+      "file_path": "memory_rust/native/src/retrieval.rs"
+    },
+    "elapsedMs": 13
+  },
+  {
+    "id": "impact-RetrievalRequest-memory_rust_native_src_retrieval_rs",
+    "tool": "impact",
+    "args": {
+      "target": "RetrievalRequest",
+      "file_path": "memory_rust/native/src/retrieval.rs",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 44
+  },
+  {
+    "id": "context-promote_candidate_atomic-memory_rust_native_src_promotion_rs",
+    "tool": "context",
+    "args": {
+      "name": "promote_candidate_atomic",
+      "file_path": "memory_rust/native/src/promotion.rs"
+    },
+    "elapsedMs": 6,
+    "error": "Symbol 'promote_candidate_atomic' not found"
+  },
+  {
+    "id": "impact-promote_candidate_atomic-memory_rust_native_src_promotion_rs",
+    "tool": "impact",
+    "args": {
+      "target": "promote_candidate_atomic",
+      "file_path": "memory_rust/native/src/promotion.rs",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 6,
+    "error": "Target 'promote_candidate_atomic' not found"
+  },
+  {
+    "id": "context-DeliveryService-stella_project_plugins_bot_main_scheduling_delivery_py",
+    "tool": "context",
+    "args": {
+      "name": "DeliveryService",
+      "file_path": "stella_project/plugins/bot_main/scheduling/delivery.py"
+    },
+    "elapsedMs": 100
+  },
+  {
+    "id": "impact-DeliveryService-stella_project_plugins_bot_main_scheduling_delivery_py",
+    "tool": "impact",
+    "args": {
+      "target": "DeliveryService",
+      "file_path": "stella_project/plugins/bot_main/scheduling/delivery.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 140
+  },
+  {
+    "id": "context-Origin-cometa_models_py",
+    "tool": "context",
+    "args": {
+      "name": "Origin",
+      "file_path": "cometa/models.py"
+    },
+    "elapsedMs": 110
+  },
+  {
+    "id": "impact-Origin-cometa_models_py",
+    "tool": "impact",
+    "args": {
+      "target": "Origin",
+      "file_path": "cometa/models.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 153
+  },
+  {
+    "id": "context-platform_link-webui_services_runtime_py",
+    "tool": "context",
+    "args": {
+      "name": "platform_link",
+      "file_path": "webui/services/runtime.py"
+    },
+    "elapsedMs": 65
+  },
+  {
+    "id": "impact-platform_link-webui_services_runtime_py",
+    "tool": "impact",
+    "args": {
+      "target": "platform_link",
+      "file_path": "webui/services/runtime.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 93
+  },
+  {
+    "id": "context-record_group_chat-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "context",
+    "args": {
+      "name": "record_group_chat",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "elapsedMs": 61
+  },
+  {
+    "id": "impact-record_group_chat-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "impact",
+    "args": {
+      "target": "record_group_chat",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 26
+  },
+  {
+    "id": "context-handle_chat-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "context",
+    "args": {
+      "name": "handle_chat",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "elapsedMs": 67
+  },
+  {
+    "id": "impact-handle_chat-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "impact",
+    "args": {
+      "target": "handle_chat",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 31
+  },
+  {
+    "id": "context-handle_private_chat-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "context",
+    "args": {
+      "name": "handle_private_chat",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "elapsedMs": 66
+  },
+  {
+    "id": "impact-handle_private_chat-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "impact",
+    "args": {
+      "target": "handle_private_chat",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 29
+  },
+  {
+    "id": "context-_scheduling_sender-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "context",
+    "args": {
+      "name": "_scheduling_sender",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "elapsedMs": 66
+  },
+  {
+    "id": "impact-_scheduling_sender-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "impact",
+    "args": {
+      "target": "_scheduling_sender",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 30
+  },
+  {
+    "id": "context-_proactive_at_user-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "context",
+    "args": {
+      "name": "_proactive_at_user",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    "elapsedMs": 63
+  },
+  {
+    "id": "impact-_proactive_at_user-stella_project_plugins_bot_main_ai_gateway_py",
+    "tool": "impact",
+    "args": {
+      "target": "_proactive_at_user",
+      "file_path": "stella_project/plugins/bot_main/ai_gateway.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 99
+  },
+  {
+    "id": "context-run_turn-webui_chat_ingress_py",
+    "tool": "context",
+    "args": {
+      "name": "run_turn",
+      "file_path": "webui/chat_ingress.py"
+    },
+    "elapsedMs": 60
+  },
+  {
+    "id": "impact-run_turn-webui_chat_ingress_py",
+    "tool": "impact",
+    "args": {
+      "target": "run_turn",
+      "file_path": "webui/chat_ingress.py",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 30705
+  },
+  {
+    "id": "impact-file-feature_list.json",
+    "tool": "impact",
+    "args": {
+      "target": "feature_list.json",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 102
+  },
+  {
+    "id": "impact-file-progress.md",
+    "tool": "impact",
+    "args": {
+      "target": "progress.md",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 97
+  },
+  {
+    "id": "impact-file-session-handoff.md",
+    "tool": "impact",
+    "args": {
+      "target": "session-handoff.md",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": -30502,
+    "partial": true
+  },
+  {
+    "id": "impact-file-docs_plans_2026-10-20-gitnexus-cross-platform-plan.md",
+    "tool": "impact",
+    "args": {
+      "target": "docs/plans/2026-10-20-gitnexus-cross-platform-plan.md",
+      "direction": "upstream",
+      "maxDepth": 3,
+      "limit": 5000
+    },
+    "elapsedMs": 24,
+    "error": "Target 'docs/plans/2026-10-20-gitnexus-cross-platform-plan.md' not found"
+  }
+]

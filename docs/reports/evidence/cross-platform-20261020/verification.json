@@ -1,0 +1,59 @@
+{
+  "source_commit": "ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d",
+  "business_source_changes": [],
+  "plan_consistency": "passed",
+  "plan_links": "passed",
+  "json_parse": "passed",
+  "work_packages": 12,
+  "backlog_dag": "passed",
+  "runtime_entries": 50,
+  "discovered_entries": 34,
+  "platform_denominator": 32,
+  "scope_files": 180,
+  "source_fingerprints": "passed",
+  "unresolved_tool_errors": [],
+  "superseded_tool_results": {
+    "impact-file-session-handoff.md.json": "impact-file-session-handoff-retry.json",
+    "context-conversation_key-core_conversation_py.json": "context-exact-conversation-key.json",
+    "impact-conversation_key-core_conversation_py.json": "impact-exact-conversation-key.json",
+    "context-RetrievalRequest-memory_rust_native_src_retrieval_rs.json": "context-exact-rust-retrieval-request.json",
+    "impact-RetrievalRequest-memory_rust_native_src_retrieval_rs.json": "impact-exact-rust-retrieval-request.json",
+    "context-promote_candidate_atomic-memory_rust_native_src_promotion_rs.json": "context-exact-promote.json",
+    "impact-promote_candidate_atomic-memory_rust_native_src_promotion_rs.json": "impact-exact-promote.json",
+    "context-knowledge-Principal.json": "context-knowledge-Principal-corrected.json",
+    "impact-knowledge-Principal.json": "impact-knowledge-Principal-corrected.json",
+    "graph-label-counts.json": "graph-node-types-fixed.json",
+    "pdg-evidence-slice.json": "pdg-evidence-slice-depth64.json",
+    "impact-file-docs_plans_2026-10-20-gitnexus-cross-platform-plan.md.json": "new plan absent from baseline index; exact reference search empty; documentation-only addition",
+    "process-proc_464_handle_toggle.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_439_handle_toggle.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_181_handle_reload.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_184_handle_toggle.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_272_handle_reload.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_185_handle_toggle.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs"
+  },
+  "checks": [
+    {
+      "argv": [
+        "python3",
+        "scripts/check_docs.py"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"ok\": true, \"errors\": 0, \"files\": 119, \"local_links\": 1199, \"migration_anchors\": 577}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "business_tests": "not_run_documentation_only",
+  "live_platform_tests": "not_run",
+  "final_index_records": ".gitnexus/verification/ (local, ignored; generated after documentation is complete)"
+}

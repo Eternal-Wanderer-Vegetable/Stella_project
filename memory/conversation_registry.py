@@ -36,9 +36,12 @@ from core.conversation import (
     qq_private_ref,
     webchat_ref,
 )
+from core.transport.keys import conversation_key_v2, decode_conversation_key_v2
+from core.transport.models import BotRef, ConversationRefV2, SceneRef
 from memory.schema import create_conversation_registry_table
 
 _TABLE = "conversation_registry"
+_TABLE_V2 = "conversation_registry_v2"
 
 # 分配负整数存储 ID 前扫描占用的 (表, 列)。全是按真实 QQ 群归属的表
 # （migrations.GROUP_SCOPED_TABLES 的口径）+ trace 表；缺失的表跳过。
@@ -95,7 +98,13 @@ def _query_row(conn: sqlite3.Connection, sql: str, params: tuple) -> sqlite3.Row
 def lookup(conn: sqlite3.Connection, conv_key: str) -> ConversationRef | None:
     """按规范会话键查找；未注册返回 None（调用方决定是否注册）。"""
     ensure_registry(conn)
-    row = _query_row(conn, f"SELECT * FROM {_TABLE} WHERE conversation_key = ?", (conv_key,))
+    # Legacy API only returns the legacy ConversationRef shape. V2 rows are read
+    # through lookup_conversation_v2 so opaque IDs are never coerced to QQ integers.
+    row = _query_row(
+        conn,
+        f"SELECT * FROM {_TABLE} WHERE conversation_key = ?",
+        (conv_key,),
+    )
     return ref_from_row(row) if row else None
 
 
@@ -132,6 +141,191 @@ def all_registered(conn: sqlite3.Connection) -> list[ConversationRef]:
     finally:
         conn.row_factory = previous
     return [ref_from_row(row) for row in rows]
+
+
+def _v2_ref_from_row(
+    conn: sqlite3.Connection, row: sqlite3.Row
+) -> ConversationRefV2:
+    bot, scene = decode_conversation_key_v2(str(row["conversation_key"]))
+    previous = conn.row_factory
+    conn.row_factory = sqlite3.Row
+    try:
+        aliases = conn.execute(
+            "SELECT alias_key FROM conversation_aliases "
+            "WHERE conversation_key = ? AND alias_key != ? ORDER BY alias_key",
+            (row["conversation_key"], row["conversation_key"]),
+        ).fetchall()
+    finally:
+        conn.row_factory = previous
+    return ConversationRefV2(
+        bot=bot,
+        scene=scene,
+        storage_session_id=int(row["storage_session_id"]),
+        memory_space=str(row["memory_space"]),
+        legacy_aliases=tuple(str(alias[0]) for alias in aliases),
+    )
+
+
+def lookup_conversation_v2(
+    conn: sqlite3.Connection, bot: BotRef, scene: SceneRef
+) -> ConversationRefV2 | None:
+    """Look up one V2 conversation by its complete bot and scene identity."""
+    ensure_registry(conn)
+    key = conversation_key_v2(bot, scene)
+    row = _query_row(conn, f"SELECT * FROM {_TABLE_V2} WHERE conversation_key = ?", (key,))
+    return _v2_ref_from_row(conn, row) if row else None
+
+
+def lookup_conversation_v2_by_alias(
+    conn: sqlite3.Connection,
+    alias_key: str,
+    *,
+    bot: BotRef | None = None,
+    scene: SceneRef | None = None,
+) -> ConversationRefV2 | None:
+    """Resolve a persisted alias, failing closed when it maps to multiple sessions.
+
+    Supplying both ``bot`` and ``scene`` scopes a legacy runtime alias to the
+    expected canonical identity. A bare alias is only accepted when unique.
+    """
+    if (bot is None) != (scene is None):
+        raise ValueError("bot and scene must be supplied together")
+    ensure_registry(conn)
+    if bot is not None and scene is not None:
+        expected_key = conversation_key_v2(bot, scene)
+        row = _query_row(
+            conn,
+            "SELECT conversation_key FROM conversation_aliases "
+            "WHERE alias_key = ? AND conversation_key = ?",
+            (alias_key, expected_key),
+        )
+        return lookup_conversation_v2(conn, bot, scene) if row else None
+
+    previous = conn.row_factory
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT conversation_key FROM conversation_aliases "
+            "WHERE alias_key = ? ORDER BY conversation_key",
+            (alias_key,),
+        ).fetchall()
+    finally:
+        conn.row_factory = previous
+    if len(rows) != 1:
+        return None
+    bot, scene = decode_conversation_key_v2(str(rows[0]["conversation_key"]))
+    return lookup_conversation_v2(conn, bot, scene)
+
+
+def _insert_v2_aliases(
+    conn: sqlite3.Connection, canonical_key: str, aliases: tuple[str, ...]
+) -> None:
+    values = tuple(dict.fromkeys((canonical_key, *aliases)))
+    conn.executemany(
+        "INSERT OR IGNORE INTO conversation_aliases (alias_key, conversation_key) "
+        "VALUES (?, ?)",
+        ((alias, canonical_key) for alias in values),
+    )
+
+
+def _register_conversation_v2_once(
+    conn: sqlite3.Connection,
+    bot: BotRef,
+    scene: SceneRef,
+    canonical_key: str,
+    aliases: tuple[str, ...],
+    memory_space: str | None,
+) -> ConversationRefV2:
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        row = _query_row(
+            conn,
+            f"SELECT * FROM {_TABLE_V2} WHERE conversation_key = ?",
+            (canonical_key,),
+        )
+        if row:
+            _insert_v2_aliases(conn, canonical_key, aliases)
+            conn.execute("COMMIT")
+            return lookup_conversation_v2(conn, bot, scene)  # type: ignore[return-value]
+
+        storage_id = _allocate_negative_storage(conn)
+        resolved_memory_space = memory_space or f"transport:{canonical_key}"
+        ref = ConversationRefV2(
+            bot=bot,
+            scene=scene,
+            storage_session_id=storage_id,
+            memory_space=resolved_memory_space,
+            legacy_aliases=aliases,
+        )
+        conn.execute(
+            f"INSERT INTO {_TABLE_V2} (conversation_key, storage_session_id, memory_space) "
+            "VALUES (?,?,?)",
+            (ref.canonical_key, storage_id, resolved_memory_space),
+        )
+        _insert_v2_aliases(conn, canonical_key, aliases)
+        conn.execute("COMMIT")
+        return ref
+    except Exception:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+
+
+def register_conversation_v2(
+    conn: sqlite3.Connection,
+    bot: BotRef,
+    scene: SceneRef,
+    *,
+    legacy_aliases: tuple[str, ...] = (),
+    memory_space: str | None = None,
+) -> ConversationRefV2:
+    """Register a V2 identity with an isolated negative storage proxy.
+
+    Aliases must come from a trusted adapter/compatibility layer. They are scoped
+    to the canonical identity and may collide across connections; unscoped lookup
+    will return ``None`` for ambiguous aliases.
+    """
+    if not isinstance(bot, BotRef) or not isinstance(scene, SceneRef):
+        raise ValueError("bot and scene must use the transport identity models")
+    if isinstance(legacy_aliases, (str, bytes)):
+        raise ValueError("legacy_aliases must be a sequence of strings")
+    aliases = tuple(dict.fromkeys(legacy_aliases))
+    if any(not isinstance(alias, str) or alias == "" for alias in aliases):
+        raise ValueError("legacy aliases must be non-empty strings")
+    if memory_space is not None and (not isinstance(memory_space, str) or memory_space == ""):
+        raise ValueError("memory_space must be a non-empty string or None")
+    ensure_registry(conn)
+    canonical_key = conversation_key_v2(bot, scene)
+    last_error: Exception | None = None
+    for attempt in range(_ALLOC_RETRIES):
+        try:
+            return _register_conversation_v2_once(
+                conn, bot, scene, canonical_key, aliases, memory_space
+            )
+        except sqlite3.IntegrityError as exc:
+            existing = lookup_conversation_v2(conn, bot, scene)
+            if existing:
+                return existing
+            last_error = exc
+        except sqlite3.OperationalError as exc:
+            last_error = exc
+            time.sleep(_ALLOC_RETRY_DELAY * (attempt + 1))
+    raise RuntimeError(f"V2 conversation registration failed ({canonical_key}): {last_error!r}") from last_error
+
+
+def all_registered_v2(conn: sqlite3.Connection) -> list[ConversationRefV2]:
+    """Enumerate V2 rows without exposing them through the legacy drain API."""
+    ensure_registry(conn)
+    previous = conn.row_factory
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            f"SELECT * FROM {_TABLE_V2} ORDER BY conversation_key"
+        ).fetchall()
+    finally:
+        conn.row_factory = previous
+    return [_v2_ref_from_row(conn, row) for row in rows]
 
 
 # ── 群会话 ───────────────────────────────────────────────
@@ -344,6 +538,11 @@ def _allocate_negative_storage(conn: sqlite3.Connection) -> int:
             occupied.add(int(row[0]))
     row = conn.execute(
         f"SELECT MIN(storage_session_id) FROM {_TABLE} WHERE storage_session_id < 0"
+    ).fetchone()
+    if row and row[0] is not None:
+        occupied.add(int(row[0]))
+    row = conn.execute(
+        f"SELECT MIN(storage_session_id) FROM {_TABLE_V2} WHERE storage_session_id < 0"
     ).fetchone()
     if row and row[0] is not None:
         occupied.add(int(row[0]))

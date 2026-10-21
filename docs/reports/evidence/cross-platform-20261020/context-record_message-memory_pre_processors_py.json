@@ -1,0 +1,172 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/pre_processors.py:record_message",
+    "name": "record_message",
+    "kind": "Function",
+    "filePath": "memory/pre_processors.py",
+    "startLine": 126,
+    "endLine": 219
+  },
+  "epistemic": "lower-bound",
+  "boundaries": [
+    "3 call sites invoking `record_message` were dropped at index time because the receiver's type could not be established (e.g. an unresolved constructor, factory or chained expression). Those callers are absent from this result — actual impact may be higher."
+  ],
+  "causes": {
+    "scopeExtractionFiles": 0,
+    "receiverTyping": 3,
+    "dispatchBoundary": 0,
+    "externalBoundary": 0,
+    "undecidedSatisfaction": 0
+  },
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_record_bot_lines",
+        "name": "_record_bot_lines",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:record_group_chat",
+        "name": "record_group_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:tests/test_bot_self_source.py:test_record_message_persists_bot_self",
+        "name": "test_record_message_persists_bot_self",
+        "filePath": "tests/test_bot_self_source.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_capture_allowed_preserves_envelope_contract",
+        "name": "test_capture_allowed_preserves_envelope_contract",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_capture_denial_writes_nothing",
+        "name": "test_capture_denial_writes_nothing",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_invalid_message_ids_stay_unknown",
+        "name": "test_invalid_message_ids_stay_unknown",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_legacy_call_without_decision_persists_unchanged",
+        "name": "test_legacy_call_without_decision_persists_unchanged",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_mentions_persisted_and_normalized",
+        "name": "test_mentions_persisted_and_normalized",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_record_message_returns_row_id",
+        "name": "test_record_message_returns_row_id",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_reply_resolves_to_original_author_same_conversation",
+        "name": "test_reply_resolves_to_original_author_same_conversation",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_reply_unknown_when_message_missing_or_cross_conversation",
+        "name": "test_reply_unknown_when_message_missing_or_cross_conversation",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_signed_message_ids_end_to_end",
+        "name": "test_signed_message_ids_end_to_end",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_tail_renders_relations_and_logical_grouping",
+        "name": "test_tail_renders_relations_and_logical_grouping",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_tail_unit_cap_keeps_recent_suffix",
+        "name": "test_tail_unit_cap_keeps_recent_suffix",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:tests/test_message_relations.py:test_tail_unknown_reply_target_rendered_as_unknown",
+        "name": "test_tail_unknown_reply_target_rendered_as_unknown",
+        "filePath": "tests/test_message_relations.py"
+      },
+      {
+        "uid": "Function:webui/chat_ingress.py:run_turn",
+        "name": "run_turn",
+        "filePath": "webui/chat_ingress.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:memory/pre_processors.py:_has_column",
+        "name": "_has_column",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/schema.py:normalize_source_kind",
+        "name": "normalize_source_kind",
+        "filePath": "memory/schema.py"
+      },
+      {
+        "uid": "Method:core/context.py:ChatContext.storage_key#0",
+        "name": "storage_key",
+        "filePath": "core/context.py"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:core/context.py:ChatContext.capture_result",
+        "name": "capture_result",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:ChatContext.capture_result",
+        "name": "capture_result",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:MessageIdentityEnvelope.recorded_row_id",
+        "name": "recorded_row_id",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Property:core/context.py:MessageIdentityEnvelope.recorded_row_id",
+        "name": "recorded_row_id",
+        "filePath": "core/context.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_183_handle_toggle",
+      "name": "Handle_toggle → _has_column",
+      "step_index": 3,
+      "step_count": 4
+    },
+    {
+      "id": "proc_184_handle_toggle",
+      "name": "Handle_toggle → Normalize_source_kind",
+      "step_index": 3,
+      "step_count": 4
+    },
+    {
+      "id": "proc_185_handle_toggle",
+      "name": "Handle_toggle → Storage_key",
+      "step_index": 3,
+      "step_count": 4
+    }
+  ]
+}

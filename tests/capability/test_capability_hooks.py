@@ -18,6 +18,7 @@ import pytest
 
 from capability.hooks import (
     HOOK_PRIORITY,
+    _build_astr_event,
     activate_capabilities,
     build_tool_tasks,
     register,
@@ -34,6 +35,7 @@ def _run(coro):
 
 
 def _ctx(message: str = "帮我查一下东京天气", **kw) -> ChatContext:
+    kw.setdefault("adapter_name", "onebot-v11")
     return ChatContext(user_id=111, group_id=1, msg_id=42, message=message, **kw)
 
 
@@ -249,6 +251,10 @@ def test_comes_runs_and_fills_summaries(stub_route, spy_memory, spy_comes, fake_
     _run(activate_capabilities(ctx))
 
     assert len(spy_comes) == 1
+    from astrbot_compat.events import AstrMessageEvent
+
+    assert isinstance(spy_comes[0]["event"], AstrMessageEvent)
+    assert spy_comes[0]["event"].get_platform_name() == "aiocqhttp"
     assert ctx.tool_summaries == ["weather.query 的结果"]
     assert len(ctx.task_results) == 1
 
@@ -339,6 +345,23 @@ def test_comes_skipped_without_platform_handles(stub_route, spy_memory, spy_come
     ctx = _run(activate_capabilities(_ctx()))
     assert spy_comes == []
     assert ctx.tool_summaries == []
+
+
+@pytest.mark.parametrize("adapter_name", ["", "satori"])
+def test_astrbot_event_builder_rejects_unadapted_platform_context(adapter_name):
+    """A raw handle alone does not make OneBot AstrBot tools safe on another adapter."""
+    ctx = _ctx(
+        raw_event=object(),
+        bot=object(),
+        adapter_name=adapter_name,
+    )
+    assert _run(_build_astr_event(ctx)) is None
+
+
+def test_astrbot_tool_builder_rejects_non_onebot_bot(fake_bot, fake_nb_event):
+    fake_bot.adapter.get_name = lambda: "Telegram"
+    ctx = _ctx(raw_event=fake_nb_event, bot=fake_bot)
+    assert _run(_build_astr_event(ctx)) is None
 
 
 def test_comes_skipped_when_disabled(

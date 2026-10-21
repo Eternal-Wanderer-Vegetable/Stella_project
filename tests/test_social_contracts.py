@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from core.social.contracts import (
@@ -41,6 +43,22 @@ class TestConversationScope:
             ConversationScope(platform="qq", bot_id="", group_id="")
         with pytest.raises(ValueError):
             ConversationScope(platform="", bot_id="", group_id="123")
+
+    def test_from_context_uses_trusted_bot_identity_when_flat_fields_are_missing(self):
+        from core.transport.models import BotRef
+
+        ctx = SimpleNamespace(
+            bot_ref=BotRef("discord-main", "discord", "discord", "bot-01"),
+            conversation_key="c2.opaque.value",
+            group_id="guild-channel",
+        )
+
+        scope = ConversationScope.from_context(ctx)
+
+        assert scope.platform == "discord"
+        assert scope.bot_id == "bot-01"
+        assert scope.connection_id == "discord-main"
+        assert scope.group_id == "guild-channel"
 
 
 class TestMessageEvidence:

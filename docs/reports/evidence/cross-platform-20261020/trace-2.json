@@ -1,0 +1,1 @@
+"name: \"Record_group_chat → Clear_proactive_skips\"\ntype: cross_community\nstep_count: 3\n\ntrace:\n  1: record_group_chat (stella_project/plugins/bot_main/ai_gateway.py)\n  2: record_message (memory/proactive.py)\n  3: clear_proactive_skips (memory/proactive.py)"

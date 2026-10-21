@@ -1,0 +1,56 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:webui/services/runtime.py:platform_link",
+    "name": "platform_link",
+    "kind": "Function",
+    "filePath": "webui/services/runtime.py",
+    "startLine": 14,
+    "endLine": 21
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:webui/routers/platform.py:platform_link",
+        "name": "platform_link",
+        "filePath": "webui/routers/platform.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:extensions/link_monitor/__init__.py:link_status",
+        "name": "link_status",
+        "filePath": "extensions/link_monitor/__init__.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_134_platform_link",
+      "name": "Platform_link → _extract_ws_url",
+      "step_index": 2,
+      "step_count": 5
+    },
+    {
+      "id": "proc_135_platform_link",
+      "name": "Platform_link → _port_in_use",
+      "step_index": 2,
+      "step_count": 5
+    },
+    {
+      "id": "proc_136_platform_link",
+      "name": "Platform_link → _token_facts",
+      "step_index": 2,
+      "step_count": 5
+    },
+    {
+      "id": "proc_137_platform_link",
+      "name": "Platform_link → _tcp_reachable",
+      "step_index": 2,
+      "step_count": 5
+    }
+  ]
+}

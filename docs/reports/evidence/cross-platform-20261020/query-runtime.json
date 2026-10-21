@@ -1,0 +1,334 @@
+{
+  "processes": [
+    {
+      "id": "proc_428_turn_detail",
+      "summary": "Turn_detail → _init_schema",
+      "priority": 0.08,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_429_turn_detail",
+      "summary": "Turn_detail → Configure",
+      "priority": 0.08,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_695_turn_detail",
+      "summary": "Turn_detail → Log_sqlite_error",
+      "priority": 0.08,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_550_turn_detail_payloads",
+      "summary": "Turn_detail_payloads → _init_schema",
+      "priority": 0.079,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_551_turn_detail_payloads",
+      "summary": "Turn_detail_payloads → Configure",
+      "priority": 0.079,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_736_turn_detail_payloads",
+      "summary": "Turn_detail_payloads → Log_sqlite_error",
+      "priority": 0.079,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_144_replay_turn",
+      "summary": "Replay_turn → _init_schema",
+      "priority": 0.079,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_145_replay_turn",
+      "summary": "Replay_turn → Configure",
+      "priority": 0.079,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_630_replay_turn",
+      "summary": "Replay_turn → Log_sqlite_error",
+      "priority": 0.079,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_104_replay_turn",
+      "summary": "Replay_turn → _current_input_block",
+      "priority": 0.071,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_105_replay_turn",
+      "summary": "Replay_turn → Estimate_tokens",
+      "priority": 0.071,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_224_replay_turn",
+      "summary": "Replay_turn → _part",
+      "priority": 0.071,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 4
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/services/trace.py:turn_timeline",
+      "name": "turn_timeline",
+      "filePath": "webui/services/trace.py",
+      "startLine": 230,
+      "endLine": 234,
+      "module": "Observability",
+      "process_id": "proc_428_turn_detail",
+      "step_index": 2
+    },
+    {
+      "id": "Function:webui/routers/trace.py:turn_detail",
+      "name": "turn_detail",
+      "filePath": "webui/routers/trace.py",
+      "startLine": 61,
+      "endLine": 65,
+      "module": "Observability",
+      "process_id": "proc_428_turn_detail",
+      "step_index": 1
+    },
+    {
+      "id": "Function:core/observability/turn_trace.py:turn_timeline",
+      "name": "turn_timeline",
+      "filePath": "core/observability/turn_trace.py",
+      "startLine": 277,
+      "endLine": 315,
+      "module": "Observability",
+      "process_id": "proc_428_turn_detail",
+      "step_index": 3
+    },
+    {
+      "id": "Function:webui/services/trace.py:turn_payloads",
+      "name": "turn_payloads",
+      "filePath": "webui/services/trace.py",
+      "startLine": 237,
+      "endLine": 241,
+      "module": "Routers",
+      "process_id": "proc_550_turn_detail_payloads",
+      "step_index": 2
+    },
+    {
+      "id": "Function:webui/routers/trace.py:turn_detail_payloads",
+      "name": "turn_detail_payloads",
+      "filePath": "webui/routers/trace.py",
+      "startLine": 69,
+      "endLine": 74,
+      "module": "Routers",
+      "process_id": "proc_550_turn_detail_payloads",
+      "step_index": 1
+    },
+    {
+      "id": "Function:core/observability/turn_trace.py:turn_payloads",
+      "name": "turn_payloads",
+      "filePath": "core/observability/turn_trace.py",
+      "startLine": 318,
+      "endLine": 343,
+      "module": "Routers",
+      "process_id": "proc_550_turn_detail_payloads",
+      "step_index": 3
+    },
+    {
+      "id": "Function:webui/services/trace.py:replay_turn",
+      "name": "replay_turn",
+      "filePath": "webui/services/trace.py",
+      "startLine": 244,
+      "endLine": 275,
+      "module": "Routers",
+      "process_id": "proc_144_replay_turn",
+      "step_index": 2
+    },
+    {
+      "id": "Function:webui/routers/trace.py:replay_turn",
+      "name": "replay_turn",
+      "filePath": "webui/routers/trace.py",
+      "startLine": 78,
+      "endLine": 83,
+      "module": "Routers",
+      "process_id": "proc_144_replay_turn",
+      "step_index": 1
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/observability/test_message_flow_runtime.py:_submit",
+      "name": "_submit",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 73,
+      "endLine": 74,
+      "module": "Observability"
+    },
+    {
+      "id": "Class:tests/observability/test_message_flow_runtime.py:TestFacadeTurnFacts",
+      "name": "TestFacadeTurnFacts",
+      "filePath": "tests/observability/test_message_flow_runtime.py",
+      "startLine": 77,
+      "endLine": 184
+    },
+    {
+      "id": "File:tests/observability/test_message_flow_runtime.py",
+      "name": "test_message_flow_runtime.py",
+      "filePath": "tests/observability/test_message_flow_runtime.py"
+    },
+    {
+      "id": "Class:core/runtime/facade.py:RuntimeFacade",
+      "name": "RuntimeFacade",
+      "filePath": "core/runtime/facade.py",
+      "startLine": 180,
+      "endLine": 490
+    },
+    {
+      "id": "File:core/runtime/facade.py",
+      "name": "facade.py",
+      "filePath": "core/runtime/facade.py"
+    },
+    {
+      "id": "Class:tests/runtime/runtime_harness.py:RuntimeHarness",
+      "name": "RuntimeHarness",
+      "filePath": "tests/runtime/runtime_harness.py",
+      "startLine": 40,
+      "endLine": 93,
+      "module": "Runtime"
+    },
+    {
+      "id": "Method:tests/runtime/runtime_harness.py:RuntimeHarness.__init__#1",
+      "name": "__init__",
+      "filePath": "tests/runtime/runtime_harness.py",
+      "startLine": 43,
+      "endLine": 58,
+      "module": "Runtime"
+    },
+    {
+      "id": "File:tests/runtime/runtime_harness.py",
+      "name": "runtime_harness.py",
+      "filePath": "tests/runtime/runtime_harness.py"
+    },
+    {
+      "id": "Function:tests/runtime/test_session_ownership.py:test_same_key_turns_serialize_single_owner",
+      "name": "test_same_key_turns_serialize_single_owner",
+      "filePath": "tests/runtime/test_session_ownership.py",
+      "startLine": 18,
+      "endLine": 29,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_session_ownership.py:test_different_keys_run_concurrently",
+      "name": "test_different_keys_run_concurrently",
+      "filePath": "tests/runtime/test_session_ownership.py",
+      "startLine": 32,
+      "endLine": 47,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_session_ownership.py:test_turn_records_written_to_independent_store",
+      "name": "test_turn_records_written_to_independent_store",
+      "filePath": "tests/runtime/test_session_ownership.py",
+      "startLine": 77,
+      "endLine": 87,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_facade_turns.py:test_full_chain_single_turn",
+      "name": "test_full_chain_single_turn",
+      "filePath": "tests/runtime/test_facade_turns.py",
+      "startLine": 21,
+      "endLine": 34,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_facade_turns.py:test_cancel_rejects_inflight_provider",
+      "name": "test_cancel_rejects_inflight_provider",
+      "filePath": "tests/runtime/test_facade_turns.py",
+      "startLine": 54,
+      "endLine": 69,
+      "module": "Runtime"
+    },
+    {
+      "id": "Function:tests/runtime/test_facade_turns.py:test_direct_and_silent_zero_provider",
+      "name": "test_direct_and_silent_zero_provider",
+      "filePath": "tests/runtime/test_facade_turns.py",
+      "startLine": 84,
+      "endLine": 111,
+      "module": "Runtime"
+    },
+    {
+      "id": "Variable:core/pipeline.py:__all__",
+      "name": "__all__",
+      "filePath": "core/pipeline.py",
+      "startLine": 28,
+      "endLine": 42
+    },
+    {
+      "id": "Class:core/pipeline.py:Pipeline",
+      "name": "Pipeline",
+      "filePath": "core/pipeline.py",
+      "startLine": 45,
+      "endLine": 64
+    },
+    {
+      "id": "File:core/pipeline.py",
+      "name": "pipeline.py",
+      "filePath": "core/pipeline.py"
+    },
+    {
+      "id": "Function:tests/test_capture_ingress_gating.py:webchat_env",
+      "name": "webchat_env",
+      "filePath": "tests/test_capture_ingress_gating.py",
+      "startLine": 259,
+      "endLine": 283
+    },
+    {
+      "id": "Class:tests/test_capture_ingress_gating.py:_FakeFacade",
+      "name": "_FakeFacade",
+      "filePath": "tests/test_capture_ingress_gating.py",
+      "startLine": 273,
+      "endLine": 277
+    },
+    {
+      "id": "Method:tests/test_capture_ingress_gating.py:_FakeFacade.submit_turn#3",
+      "name": "submit_turn",
+      "filePath": "tests/test_capture_ingress_gating.py",
+      "startLine": 274,
+      "endLine": 277
+    }
+  ],
+  "timing": {
+    "vector": 2.6,
+    "bm25": 990.4,
+    "merge": 0.1,
+    "symbol_lookup": 85.7,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 1076.4
+  }
+}

@@ -915,6 +915,13 @@ MESSAGE_CLEANUP_PROTECT_UNCONSOLIDATED = _env_bool("MESSAGE_CLEANUP_PROTECT_UNCO
 MAX_REPLY_LINES = _env_int("MAX_REPLY_LINES", 5)
 SEND_INTERVAL = _env_float("SEND_INTERVAL", 0.8)
 
+# ---------- NoneBot 适配器装配 ----------
+# 适配器模块按需加载；依赖需由用户预先安装，未启用的模块不会导入。
+# 留空或设为 none 可在 WebChat 等不需 Bot adapter 的模式下关闭所有适配器。
+STELLA_ADAPTER_MODULES = _env(
+    "STELLA_ADAPTER_MODULES", "nonebot.adapters.onebot.v11"
+)
+
 # ---------- OneBot 链路监测 ----------
 # 只监测、不重启。Bot 不再管理 NapCat 进程——QQ 的登录风控会把自动登录退化为
 # 扫码（见 design_docs/deprecated_napcat_manager.md），登录必须有人在场，

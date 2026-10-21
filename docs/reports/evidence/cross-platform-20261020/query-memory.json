@@ -1,0 +1,154 @@
+{
+  "processes": [],
+  "process_symbols": [],
+  "definitions": [
+    {
+      "id": "Function:tests/test_memory_evidence_contract.py:test_exact_self_report_binds_subject_predicate_value_and_source",
+      "name": "test_exact_self_report_binds_subject_predicate_value_and_source",
+      "filePath": "tests/test_memory_evidence_contract.py",
+      "startLine": 74,
+      "endLine": 86,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_memory_evidence_contract.py:test_source_must_be_in_exact_batch_and_current_conversation",
+      "name": "test_source_must_be_in_exact_batch_and_current_conversation",
+      "filePath": "tests/test_memory_evidence_contract.py",
+      "startLine": 148,
+      "endLine": 152,
+      "module": "Tests"
+    },
+    {
+      "id": "File:tests/test_memory_evidence_contract.py",
+      "name": "test_memory_evidence_contract.py",
+      "filePath": "tests/test_memory_evidence_contract.py"
+    },
+    {
+      "id": "Method:memory/memory_manager.py:MemoryManager._process_new_candidates_python#0",
+      "name": "_process_new_candidates_python",
+      "filePath": "memory/memory_manager.py",
+      "startLine": 620,
+      "endLine": 940,
+      "module": "Memory"
+    },
+    {
+      "id": "Function:memory/memory_manager.py:MemoryManager._process_new_candidates_python._has_current_accepted_evidence@645:8#1",
+      "name": "_has_current_accepted_evidence",
+      "filePath": "memory/memory_manager.py",
+      "startLine": 646,
+      "endLine": 711,
+      "module": "Memory"
+    },
+    {
+      "id": "File:memory/memory_manager.py",
+      "name": "memory_manager.py",
+      "filePath": "memory/memory_manager.py"
+    },
+    {
+      "id": "Function:memory/evidence_contract.py:assess_candidate",
+      "name": "assess_candidate",
+      "filePath": "memory/evidence_contract.py",
+      "startLine": 229,
+      "endLine": 467,
+      "module": "Memory"
+    },
+    {
+      "id": "Function:memory/evidence_contract.py:assess_candidate.unassessed@258:4",
+      "name": "unassessed",
+      "filePath": "memory/evidence_contract.py",
+      "startLine": 259,
+      "endLine": 290,
+      "module": "Memory"
+    },
+    {
+      "id": "File:memory/evidence_contract.py",
+      "name": "evidence_contract.py",
+      "filePath": "memory/evidence_contract.py"
+    },
+    {
+      "id": "Function:memory_rust/native/src/promotion.rs:promote",
+      "name": "promote",
+      "filePath": "memory_rust/native/src/promotion.rs",
+      "startLine": 1327,
+      "endLine": 1350,
+      "module": "Cluster_640"
+    },
+    {
+      "id": "Function:memory_rust/native/src/promotion.rs:tests.add_evidence",
+      "name": "add_evidence",
+      "filePath": "memory_rust/native/src/promotion.rs",
+      "startLine": 1559,
+      "endLine": 1652,
+      "module": "Cluster_640"
+    },
+    {
+      "id": "File:memory_rust/native/src/promotion.rs",
+      "name": "promotion.rs",
+      "filePath": "memory_rust/native/src/promotion.rs"
+    },
+    {
+      "id": "Function:tests/test_memory_rust_promotion.py:_seed",
+      "name": "_seed",
+      "filePath": "tests/test_memory_rust_promotion.py",
+      "startLine": 27,
+      "endLine": 106,
+      "module": "Tests"
+    },
+    {
+      "id": "Method:tests/test_memory_rust_promotion.py:FakeRustBackend.promote#1",
+      "name": "promote",
+      "filePath": "tests/test_memory_rust_promotion.py",
+      "startLine": 119,
+      "endLine": 128
+    },
+    {
+      "id": "File:tests/test_memory_rust_promotion.py",
+      "name": "test_memory_rust_promotion.py",
+      "filePath": "tests/test_memory_rust_promotion.py"
+    },
+    {
+      "id": "Function:tests/test_memory_promotion_deadlock.py:test_zero_importance_blocks_promotion_regardless_of_confidence",
+      "name": "test_zero_importance_blocks_promotion_regardless_of_confidence",
+      "filePath": "tests/test_memory_promotion_deadlock.py",
+      "startLine": 57,
+      "endLine": 71
+    },
+    {
+      "id": "Function:tests/test_memory_promotion_deadlock.py:test_nonzero_importance_lets_confidence_decide",
+      "name": "test_nonzero_importance_lets_confidence_decide",
+      "filePath": "tests/test_memory_promotion_deadlock.py",
+      "startLine": 74,
+      "endLine": 84
+    },
+    {
+      "id": "File:tests/test_memory_promotion_deadlock.py",
+      "name": "test_memory_promotion_deadlock.py",
+      "filePath": "tests/test_memory_promotion_deadlock.py"
+    },
+    {
+      "id": "Function:memory/proactive_target.py:_fetch_observing_candidate",
+      "name": "_fetch_observing_candidate",
+      "filePath": "memory/proactive_target.py",
+      "startLine": 163,
+      "endLine": 329,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:memory/proactive_target.py:pick_target",
+      "name": "pick_target",
+      "filePath": "memory/proactive_target.py",
+      "startLine": 348,
+      "endLine": 489,
+      "module": "Tests"
+    }
+  ],
+  "timing": {
+    "vector": 1.5,
+    "bm25": 978.7,
+    "merge": 0.2,
+    "symbol_lookup": 81.6,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 1060.6
+  }
+}

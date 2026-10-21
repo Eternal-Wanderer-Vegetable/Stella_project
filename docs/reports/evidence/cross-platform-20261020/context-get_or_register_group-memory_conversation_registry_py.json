@@ -1,0 +1,86 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/conversation_registry.py:get_or_register_group",
+    "name": "get_or_register_group",
+    "kind": "Function",
+    "filePath": "memory/conversation_registry.py",
+    "startLine": 140,
+    "endLine": 179
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestDrainEnumeration.test_all_registered_covers_private#1",
+        "name": "test_all_registered_covers_private",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestGroupRegistration.test_group_gets_legacy_alias_and_positive_storage#1",
+        "name": "test_group_gets_legacy_alias_and_positive_storage",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestGroupRegistration.test_group_registration_is_idempotent#1",
+        "name": "test_group_registration_is_idempotent",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestGroupRegistration.test_group_registration_is_idempotent#1",
+        "name": "test_group_registration_is_idempotent",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestMultiBotConflict.test_multi_bot_registration_stable_across_reconnect#1",
+        "name": "test_multi_bot_registration_stable_across_reconnect",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestMultiBotConflict.test_multi_bot_registration_stable_across_reconnect#1",
+        "name": "test_multi_bot_registration_stable_across_reconnect",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestMultiBotConflict.test_second_bot_gets_independent_storage_for_same_group#1",
+        "name": "test_second_bot_gets_independent_storage_for_same_group",
+        "filePath": "tests/test_conversation_registry.py"
+      },
+      {
+        "uid": "Method:tests/test_conversation_registry.py:TestMultiBotConflict.test_second_bot_gets_independent_storage_for_same_group#1",
+        "name": "test_second_bot_gets_independent_storage_for_same_group",
+        "filePath": "tests/test_conversation_registry.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/conversation.py:conversation_key",
+        "name": "conversation_key",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Function:core/conversation.py:qq_group_ref",
+        "name": "qq_group_ref",
+        "filePath": "core/conversation.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:_register_with_allocated_storage",
+        "name": "_register_with_allocated_storage",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:ensure_registry",
+        "name": "ensure_registry",
+        "filePath": "memory/conversation_registry.py"
+      },
+      {
+        "uid": "Function:memory/conversation_registry.py:lookup",
+        "name": "lookup",
+        "filePath": "memory/conversation_registry.py"
+      }
+    ]
+  },
+  "processes": []
+}

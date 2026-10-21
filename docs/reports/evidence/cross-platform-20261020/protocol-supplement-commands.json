@@ -1,0 +1,26 @@
+[
+  {
+    "tool": "context",
+    "target": "parse_reply_envelope",
+    "file": "core/dialogue_attribution.py",
+    "repo": "Stella_project"
+  },
+  {
+    "tool": "impact",
+    "target": "parse_reply_envelope",
+    "file": "core/dialogue_attribution.py",
+    "repo": "Stella_project"
+  },
+  {
+    "tool": "context",
+    "target": "parse_platform_message_id",
+    "file": "memory/conversation_projection.py",
+    "repo": "Stella_project"
+  },
+  {
+    "tool": "impact",
+    "target": "parse_platform_message_id",
+    "file": "memory/conversation_projection.py",
+    "repo": "Stella_project"
+  }
+]

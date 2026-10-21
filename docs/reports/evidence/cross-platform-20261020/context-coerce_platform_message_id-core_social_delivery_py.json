@@ -1,0 +1,38 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:core/social/delivery.py:coerce_platform_message_id",
+    "name": "coerce_platform_message_id",
+    "kind": "Function",
+    "filePath": "core/social/delivery.py",
+    "startLine": 296,
+    "endLine": 313
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:core/social/delivery.py:deliver_lines",
+        "name": "deliver_lines",
+        "filePath": "core/social/delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestCoercePlatformMessageId.test_none_and_garbage#0",
+        "name": "test_none_and_garbage",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestCoercePlatformMessageId.test_onebot_dict#0",
+        "name": "test_onebot_dict",
+        "filePath": "tests/test_social_delivery.py"
+      },
+      {
+        "uid": "Method:tests/test_social_delivery.py:TestCoercePlatformMessageId.test_plain_int#0",
+        "name": "test_plain_int",
+        "filePath": "tests/test_social_delivery.py"
+      }
+    ]
+  },
+  "outgoing": {},
+  "processes": []
+}

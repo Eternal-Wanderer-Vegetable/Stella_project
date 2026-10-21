@@ -1,0 +1,9 @@
+{
+  "error": "Target 'docs/plans/2026-10-20-gitnexus-cross-platform-plan.md' not found",
+  "target": {
+    "name": "docs/plans/2026-10-20-gitnexus-cross-platform-plan.md"
+  },
+  "direction": "upstream",
+  "impactedCount": null,
+  "risk": "UNKNOWN"
+}

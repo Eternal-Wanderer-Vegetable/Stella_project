@@ -125,6 +125,12 @@ def extract_image_sources(event: Any, *, include_quoted: bool | None = None) -> 
     """
     if include_quoted is None:
         include_quoted = bool(VISION_INCLUDE_QUOTED)
+    # A normalized ingress event retains its original adapter handle only in
+    # process memory. Image codecs remain adapter-specific, so extraction reads
+    # that handle instead of projecting third-party segments into storage.
+    raw_event = getattr(event, "raw_event", None)
+    if raw_event is not None:
+        event = raw_event
     sources = _collect_segment_images(event.get_message())
     if include_quoted:
         quoted = getattr(event, "reply", None)

@@ -1,8 +1,186 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-17",
-  "active_feature": null,
+  "updated_at": "2026-10-21",
+  "active_feature": "XPLAT-IMPL",
   "features": [
+    {
+      "id": "XPLAT-PLAN",
+      "name": "GitNexus代码图谱与跨平台执行方案",
+      "description": "建立当前工作区代码图谱，结合调用、影响和入口补证，交付NoneBot跨平台实施计划；不修改业务代码。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        ".gitnexus 本地索引与固定版本工具",
+        "docs/plans/2026-10-20-gitnexus-cross-platform-plan.md",
+        "docs/plans/2026-10-20-cross-platform-inventory.md",
+        "docs/reports/evidence/cross-platform-20261020/",
+        "任务状态和交接"
+      ],
+      "done_criteria": [
+        "索引绑定ba582a9工作区，可执行query/context/impact，保留图限制",
+        "50个入口、32个注册适配器和工程候选文件均有清单",
+        "12个工作包含合同、依赖、迁移回滚和验收；业务实施未启动",
+        "文档与状态门禁通过，最终图状态和变更检查无partial/truncated",
+        "除文档与状态外无已跟踪业务源码修改"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus 1.6.11 analyze --index-only --workers 1 --pdg --name Stella_project --default-branch main",
+          "result": "Baseline graph built: 1249 files / 95747 nodes / 236981 edges / 829 inferred processes at ba582a9. Query/context/upstream impact/PDG evidence saved; extraction limits retained."
+        },
+        {
+          "command": "runtime inventory validation + discovered entry reconciliation",
+          "result": "50 declared entries / 9 families / 34 discovered registrations; no missing or undeclared entries."
+        },
+        {
+          "command": "plan artifact consistency + python3 scripts/check_docs.py + git diff --check",
+          "result": "12 planned work packages; 32 adapter registry rows; 180 reviewed candidate files; DAG, links, JSON, source fingerprints and evidence checksums passed. Documentation checker: 119 files / 1199 local links / 577 anchors / 0 errors."
+        },
+        {
+          "command": "GitNexus status --json + detect_changes(scope=all)",
+          "result": "Checkpoint status up-to-date, content current; tracked documentation/state diff LOW with no partial/truncated. Final refreshed records under ignored .gitnexus/verification. Untracked plan/evidence validated separately."
+        },
+        {
+          "report": "docs/plans/2026-10-20-gitnexus-cross-platform-plan.md",
+          "result": "Planning complete only; business implementation, migrations, fixture/live platform acceptance, commit and push not performed."
+        }
+      ]
+    },
+    {
+      "id": "XPLAT-IMPL",
+      "name": "NoneBot 跨平台接入实施",
+      "description": "按 GitNexus 方案顺序执行 WP00–WP11，逐阶段提交；平台 live/发布认证仅凭真实验收记录通过。",
+      "status": "in_progress",
+      "dependencies": [
+        "XPLAT-PLAN"
+      ],
+      "scope": [
+        "core/transport/ 与会话/上下文合同",
+        "memory 注册、迁移、后端和权限边界",
+        "消息入口、统一发送、后台投递与插件接入",
+        "多适配器装配、控制面、部署及验收矩阵",
+        "tests/、依赖锁、文档、进度和交接"
+      ],
+      "done_criteria": [
+        "WP00–WP11 有对应实现、定向回归、影响证据和分阶段提交",
+        "身份/会话键支持不透明外部 ID、父级/线程和多 Bot 且旧 QQ/WebChat alias 可读",
+        "权限、记忆来源和后台目标均使用可信主体/Target；跨平台泄漏与错投负例为零",
+        "schema 迁移可在临时旧库上 dry-run、回滚、重跑；Python/native 合同一致并显式核验",
+        "官方 32 项矩阵逐行保留状态，L0/L1/L2/L3 与 fixture/live 证据分开；未做 live 的平台不标 certified",
+        "QQ/WebChat 回归、文档、flow、Python、Dashboard、Rust 与打包门禁结果记录；所有外部验收缺口明确"
+      ],
+      "evidence": [
+        {
+          "command": "python3 scripts/check_docs.py",
+          "result": "WP00 documentation gate: 119 files, 1201 local links, 577 migration anchors, 0 errors"
+        },
+        {
+          "command": "GitNexus status --json + upstream impact for WP01 identity/ownership symbols",
+          "result": "Index current at ba582a9; exact UID conversation_key function CRITICAL/14 impacted/6 direct/4 flows/5 modules; ConversationRef property UNKNOWN/0 graph edges; get_or_register_group UNKNOWN/0 static callers; scope_for_chat_context HIGH/5 impacted in maybe_plan; record_message CRITICAL/18 lower-bound/9 flows with 3 unresolved receivers. Textual/entrypoint verification required."
+        },
+        {
+          "command": "uv pip compile --universal --python-version 3.10 requirements-platform.in; runtime import smoke on Python 3.10/3.11/3.12",
+          "result": "Pinned nonebot-plugin-alconna 0.62.1 and nonebot-plugin-uninfo 0.11.2; dependency resolution and imports passed on all three supported CI versions. requirements-platform.lock generated."
+        },
+        {
+          "command": ".venv/bin/python -m pytest tests/test_conversation_identity.py tests/test_conversation_registry.py tests/test_multi_user_identity.py tests/test_private_chat_ingress.py tests/test_context_tail.py tests/test_ai_gateway_deterministic_reply.py tests/test_memory_capture_gate.py tests/test_capture_ingress_gating.py -q",
+          "result": "WP00 locked-environment QQ/WebChat identity, ingress, context, and capture-gate baseline: 142 passed. STELLA_HOME unset; tests use temporary isolated data/config."
+        },
+        {
+          "command": "WP01: GitNexus 1.6.11 analyze/status/upstream impact + rg source audit; .venv/bin/python -m pytest tests/test_transport_identity.py tests/test_conversation_registry.py tests/test_conversation_identity.py tests/test_multi_user_identity.py tests/test_private_chat_ingress.py tests/test_context_tail.py tests/test_ai_gateway_deterministic_reply.py tests/test_memory_capture_gate.py tests/test_capture_ingress_gating.py -q; .venv/bin/ruff check changed Python; python scripts/check_docs.py; python scripts/generate_message_flow.py --check; GitNexus detect-changes scope all/compare main",
+          "result": "WP01 identity and registry regressions: 160 passed; message-flow contract: 14 passed; Ruff passed; docs 119 files / 1204 local links / 577 anchors / 0 errors; message-flow topology unchanged and generated check passed. GitNexus current at edb8a3d; post-stage scope all 13 files / 83 symbols / low, compare main 156 files / 111 symbols / low, no partial/truncated. Implementation commit ea79171; see docs/reports/2026-10-21-wp01-identity-registry.md."
+        },
+        {
+          "command": "WP02: GitNexus 1.6.11 upstream impacts + rg source audit; .venv/bin/python -m pytest -q tests/test_context_projection_identity.py tests/test_transport_identity.py tests/test_conversation_projection.py tests/test_conversation_identity.py tests/test_dialogue_attribution_repair.py tests/test_attribution_wiring.py tests/test_session_compact.py tests/test_context_tail.py tests/test_full_workflow.py tests/test_message_relations.py tests/test_private_chat_ingress.py tests/runtime/test_turn_service.py tests/runtime/test_session_ownership.py tests/runtime/test_facade_turns.py tests/runtime/test_legacy_reference_traces.py; Ruff; generate_message_flow.py --check; GitNexus detect-changes all/compare main",
+          "result": "Projection v7, transcript v2, opaque message IDs, QQ INTEGER codec boundary, and turn-bound target_ref implemented in 8ab18ce. Targeted regressions 310 passed; Ruff, flow check, staged diff check passed. GitNexus all: 31 files/121 symbols/21 processes/critical; compare main: 187 files/232 symbols/21 processes/critical after retry without partial/truncated. Full suite 3782 passed/29 skipped/4 failed (unresolved Cometa lease, two WebUI Cometa 401, WebUI chat history TypeError); see docs/reports/2026-10-21-wp02-context-message-identity.md. STELLA_HOME unset; no Bot or production DB."
+        },
+        {
+          "command": "WP03: GitNexus 1.6.12 upstream impacts + source audit; targeted migration/retrieval/identity pytest; Rust cargo test/fmt; isolated maturin release wheel and native fullchain; Python/native embedding and rule benchmarks; Ruff/docs/flow; detect-changes all/compare main",
+          "result": "Implemented schema 20→21 platform message identity storage and Python/native API 4 in ec5cf65. Targeted pytest 77 passed/1 skipped; Rust 25 passed; isolated release wheel reported API 4/schema 21 and native fullchain passed; embedding benchmark 101/101 expected-correct and parity matched. Rule benchmark parity matched but both backends share rank-casual-001 expected-ranking failure (100/101). Docs 119 files/1206 local links/577 anchors/0 errors; Ruff and flow check passed. GitNexus pre-commit all 17 files/58 symbols/10 flows/HIGH; compare main 202 files/296 symbols/28 flows/CRITICAL. Full Python suite interrupted after 451.87s at Cometa worker test (876 passed/7 skipped); isolated test reproduced 30s timeout. NOT READY. STELLA_HOME unset; no production DB, Bot, model, or live platform.",
+          "report": "docs/reports/2026-10-21-wp03-storage-backend.md"
+        },
+        {
+          "command": "WP04: GitNexus 1.6.12 upstream impacts + source audit; targeted memory/identity/sharing/addressing/knowledge/social/proactive/retrieval pytest; native Python selector/promotion tests and cargo test/fmt; isolated maturin release wheel; Ruff/docs/flow/diff; GitNexus detect-changes all/compare main",
+          "result": "Implemented in eabec23: person ownership/evidence, personal sharing, address preferences, social learning/effects, knowledge ACL, and proactive validation are scoped by connection and namespaced subject. Memory/native schema 22, social schema 4, KB schema 2; old sharing rows are copied and historical connections remain unknown. Targeted pytest groups: 135 passed, 203 passed, and 45 passed (overlap; do not sum); Python native selector/promotion/benchmark 29 passed/1 skipped; Rust 25 passed. Isolated wheel reports API 4/schema 22. Ruff, docs (119 files/1209 links/577 anchors/0 errors), flow manifest, diff, and cargo fmt passed. GitNexus source all 49 files/215 symbols/48 processes/CRITICAL; compare main 241 files/496 symbols/71 processes/CRITICAL including earlier work packages. State-document all/compare also ran successfully; raw risk CRITICAL. Full suite and live/platform/release acceptance remain NOT READY. STELLA_HOME unset; no production database or Bot.",
+          "report": "docs/reports/2026-10-21-wp04-memory-authorization-scope.md"
+        },
+        {
+          "command": "WP05: GitNexus 1.6.11 upstream impact + source/decorator audit; targeted normalizer, vision, capture, QQ group/private, WebChat, plugin, capability, registry, context, observability pytest; changed-file Ruff; generate_message_flow.py + --check; GitNexus detect-changes all/compare main",
+          "result": "Implemented in 28b296c: OneBot v11 and conservative generic NoneBot normalizers, shared admission, trusted WebChat identity, QQ group registry wiring, normalized vision access, and non-OneBot AstrBot event guard. Targeted regression matrix: 214 passed. Changed-file Ruff, message-flow check, and staged diff check passed; new immutable manifest message-flow.3631d3d0ca29.json generated. GitNexus source all: 14 files/26 symbols/16 processes/CRITICAL; compare main: 254 files/484 symbols/76 processes/CRITICAL. State docs all: 5 files/14 symbols/0 processes/LOW; compare main: 255 files/486 symbols/76 processes/CRITICAL after retrying the first PARTIAL query. Full Python suite and platform/live/release acceptance remain NOT READY. STELLA_HOME unset; tests use temporary isolated data.",
+          "report": "docs/reports/2026-10-21-wp05-ingress-admission.md"
+        },
+        {
+          "command": "WP06: GitNexus upstream impacts + source audit; targeted outbound/social/schema/QQ group/private/Cometa/capability/flow pytest; changed-file Ruff; generate_message_flow.py + --check; GitNexus detect-changes all/compare main",
+          "result": "Implemented in d2270d1: versioned outbound/media/capability contracts, explicit exact-Bot selection, OneBot v11 UniMessage codec, fallback and length splitting, opaque per-part results, and unified group/private/Cometa/proactive/capability sends. Social schema 4→5 persists all platform IDs per physical part and backfills old primary IDs. Targeted matrix 138 passed/1 adapter-not-installed warning; changed-file Ruff and flow/diff checks passed; message-flow.72cc70e6e149.json has 141 nodes/139 source-resolved/8952 closure sites/11689 reachable symbols. GitNexus all 21 files/54 symbols/7 processes/HIGH; compare main 264 files/589 symbols/76 processes/CRITICAL. Full Python and live/platform/release acceptance remain NOT READY. STELLA_HOME unset; tests use temporary data.",
+          "report": "docs/reports/2026-10-21-wp06-outbound-delivery.md"
+        },
+        {
+          "command": "WP07: GitNexus 1.6.11 upstream impact + dynamic-registration/source audit; scheduling/proactive/context/Cometa targeted pytest; changed-file Ruff; generate_message_flow.py + --check; docs gate; GitNexus detect-changes all/compare main",
+          "result": "Implemented in 7bea280: exact versioned BotRef/DeliveryTarget binding for scheduling, Cometa, and proactive background sends. Scheduling SQL schema 1→2 binds only verifiable legacy QQ task routes and isolates legacy quota; Cometa Origin v2→v3 validates BotRef/target consistency. Regression: 401 combined scheduling/proactive/context tests, 194 Cometa passed/7 skipped excluding worker, 79 Cometa targeted, 67 identity/outbound. Ruff, 119-file docs check (1223 links/577 anchors/0 errors), regenerated message-flow check, and diff check passed. GitNexus all 31 files/162 symbols/36 flows/CRITICAL; compare main 287 files/908 symbols/102 flows/CRITICAL; no partial/truncated. Broad Cometa suite hung beyond 8 minutes (180 passed/7 skipped at interrupt), NOT READY. STELLA_HOME unset; only temporary test data; no Bot/platform/live/release/clean-VM acceptance.",
+          "report": "docs/reports/2026-10-21-wp07-background-recovery.md"
+        },
+        {
+          "command": "WP08: GitNexus 1.6.11 upstream impact + dynamic-filter/source audit; astrbot_compat/capability targeted pytest; Ruff; docs/flow gates; GitNexus detect-changes all/compare main",
+          "result": "Implemented in 8e3466e: AstrBot dispatch/tool event construction requires a verified OneBot v11 Bot; common message-chain conversion is adapter-neutral while QQ API/send stays OneBot-only; platform filters use adapter type names, and Context.send_message fails closed on ambiguous OneBot Bot registries. Targeted tests: 373 passed; Ruff passed; docs 119 files/1223 links/577 anchors/0 errors; message-flow manifest 9b80952673b2 passed check (141 nodes, 139 source-resolved, 8973 closure sites, 11899 reachable symbols). GitNexus all 14 files/60 symbols/5 processes/MEDIUM; compare main 300 files/971 symbols/107 processes/CRITICAL. CLI emitted no partial/truncated status fields. Full Python, non-OneBot live, QQ live, clean VM, and release acceptance remain NOT READY; STELLA_HOME unset and tests used temporary/fixture data.",
+          "report": "docs/reports/2026-10-21-wp08-astrbot-compat.md"
+        },
+        {
+          "command": "WP09: GitNexus upstream impacts + dynamic-registration/source audit; targeted adapter/link/status/runtime pytest; Ruff; check_docs; generate_message_flow.py --check; pyproject TOML parse; isolated NoneBot Driver registration smoke; GitNexus detect-changes all/compare main",
+          "result": "Implemented in 9f75ded: STELLA_ADAPTER_MODULES selects ordered adapter modules, defaulting to OneBot V11; disabled or uninstalled adapters are not loaded, and missing modules/driver incompatibility fail clearly. Per-Bot OneBot V11 heartbeat/probe isolation; non-OneBot connections retain unknown health, exposed with opaque references. 73 targeted tests passed; Ruff passed; docs 119 files/1224 links/577 anchors/0 errors; message-flow 9b80952673b2 check passed; isolated NoneBot Driver registered only OneBot V11 without starting Bot/network. GitNexus all 13 files/59 symbols/4 processes/MEDIUM; compare main 314 files/1018 symbols/106 processes/CRITICAL cumulative. The initial compare was PARTIAL and rerun serially; final counts/risk cover all changes, while displayed symbol list is capped. Non-OneBot live, full Python, QQ gray, clean VM, and release acceptance remain NOT READY; tests used STELLA_HOME=/tmp/stella-wp09-20261021.",
+          "report": "docs/reports/2026-10-21-wp09-adapter-assembly-health.md"
+        },
+        {
+          "command": "WP10: GitNexus upstream impact/source audit; deploy/runtime/status/WebUI targeted pytest; adapter and product-profile tests; Ruff/docs/message-flow; Dashboard typecheck/Vitest/build; installer JS syntax; standalone archive and OneClick/Standalone layout checks; GitNexus detect-changes all/compare main",
+          "result": "Implemented in a20c3a1: authenticated/audited platform adapter configuration, OneBot multi-URL/token redaction, Doctor skips NapCat checks when OneBot is disabled, installer distinguishes inapplicable/disabled/disconnected. Follow-up b0cb052 generates editable-file manifest from final standalone and OneClick staging trees. Targeted Python 253 passed, adapter config suite 4 passed, product profile/package tests 18 passed (overlap); Dashboard typecheck and 100 Vitest tests passed; Vite build passed with chunk/dynamic-import warnings; Ruff, docs (119 files/1225 links/577 anchors), flow check and installer JS syntax passed. Standalone archive and both staging layouts passed. GitNexus first batch all 16 files/47 symbols/8 processes/HIGH; package follow-up all 2/4/0/LOW; fresh-index compare main 333 files/1122 symbols/106 processes/CRITICAL cumulative, full counts with symbol listing capped. Live adapters, full Python, QQ gray, clean VM, and full Release CI remain NOT READY; tests/packages used temporary STELLA_HOME/output.",
+          "report": "docs/reports/2026-10-21-wp10-control-plane-delivery.md"
+        },
+        {
+          "command": "WP10 state follow-up: python scripts/check_docs.py; feature_list JSON parse; git diff --check; GitNexus detect-changes scope all and compare main",
+          "result": "Plan, progress, feature state, and WP10 report updated bilingually where applicable. Docs check: 119 files/1228 links/577 anchors/0 errors; feature_list JSON and staged diff passed. State scope all: 4 files/11 symbols/0 processes/LOW; compare main: 334 files/1128 symbols/106 processes/CRITICAL cumulative, successful with symbol listing capped.",
+          "report": "docs/reports/2026-10-21-wp10-control-plane-delivery.md"
+        },
+        {
+          "command": "WP11 fixture and matrix: GitNexus upstream impacts; isolated adapter package metadata; targeted OneBot/normalizer/outbound pytest; Ruff; message-flow check",
+          "result": "Added a frozen-source 32-row matrix and real OneBot V11 GroupMessageEvent-to-fake-reply fixture. Targeted suite: 18 passed; Ruff and message-flow check passed. Local package metadata observed nonebot-adapter-onebot 2.4.6 (Requires-Python >=3.9,<4.0) for the V11/V12 rows only; the other 30 adapter distributions are not installed. All 32 rows remain NOT CERTIFIED.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 full Python release gate: pytest tests/ -q --timeout=120 -n auto --dist loadgroup; serial rerun of all failed cases",
+          "result": "3873 passed / 29 skipped / 6 failed in 79.06s; all six failures reproduced serially. Failures affect proactive delivery, candidate promotion, capture-gate reply delivery, replay gate, and scheduling CRUD. Platform live, complete L2/L3, QQ gray, clean VM, and full release gates remain NOT READY.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 state: python scripts/check_docs.py; ruff check .; generate_message_flow.py --check; feature/matrix JSON parse; git diff --check; GitNexus detect-changes all and compare main",
+          "result": "Docs: 119 files/1235 links/577 anchors/0 errors; Ruff passed; message-flow 9b80952673b2 passed; JSON and diff checks passed. GitNexus all: 5 tracked files/15 symbols/0 processes/LOW. Compare main first returned partial on process lookup; serial rerun completed at 336 files/1140 symbols/106 processes/CRITICAL with no partial/truncated; symbol listing capped.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 follow-up: isolated memory source-key, authenticated scheduling Bot-target route, and Cometa worker shutdown fixes; CI xdist pytest tests/ -q --timeout=120 -n auto --dist loadgroup",
+          "result": "Memory replay/candidate 27 passed; scheduling service 176 passed; WebUI manage 12 passed and scheduling route 1 passed; Cometa worker 6 passed. Full Python regression: 3879 passed / 29 skipped / 5 warnings in 112.76s. Initial six failures no longer reproduce. Commits: 1f5c900, 54c4d4c, 7f35347. All tests used isolated STELLA_HOME under /tmp.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 Dashboard: node_modules/.bin/vitest run; node_modules/.bin/vue-tsc --noEmit; node_modules/.bin/vite build",
+          "result": "Vitest 100 passed; vue-tsc passed; Vite build succeeded with existing dynamic/static import and large-chunk warnings. Direct workspace binaries were used after the pnpm wrapper attempted an install blocked by ignored build-script policy.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 final state documentation gate: python scripts/check_docs.py; ruff check .; generate_message_flow.py --check; feature/matrix JSON parse; git diff --check",
+          "result": "Docs: 119 files / 1234 local links / 577 migration anchors / 0 errors; full Ruff passed; message-flow.52dffc73a1aa.json matches current source; JSON and diff checks passed. GitNexus editor impacts: plan MEDIUM (17 impacted/6 direct), report LOW (17/3), progress LOW (26/3), handoff LOW (19/2), feature_list LOW (19/2). Platform/live, QQ gray, clean VM, Python 3.10/3.11 independent runs, and release remain NOT READY.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 pre-commit GitNexus: detect-changes --scope all; detect-changes --scope compare --base-ref main",
+          "result": "Current state-doc scope all: 5 files / 15 symbols / 0 processes / LOW. Compare main: 349 files / 1186 symbols / 126 processes / CRITICAL, complete counts with capped symbol listing. Several retries were interrupted; final accepted run had no PARTIAL result. Compare covers cumulative branch changes.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "PR #111 CI diagnosis/fix: GitHub Actions logs + uv pip dry-run + isolated targeted pytest + python3 scripts/check_docs.py",
+          "result": "Root cause 1: test matrix omitted optional platform bridge dependencies despite direct test imports; commit e622c7a installs requirements-platform.lock and updates bilingual CI docs/cache key. Root cause 2: Cometa ack test exited on transient SENDING; commit 97a2ea9 waits for SERVER_EMITTED. Final hosted CI run 39557774555 succeeded: each Python 3.10/3.11/3.12 job 3,879 passed / 29 skipped, and all other PR checks passed. Local lock dry-run: 95 packages/no changes; affected tests 22 passed + 1 warning, Cometa runtime assembly 3 passed; docs: 119 files/1,234 links/577 anchors/0 errors.",
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/111"
+        }
+      ]
+    },
     {
       "id": "CI-106",
       "name": "PR #106 flow-closure GitNexus worker 崩溃修复",

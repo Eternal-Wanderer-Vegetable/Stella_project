@@ -12,6 +12,10 @@ from __future__ import annotations
 
 import json
 
+from core.transport.adapter_loader import (
+    DEFAULT_ADAPTER_MODULES,
+    parse_adapter_modules,
+)
 from webui.responses import ApiError
 from webui.services import envfile
 
@@ -33,6 +37,49 @@ def onebot() -> dict:
         "ws_urls": ws_urls,
         "has_token": bool(raw.get("ONEBOT_ACCESS_TOKEN", "")),
     }
+
+
+def adapters() -> dict:
+    """Read configured and running adapter module paths without reading secrets."""
+    import os
+
+    from config.settings import STELLA_ADAPTER_MODULES
+
+    raw = envfile.read_values()
+    configured = raw.get("STELLA_ADAPTER_MODULES")
+    configured_modules = parse_adapter_modules(
+        configured if "STELLA_ADAPTER_MODULES" in raw else None
+    )
+    try:
+        effective_modules = parse_adapter_modules(STELLA_ADAPTER_MODULES)
+    except ValueError:
+        # An invalid process setting prevents Bot startup; keep the status endpoint
+        # resilient so operators can still see and correct the saved .env value.
+        effective_modules = ()
+    return {
+        "modules": list(configured_modules or DEFAULT_ADAPTER_MODULES)
+        if configured is None and "STELLA_ADAPTER_MODULES" not in raw
+        else list(configured_modules),
+        "effective_modules": list(effective_modules),
+        "process_override": "STELLA_ADAPTER_MODULES" in os.environ,
+    }
+
+
+def update_adapters(payload: dict) -> dict:
+    """Persist adapter module paths; never import or execute modules in the UI process."""
+    raw_modules = payload.get("modules")
+    if not isinstance(raw_modules, list) or any(
+        not isinstance(module, str) for module in raw_modules
+    ):
+        raise ApiError("modules 必须是适配器模块路径字符串列表")
+    raw = ",".join(module.strip() for module in raw_modules)
+    try:
+        modules = parse_adapter_modules(raw)
+    except ValueError as exc:
+        raise ApiError(str(exc)) from None
+    value = ",".join(modules) if modules else "none"
+    report = envfile.write_values({"STELLA_ADAPTER_MODULES": value})
+    return {**report, "modules": list(modules), "restart_required": True}
 
 
 def update(payload: dict) -> dict:

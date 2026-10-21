@@ -1,0 +1,171 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:stella_project/plugins/bot_main/scheduling/models.py:Task",
+    "name": "Task",
+    "kind": "Class",
+    "filePath": "stella_project/plugins/bot_main/scheduling/models.py",
+    "startLine": 148,
+    "endLine": 173
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:stella_project/plugins/bot_main/scheduling/delivery.py",
+        "name": "delivery.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/delivery.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/scheduling/runtime.py",
+        "name": "runtime.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/scheduling/service.py",
+        "name": "service.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/service.py"
+      },
+      {
+        "uid": "File:stella_project/plugins/bot_main/scheduling/store.py",
+        "name": "store.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/store.py"
+      },
+      {
+        "uid": "File:tests/scheduling/conftest.py",
+        "name": "conftest.py",
+        "filePath": "tests/scheduling/conftest.py"
+      },
+      {
+        "uid": "File:tests/scheduling/test_scheduling_delivery.py",
+        "name": "test_scheduling_delivery.py",
+        "filePath": "tests/scheduling/test_scheduling_delivery.py"
+      },
+      {
+        "uid": "File:tests/scheduling/test_scheduling_runtime.py",
+        "name": "test_scheduling_runtime.py",
+        "filePath": "tests/scheduling/test_scheduling_runtime.py"
+      },
+      {
+        "uid": "File:tests/scheduling/test_scheduling_service.py",
+        "name": "test_scheduling_service.py",
+        "filePath": "tests/scheduling/test_scheduling_service.py"
+      },
+      {
+        "uid": "File:tests/scheduling/test_scheduling_store.py",
+        "name": "test_scheduling_store.py",
+        "filePath": "tests/scheduling/test_scheduling_store.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_property": [
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.bot_id",
+        "name": "bot_id",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.created_at",
+        "name": "created_at",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.cron_expr",
+        "name": "cron_expr",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.group_id",
+        "name": "group_id",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.instance_id",
+        "name": "instance_id",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.last_run_utc",
+        "name": "last_run_utc",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.max_model_rounds",
+        "name": "max_model_rounds",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.max_tool_calls",
+        "name": "max_tool_calls",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.mode",
+        "name": "mode",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.next_run_utc",
+        "name": "next_run_utc",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.notification_mode",
+        "name": "notification_mode",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.objective",
+        "name": "objective",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.output_max_chars",
+        "name": "output_max_chars",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.owner_id",
+        "name": "owner_id",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.policy",
+        "name": "policy",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.revision",
+        "name": "revision",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.run_timeout_seconds",
+        "name": "run_timeout_seconds",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.status",
+        "name": "status",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.task_id",
+        "name": "task_id",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.timezone",
+        "name": "timezone",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      },
+      {
+        "uid": "Property:stella_project/plugins/bot_main/scheduling/models.py:Task.updated_at",
+        "name": "updated_at",
+        "filePath": "stella_project/plugins/bot_main/scheduling/models.py"
+      }
+    ]
+  },
+  "processes": []
+}

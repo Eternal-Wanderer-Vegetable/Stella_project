@@ -1,0 +1,46 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/conversation_projection.py:parse_platform_message_id",
+    "name": "parse_platform_message_id",
+    "kind": "Function",
+    "filePath": "memory/conversation_projection.py",
+    "startLine": 33,
+    "endLine": 71
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:memory/conversation_projection.py:canonical_message_id_text",
+        "name": "canonical_message_id_text",
+        "filePath": "memory/conversation_projection.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_record_bot_lines",
+        "name": "_record_bot_lines",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:tests/test_conversation_projection.py:test_parse_platform_message_id_matrix",
+        "name": "test_parse_platform_message_id_matrix",
+        "filePath": "tests/test_conversation_projection.py"
+      }
+    ]
+  },
+  "outgoing": {},
+  "processes": [
+    {
+      "id": "proc_272_handle_reload",
+      "name": "Handle_reload → Parse_platform_message_id",
+      "step_index": 3,
+      "step_count": 3
+    },
+    {
+      "id": "proc_464_handle_toggle",
+      "name": "Handle_toggle → Parse_platform_message_id",
+      "step_index": 3,
+      "step_count": 3
+    }
+  ]
+}

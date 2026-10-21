@@ -1,0 +1,189 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:record_group_chat",
+    "name": "record_group_chat",
+    "kind": "Function",
+    "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+    "startLine": 1104,
+    "endLine": 1274
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:tests/test_capture_ingress_gating.py:test_group_closed_gate_writes_nothing_derived",
+        "name": "test_group_closed_gate_writes_nothing_derived",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      },
+      {
+        "uid": "Function:tests/test_capture_ingress_gating.py:test_group_outage_interval_not_replayed_after_recovery",
+        "name": "test_group_outage_interval_not_replayed_after_recovery",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      },
+      {
+        "uid": "Function:tests/test_capture_ingress_gating.py:test_group_outage_interval_not_replayed_after_recovery",
+        "name": "test_group_outage_interval_not_replayed_after_recovery",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      },
+      {
+        "uid": "Function:tests/test_capture_ingress_gating.py:test_group_ready_gate_persists_with_side_effects",
+        "name": "test_group_ready_gate_persists_with_side_effects",
+        "filePath": "tests/test_capture_ingress_gating.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/context.py:normalize_display_name",
+        "name": "normalize_display_name",
+        "filePath": "core/context.py"
+      },
+      {
+        "uid": "Function:core/observability/message_flow.py:attach",
+        "name": "attach",
+        "filePath": "core/observability/message_flow.py"
+      },
+      {
+        "uid": "Function:core/social/contracts.py:new_trace_id",
+        "name": "new_trace_id",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Function:core/vision.py:extract_image_sources",
+        "name": "extract_image_sources",
+        "filePath": "core/vision.py"
+      },
+      {
+        "uid": "Function:core/vision.py:vision_available",
+        "name": "vision_available",
+        "filePath": "core/vision.py"
+      },
+      {
+        "uid": "Function:memory/capture_gate.py:ingress_decision",
+        "name": "ingress_decision",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Function:memory/conversation_identity.py:process_message_identity",
+        "name": "process_message_identity",
+        "filePath": "memory/conversation_identity.py"
+      },
+      {
+        "uid": "Function:memory/expression_learning.py:note_passive_message",
+        "name": "note_passive_message",
+        "filePath": "memory/expression_learning.py"
+      },
+      {
+        "uid": "Function:memory/participation/__init__.py:get_participation_manager",
+        "name": "get_participation_manager",
+        "filePath": "memory/participation/__init__.py"
+      },
+      {
+        "uid": "Function:memory/pre_processors.py:record_message",
+        "name": "record_message",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/pre_processors.py:resolve_reply_target",
+        "name": "resolve_reply_target",
+        "filePath": "memory/pre_processors.py"
+      },
+      {
+        "uid": "Function:memory/proactive.py:get_proactive",
+        "name": "get_proactive",
+        "filePath": "memory/proactive.py"
+      },
+      {
+        "uid": "Function:memory/proactive_state.py:reset_no_reply",
+        "name": "reset_no_reply",
+        "filePath": "memory/proactive_state.py"
+      },
+      {
+        "uid": "Function:memory/session_context.py:touch",
+        "name": "touch",
+        "filePath": "memory/session_context.py"
+      },
+      {
+        "uid": "Function:memory/social_store.py:record_event",
+        "name": "record_event",
+        "filePath": "memory/social_store.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_extract_message_relations",
+        "name": "_extract_message_relations",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_checkpoint",
+        "name": "_flow_checkpoint",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_decision",
+        "name": "_flow_decision",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_root_for",
+        "name": "_flow_root_for",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_span",
+        "name": "_flow_span",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_flow_transition",
+        "name": "_flow_transition",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_social_delivery_enabled",
+        "name": "_social_delivery_enabled",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_spawn_participation_speak",
+        "name": "_spawn_participation_speak",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Method:core/social/contracts.py:ConversationScope.for_qq#2",
+        "name": "for_qq",
+        "filePath": "core/social/contracts.py"
+      },
+      {
+        "uid": "Method:memory/participation/__init__.py:ParticipationManager.observe#12",
+        "name": "observe",
+        "filePath": "memory/participation/__init__.py"
+      },
+      {
+        "uid": "Method:memory/proactive.py:ProactiveController.record_message#2",
+        "name": "record_message",
+        "filePath": "memory/proactive.py"
+      },
+      {
+        "uid": "Method:memory/proactive.py:ProactiveController.record_tome#2",
+        "name": "record_tome",
+        "filePath": "memory/proactive.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_275_record_group_chat",
+      "name": "Record_group_chat → Clear_proactive_skips",
+      "step_index": 1,
+      "step_count": 3
+    },
+    {
+      "id": "proc_642_record_group_chat",
+      "name": "Record_group_chat → Decision",
+      "step_index": 1,
+      "step_count": 3
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Progress: resolved 31, reused 0, downloaded 8, added 0
+Progress: resolved 101, reused 0, downloaded 59, added 0
+Progress: resolved 138, reused 0, downloaded 126, added 0
+Progress: resolved 184, reused 0, downloaded 139, added 0
+Progress: resolved 246, reused 0, downloaded 186, added 0
+Progress: resolved 268, reused 0, downloaded 235, added 0
+Progress: resolved 278, reused 0, downloaded 246, added 0
+Progress: resolved 280, reused 0, downloaded 250, added 0
+Progress: resolved 280, reused 0, downloaded 251, added 0
+Progress: resolved 281, reused 0, downloaded 252, added 0
+Packages: +252
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 281, reused 0, downloaded 254, added 251
+Progress: resolved 281, reused 0, downloaded 254, added 252, done
+.../node_modules/tree-sitter install$ node-gyp-build
+.../node_modules/@ladybugdb/core install$ node install.js
+.../node_modules/@ladybugdb/core install: Prebuilt binary found at /home/vegetable/.local/share/pnpm/store/v11/links/@ladybugdb/core-linux-x64/0.19.1/d425dac8ba31088799e672de6e9066ededd552717d701c2e0518c340b8e283b0/node_modules/@ladybugdb/core-linux-x64/lbugjs.node.
+.../node_modules/@ladybugdb/core install: Copying prebuilt binary to package directory...
+.../node_modules/tree-sitter install: Done
+.../node_modules/@ladybugdb/core install: Copied /home/vegetable/.local/share/pnpm/store/v11/links/@ladybugdb/core-linux-x64/0.19.1/d425dac8ba31088799e672de6e9066ededd552717d701c2e0518c340b8e283b0/node_modules/@ladybugdb/core-linux-x64/lbugjs.node -> /home/vegetable/.local/share/pnpm/store/v11/links/@ladybugdb/core/0.19.1/04728b013db873f32366f89c20763bbf4d68c9b17e946a0f232b5c22fd0632ee/node_modules/@ladybugdb/core/lbugjs.node.
+.../node_modules/@ladybugdb/core install: Done!
+.../node_modules/@ladybugdb/core install: Done
+.../node_modules/gitnexus postinstall$ node scripts/build-tree-sitter-grammars.cjs
+.../node_modules/gitnexus postinstall: Done
+[WARN] Issues with peer dependencies found. Run "pnpm peers check" to list them.
+Usage: gitnexus [options] [command]
+
+GitNexus local CLI and MCP server
+
+Options:
+  -V, --version                            output the version number
+  -h, --help                               display help for command
+
+Commands:
+  setup [options]                          One-time setup: configure MCP for Cursor, Claude Code, Antigravity, OpenCode, CodeBuddy, Qoder, Codex
+  uninstall [options]                      Reverse `setup`: remove GitNexus MCP entries, skills, and hooks from all detected editors
+  auto-sync [action]                       Control scheduled repository clone/pull and analysis from GITNEXUS_HOME/watch_config.yml
+  watch [action]                           Ambiguous: use `analyze --watch` for local files, or `auto-sync` for scheduled remotes
+  analyze [options] [path]                 Index a repository (full analysis)
+  index [options] [path...]                Register an existing .gitnexus/ folder into the global registry (no re-analysis needed)
+  serve [options]                          Start local HTTP server for web UI connection
+  mcp [options]                            Start MCP server. Default: stdio. Use --http for a remote HTTP server (Streamable HTTP at POST /mcp + legacy SSE at GET /sse, POST /messages).
+  list                                     List all indexed repositories
+  status [options]                         Show index status for current repo
+  doctor                                   Show runtime platform capabilities and embedding configuration
+  update                                   Install the latest published GitNexus globally (`npm i -g gitnexus@<x.y.z>`).
+  embeddings                               Manage the on-demand local embedding runtime
+  clean [options]                          Delete GitNexus index for current repo
+  remove [options] <target>                Delete the GitNexus index for a registered repo (by alias, name, or absolute path). Unlike `clean`, does not require being inside the repo. Idempotent on unknown targets.
+  wiki [options] [path]                    Generate repository wiki from knowledge graph
+  augment <pattern>                        Augment a search pattern with knowledge graph context (used by hooks)
+  publish [options] [path]                 Notify the understand-quickly registry that this repo has a fresh GitNexus index. Opt-in: requires UNDERSTAND_QUICKLY_TOKEN (fine-grained PAT with `Repository dispatches: write` on looptech-ai/understand-quickly). No-op without the token. See https://github.com/looptech-ai/understand-quickly.
+  query [options] [search_query]           Search the knowledge graph for execution flows related to a concept
+  context [options] [name]                 360-degree view of a code symbol: callers, callees, processes
+  impact [options] [target]                Blast radius analysis: what breaks if you change a symbol
+  trace [options] <from> <to>              Find the shortest directed path between two symbols (call + class-member edges)
+  cypher [options] <query>                 Execute raw Cypher query against the knowledge graph
+  detect-changes|detect_changes [options]  Map git diff hunks to indexed symbols and affected execution flows
+  check [options]                          Run structural checks against the indexed graph
+  eval-server [options]                    Start lightweight HTTP server for fast tool calls during evaluation
+  group                                    Manage repository groups for cross-index impact analysis
+  help [command]                           display help for command

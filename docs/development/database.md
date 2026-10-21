@@ -2,13 +2,17 @@
 
 中文 | [English](database.en.md) · [文档总览](../README.md)
 
+### 调度任务库
+
+调度库由 `stella_project/plugins/bot_main/scheduling/migrations.py` 管理，当前 `SCHEMA_VERSION = 2`。迁移在调度服务初始化时按版本执行；测试迁移必须使用临时库。v1→v2 为 task/run/audit/quota 增加精确投递目标、主体与 scope。旧任务只有在可验证的 QQ Bot 与群号能够无歧义绑定时才迁移为可投递；无法证明目标的历史任务保留但不发送。历史 quota 留在独立 legacy scope，不折算进新连接的配额。执行器每次投递都再次解析 BotRef 并校验完整目标。
+
 ```bash
 python -m memory.schema --dry-run    # 预览待执行的迁移
 python -m memory.schema              # 执行迁移
 python -m memory.schema --backup     # 仅备份
 ```
 
-**迁移原则：Additive Migration** —— 只加字段与索引，绝不删数据。所有 `ALTER` 都经过 `PRAGMA table_info` 探测，幂等可重跑。首次迁移前自动备份为 `stella_memory_backup.db`。
+**迁移原则：新增优先，数据保留。** 普通升级只加字段与索引；确需改唯一约束或主键时，在版本化事务中建新表、复制全部行、再换表。所有 `ALTER` 都经过 `PRAGMA table_info` 探测，幂等可重跑。首次迁移前自动备份为 `stella_memory_backup.db`。
 
 ### 加字段的正确做法
 

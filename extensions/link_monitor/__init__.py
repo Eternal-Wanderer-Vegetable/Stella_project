@@ -1,24 +1,22 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""OneBot 链路监测扩展（extensions.link_monitor）。
+"""Monitor OneBot V11 links without assigning fake health to other adapters.
 
-职责：监测 OneBot 链路是否存活，断开时给可操作的排查提示。**只监测、不重启**
-（不重启的理由：登录风控使自动重启无效，见 design_docs/deprecated_napcat_manager.md）。
-
-与连接方向无关：基于「最近一次收到任何 OneBot 事件」判活，反向 WS / 正向 WS 都适用。
-
-关键设计：必须区分「没人说话」与「链路断了」。NapCat 周期性发
-meta_event.heartbeat（默认 15s），有它就说明 WS 通着；因此超时后要主动探活
-（bot.get_status()），探活成功说明只是安静（正常），失败才是真断开。
-2026-08-14 的重启循环就是因为只挂 on_message、把安静的群误判为中断。
+NapCat periodically sends ``meta_event.heartbeat``. A quiet chat therefore does
+not mean a dead link: after the event timeout, actively call ``get_status`` on
+that exact Bot. This module monitors every OneBot V11 connection independently;
+adapters without a comparable heartbeat remain connected with unknown health.
 """
 
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+import uuid
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
+import nonebot
 from nonebot import get_driver, logger
 from nonebot.message import event_preprocessor
 from nonebot_plugin_apscheduler import scheduler
@@ -35,43 +33,107 @@ if TYPE_CHECKING:
     from core.pipeline import Pipeline
 
 
-class _State:
-    """链路状态容器（对象属性代替模块级全局变量）。
+def _adapter_name(bot: Any) -> str:
+    adapter = getattr(bot, "adapter", None)
+    try:
+        name = adapter.get_name()
+    except Exception:
+        name = getattr(adapter, "name", None)
+    return str(name or "unknown")
 
-    时间统一用 time.time()：与原 watchdog 一致，且 link_status() 对外暴露
-    「距今多少秒」这类相对值，不依赖单调性。
-    """
 
-    last_event_time: float | None = None  # 最近一次收到任何 OneBot 事件
+def _is_onebot_v11(adapter_name: str) -> bool:
+    """Match the NoneBot adapter type, never a configured instance ID."""
+    return adapter_name.casefold().replace(" ", "") == "onebotv11"
+
+
+@dataclass(slots=True)
+class _BotState:
+    adapter: str
+    self_id: str
+    instance_ref: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     connected: bool = False
-    bot_self_id: str = ""
     connected_since: float | None = None
+    last_event_time: float | None = None
     last_probe_ok: bool | None = None
     last_probe_time: float | None = None
     last_alert_time: float | None = None
 
 
+@dataclass(slots=True)
+class _State:
+    bots: dict[tuple[str, str], _BotState] = field(default_factory=dict)
+    no_bot_alert_time: float | None = None
+
+
 state = _State()
 
 
-@event_preprocessor
-async def _refresh_on_any_event() -> None:
-    """任何 OneBot 事件都刷新 last_event_time。
+def _bot_key(bot: Any) -> tuple[str, str]:
+    return (_adapter_name(bot), str(getattr(bot, "self_id", "")))
 
-    包括 NapCat 周期性发送的 meta_event.heartbeat（默认 15s）——有它就说明
-    WebSocket 通着。原先只挂 on_message，安静的群会被误判为链路中断。
-    """
-    state.last_event_time = time.time()
+
+def _state_for(bot: Any) -> _BotState:
+    adapter, self_id = _bot_key(bot)
+    key = (adapter, self_id)
+    record = state.bots.get(key)
+    if record is None:
+        record = _BotState(adapter=adapter, self_id=self_id)
+        state.bots[key] = record
+    return record
+
+
+def _current_adapters() -> dict[str, Any]:
+    try:
+        return dict(nonebot.get_adapters())
+    except Exception:
+        return {}
+
+
+def _current_bots() -> list[Any]:
+    try:
+        return list(nonebot.get_bots().values())
+    except Exception:
+        return []
+
+
+def _sync_active_bots() -> list[Any]:
+    """Refresh lifecycle state from NoneBot's current Bot registry."""
+    active = _current_bots()
+    active_keys: set[tuple[str, str]] = set()
+    now = time.time()
+    for bot in active:
+        record = _state_for(bot)
+        active_keys.add(_bot_key(bot))
+        if not record.connected:
+            record.connected_since = now
+        record.connected = True
+    for key, record in state.bots.items():
+        if key not in active_keys and record.connected:
+            record.connected = False
+            record.connected_since = None
+    return active
+
+
+@event_preprocessor
+async def _refresh_on_any_event(bot: Any, event: Any) -> None:
+    """Refresh heartbeat only for OneBot V11 events."""
+    del event
+    if not _is_onebot_v11(_adapter_name(bot)):
+        return
+    record = _state_for(bot)
+    now = time.time()
+    if not record.connected:
+        record.connected_since = now
+    record.connected = True
+    record.last_event_time = now
 
 
 driver = get_driver()
 
 
 def _ws_hint() -> str:
-    """从 NoneBot 配置拼出反向 WS 的实际地址，供排查提示使用。
-
-    取不到就退回占位说明——告警本身不能因为拿不到配置而失败。
-    """
+    """Return the configured reverse WS endpoint for actionable alerts."""
     try:
         cfg = get_driver().config
         host = getattr(cfg, "host", None)
@@ -84,43 +146,41 @@ def _ws_hint() -> str:
 
 
 @driver.on_bot_connect
-async def _on_bot_connect(bot) -> None:
-    """连接建立即视为健康，并清零告警节流，恢复后允许再次告警。"""
-    state.connected = True
-    state.bot_self_id = bot.self_id
-    state.connected_since = time.time()
-    state.last_event_time = time.time()
-    state.last_alert_time = None
-    logger.info(f"[LinkMonitor] Bot {bot.self_id} 已连接")
+async def _on_bot_connect(bot: Any) -> None:
+    """Mark only the connecting Bot healthy and reset its alert throttle."""
+    record = _state_for(bot)
+    now = time.time()
+    record.connected = True
+    record.connected_since = now
+    record.last_event_time = now if _is_onebot_v11(record.adapter) else None
+    record.last_alert_time = None
+    logger.info(f"[LinkMonitor] {record.adapter} Bot {record.self_id} 已连接")
 
 
 @driver.on_bot_disconnect
-async def _on_bot_disconnect(bot) -> None:
-    """连接断开：置未连接，保留 last_event_time 供链路异常排查参考。"""
-    state.connected = False
-    state.connected_since = None
-    logger.warning(f"[LinkMonitor] Bot {bot.self_id} 连接断开")
+async def _on_bot_disconnect(bot: Any) -> None:
+    """Mark the disconnected Bot without changing any peer's state."""
+    record = _state_for(bot)
+    record.connected = False
+    record.connected_since = None
+    logger.warning(f"[LinkMonitor] {record.adapter} Bot {record.self_id} 连接断开")
 
 
-def _alert(reason: str, elapsed: float | None = None) -> None:
-    """节流告警：断线期间不重复刷同样的 error，否则日志会被填满。
-
-    文案给出可操作的排查步骤——本项目现在不再自动重启 NapCat，
-    用户需要知道该去哪里看、以及**不需要重启本程序**（Bot 会自动等待重连）。
-    """
+def _alert(record: _BotState, reason: str, elapsed: float | None = None) -> None:
+    """Throttle repeated alerts independently for each OneBot connection."""
     now = time.time()
     if (
-        state.last_alert_time is not None
-        and now - state.last_alert_time < LINK_MONITOR_ALERT_INTERVAL
+        record.last_alert_time is not None
+        and now - record.last_alert_time < LINK_MONITOR_ALERT_INTERVAL
     ):
         return
-    state.last_alert_time = now
+    record.last_alert_time = now
 
     elapsed_line = ""
     if elapsed is not None:
         elapsed_line = f"   （距上次收到事件 {humanize_duration(elapsed)}）\n"
     logger.error(
-        f"⚠️ [LinkMonitor] OneBot 链路异常：{reason}\n"
+        f"⚠️ [LinkMonitor] OneBot 链路异常（实例 {record.instance_ref}）：{reason}\n"
         f"{elapsed_line}"
         f"   请依次检查：\n"
         f"   1. NapCat 是否仍在运行、账号是否掉线 —— 用 NapCatQQ Desktop 查看日志\n"
@@ -132,109 +192,212 @@ def _alert(reason: str, elapsed: float | None = None) -> None:
     )
 
 
-# 周期性检查：事件超时 → 主动探活 → 探活失败才告警（不重启）
+def _alert_no_bot() -> None:
+    now = time.time()
+    if (
+        state.no_bot_alert_time is not None
+        and now - state.no_bot_alert_time < LINK_MONITOR_ALERT_INTERVAL
+    ):
+        return
+    state.no_bot_alert_time = now
+    logger.error("⚠️ [LinkMonitor] 已启用 OneBot V11，但当前没有已连接的 Bot。")
+
+
+def _event_age(record: _BotState, now: float) -> float | None:
+    return None if record.last_event_time is None else now - record.last_event_time
+
+
+def _record_healthy(record: _BotState, now: float) -> bool:
+    if not record.connected:
+        return False
+    age = _event_age(record, now)
+    return (age is not None and age <= LINK_MONITOR_TIMEOUT) or record.last_probe_ok is True
+
+
 @scheduler.scheduled_job("interval", seconds=LINK_MONITOR_CHECK_INTERVAL)
 async def link_monitor_task() -> None:
-    """检查链路：超时后主动探活，探活失败才告警。"""
+    """Probe every stale OneBot V11 connection independently."""
     if not LINK_MONITOR_ENABLED:
         return
 
-    if not state.connected:
-        elapsed = (
-            None
-            if state.last_event_time is None
-            else time.time() - state.last_event_time
-        )
-        _alert("协议端未连接", elapsed)
+    adapters = _current_adapters()
+    if not any(_is_onebot_v11(str(name)) for name in adapters):
         return
 
-    if state.last_event_time is None:
-        if (
-            state.connected_since is not None
-            and time.time() - state.connected_since > LINK_MONITOR_TIMEOUT
-        ):
-            _alert("已连接但从未收到任何事件")
+    active_bots = _sync_active_bots()
+    onebot_bots = [
+        bot for bot in active_bots if _is_onebot_v11(_adapter_name(bot))
+    ]
+    if not onebot_bots:
+        records = [
+            record
+            for record in state.bots.values()
+            if _is_onebot_v11(record.adapter)
+        ]
+        if records:
+            now = time.time()
+            for record in records:
+                age = _event_age(record, now)
+                _alert(record, "协议端未连接", age)
+        else:
+            _alert_no_bot()
         return
 
-    if time.time() - state.last_event_time <= LINK_MONITOR_TIMEOUT:
-        logger.debug("[LinkMonitor] 链路健康（事件新鲜）")
-        return
-
-    # 二次确认：心跳超时不等于链路断开。主动调一次 OneBot API，
-    # 能返回即说明连接健康，只是群里安静——该问的是「连接通不通」，
-    # 不是「有没有人说话」。
-    try:
-        from nonebot import get_bot
-
-        bot = get_bot()
-    except Exception as e:
-        state.last_probe_ok = False
-        state.last_probe_time = time.time()
-        _alert(f"无可用 Bot 连接（{e}）")
-        return
-
-    try:
-        await bot.get_status()
-    except Exception as e:
-        state.last_probe_ok = False
-        state.last_probe_time = time.time()
-        _alert(
-            f"已连接但 API 无响应（{e}）",
-            time.time() - state.last_event_time,
-        )
-        return
-
-    # 探活成功：刷新 last_event_time，避免每个检查周期都重复探活
-    state.last_probe_ok = True
-    state.last_probe_time = time.time()
-    state.last_event_time = time.time()
-    logger.debug("[LinkMonitor] 超时但探活成功，链路正常，只是没人说话")
-
-
-def link_status() -> dict:
-    """导出链路状态，供 deploy doctor 与将来的前端查询。
-
-    healthy 是给调用方的单一布尔（已连接 且（事件新鲜 或 最近探活成功）），
-    避免每个消费方各自拼判断逻辑。
-
-    注意本契约的坑：connected_seconds / last_event_seconds_ago 等在未连接时是
-    **显式的 None**（键存在、值为 None）。消费方不要用 dict.get(key, 0) 这种
-    「默认值只在键不存在时生效」的写法，否则 None 会直接进 :.0f 崩掉
-    （2026-08-19 实测两次）。若将来消费方变多，考虑在这里就生成一个
-    summary_text 人类可读字段，让消费方直接用、不再各自格式化。
-    """
     now = time.time()
-    last_event_seconds_ago = (
-        None if state.last_event_time is None else now - state.last_event_time
-    )
-    connected_seconds = (
-        None if state.connected_since is None else now - state.connected_since
-    )
-    last_probe_seconds_ago = (
-        None if state.last_probe_time is None else now - state.last_probe_time
-    )
-    try:
-        from deploy.probe import _probe_onebot
+    for bot in onebot_bots:
+        record = _state_for(bot)
+        age = _event_age(record, now)
+        if age is None:
+            connected_for = (
+                None
+                if record.connected_since is None
+                else now - record.connected_since
+            )
+            if connected_for is not None and connected_for > LINK_MONITOR_TIMEOUT:
+                _alert(record, "已连接但从未收到任何事件")
+            continue
+        if age <= LINK_MONITOR_TIMEOUT:
+            logger.debug(
+                f"[LinkMonitor] OneBot 实例 {record.instance_ref} 链路健康（事件新鲜）"
+            )
+            continue
 
-        config_status = _probe_onebot()
-    except Exception:
-        config_status = {}
-    healthy = (
-        LINK_MONITOR_ENABLED
-        and state.connected
-        and (
-            (last_event_seconds_ago is not None and last_event_seconds_ago <= LINK_MONITOR_TIMEOUT)
-            or state.last_probe_ok is True
+        try:
+            await bot.get_status()
+        except Exception as exc:
+            record.last_probe_ok = False
+            record.last_probe_time = time.time()
+            _alert(record, f"已连接但 API 无响应（{exc}）", time.time() - record.last_event_time)
+            continue
+
+        record.last_probe_ok = True
+        record.last_probe_time = time.time()
+        record.last_event_time = record.last_probe_time
+        logger.debug(
+            f"[LinkMonitor] OneBot 实例 {record.instance_ref} 超时但探活成功"
         )
+
+
+def _age(value: float | None, now: float) -> float | None:
+    return None if value is None else now - value
+
+
+def link_status() -> dict[str, Any]:
+    """Export aggregate health plus opaque per-connection status records."""
+    adapters = _current_adapters()
+    applicable = any(_is_onebot_v11(str(name)) for name in adapters)
+    active_bots = _sync_active_bots()
+    now = time.time()
+
+    onebot_records = [
+        record
+        for record in state.bots.values()
+        if _is_onebot_v11(record.adapter)
+    ]
+    # A registry can be populated before the connect callbacks fire.
+    for bot in active_bots:
+        record = _state_for(bot)
+        if record not in onebot_records and _is_onebot_v11(record.adapter):
+            onebot_records.append(record)
+
+    per_bot: list[dict[str, Any]] = []
+    for record in onebot_records:
+        age = _event_age(record, now)
+        connected_seconds = _age(record.connected_since, now)
+        per_bot.append(
+            {
+                "instance_ref": record.instance_ref,
+                "connected": record.connected,
+                "healthy": _record_healthy(record, now),
+                "connected_seconds": connected_seconds,
+                "last_event_seconds_ago": age,
+                "last_probe_ok": record.last_probe_ok,
+                "last_probe_seconds_ago": _age(record.last_probe_time, now),
+            }
+        )
+
+    connections = []
+    for record in sorted(state.bots.values(), key=lambda item: item.instance_ref):
+        onebot = _is_onebot_v11(record.adapter)
+        connections.append(
+            {
+                "adapter": record.adapter,
+                "instance_ref": record.instance_ref,
+                "connected": record.connected,
+                "health": _record_healthy(record, now) if onebot else None,
+            }
+        )
+
+    enabled = bool(LINK_MONITOR_ENABLED and applicable)
+    connected = (
+        any(record.connected for record in onebot_records) if applicable else None
     )
+    if not applicable:
+        healthy: bool | None = None
+    elif not enabled:
+        healthy = False
+    else:
+        healthy = bool(onebot_records) and all(
+            _record_healthy(record, now) for record in onebot_records
+        )
+
+    # Preserve the legacy single-Bot fields. Multi-Bot callers use the explicit
+    # ``bots`` entries so no one connection is misrepresented as the whole group.
+    singleton = onebot_records[0] if len(onebot_records) == 1 else None
+    last_event_ages = [
+        age for record in onebot_records if (age := _event_age(record, now)) is not None
+    ]
+    connected_ages = [
+        age
+        for record in onebot_records
+        if (age := _age(record.connected_since, now)) is not None
+    ]
+    probe_ages = [
+        age
+        for record in onebot_records
+        if (age := _age(record.last_probe_time, now)) is not None
+    ]
+    if singleton:
+        aggregate_probe_ok = singleton.last_probe_ok
+    elif any(record.last_probe_ok is False for record in onebot_records):
+        aggregate_probe_ok = False
+    elif onebot_records and all(
+        record.last_probe_ok is True for record in onebot_records
+    ):
+        aggregate_probe_ok = True
+    else:
+        aggregate_probe_ok = None
+
+    config_status: dict[str, Any] = {}
+    if applicable:
+        try:
+            from deploy.probe import _probe_onebot
+
+            config_status = _probe_onebot()
+        except Exception:
+            pass
+
     return {
-        "enabled": LINK_MONITOR_ENABLED,
-        "connected": state.connected,
-        "bot_self_id": state.bot_self_id,
-        "connected_seconds": connected_seconds,
-        "last_event_seconds_ago": last_event_seconds_ago,
-        "last_probe_ok": state.last_probe_ok,
-        "last_probe_seconds_ago": last_probe_seconds_ago,
+        "enabled": enabled,
+        "applicable": applicable,
+        "connected": connected,
+        "bot_self_id": singleton.self_id if singleton else "",
+        "connected_seconds": (
+            _age(singleton.connected_since, now)
+            if singleton
+            else (max(connected_ages) if connected_ages else None)
+        ),
+        "last_event_seconds_ago": (
+            _event_age(singleton, now)
+            if singleton
+            else (max(last_event_ages) if last_event_ages else None)
+        ),
+        "last_probe_ok": aggregate_probe_ok,
+        "last_probe_seconds_ago": (
+            _age(singleton.last_probe_time, now)
+            if singleton
+            else (max(probe_ages) if probe_ages else None)
+        ),
         "timeout": LINK_MONITOR_TIMEOUT,
         "healthy": healthy,
         "mode": config_status.get("mode", "unknown"),
@@ -244,13 +407,13 @@ def link_status() -> dict:
         "token_configured": config_status.get("token_configured", False),
         "token_in_url": config_status.get("token_in_url", False),
         "token_consistent": config_status.get("token_consistent"),
-        "waiting_for_reconnect": LINK_MONITOR_ENABLED and not state.connected,
+        "waiting_for_reconnect": enabled and not connected,
+        "bots": per_bot,
+        "connections": connections,
     }
 
 
 class _Hooked:
-    """扩展幂等标记容器（对象属性代替模块级全局变量）。"""
-
     done: bool = False
 
 
@@ -258,11 +421,7 @@ _hooked = _Hooked()
 
 
 def setup(_pipeline: Pipeline) -> None:
-    """接入扩展机制。
-
-    钩子与定时任务在模块 import 时已注册，这里只做一次开关状态的日志声明
-    （保持与其他扩展一致的加载可见性）。
-    """
+    """Expose extension readiness in startup logs."""
     if _hooked.done:
         return
     _hooked.done = True
@@ -273,11 +432,6 @@ def setup(_pipeline: Pipeline) -> None:
 
 
 def reset_state() -> None:
-    """把 state 的所有字段还原为初始值，供测试用。"""
-    state.last_event_time = None
-    state.connected = False
-    state.bot_self_id = ""
-    state.connected_since = None
-    state.last_probe_ok = None
-    state.last_probe_time = None
-    state.last_alert_time = None
+    """Reset all in-memory connection state for tests."""
+    state.bots.clear()
+    state.no_bot_alert_time = None

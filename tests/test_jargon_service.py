@@ -66,6 +66,16 @@ class TestOccurrence:
         matched_b = jargon_service.match_jargon(GROUP_B, "狼人")
         assert matched_b == []  # B 群没有确认词义，只有出现证据
 
+    def test_same_group_and_bot_on_two_connections_are_separate(self, social_db):
+        connection_a = ConversationScope.for_qq(111, "bot", "connection-a")
+        connection_b = ConversationScope.for_qq(111, "bot", "connection-b")
+        asset_a = jargon_service.get_or_create_asset(connection_a, "同号词")
+        asset_b = jargon_service.get_or_create_asset(connection_b, "同号词")
+        assert asset_a and asset_b and asset_a != asset_b
+        jargon_service.add_sense(connection_a, "同号词", "连接 A 的含义")
+        terms_b = jargon_service.list_terms(connection_b)
+        assert all(not row["sense"] and not row["definition"] for row in terms_b)
+
 
 class TestSenses:
     def test_add_sense_idempotent_and_conflict_creates_new(self, social_db):

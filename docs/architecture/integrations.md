@@ -54,14 +54,14 @@
 
 **为什么不新增端口**：NoneBot 本就跑着 FastAPI/uvicorn，反向 WS 端点 `/onebot/v11/ws` 就是它提供的。状态路由直接挂在同一个 app 上（`GET /stella/status`），Stella 仍然只有一个监听端口（`PORT`）。
 
-**实现**：`stella_project/plugins/bot_main/status_api.py`。`setup_status_api()` 在 ai_gateway 的启动段（扩展加载之后）调用；`build_payload()` 聚合 `link_status()`、`core.llm.snapshot()`、`usage_store.usage_snapshot()`、`capability.inventory.snapshot()`、skills 运行时状态与版本/进程信息，返回 `{version, instance_id, pid, uptime_seconds, allowed_group_count, link, scheduler, usage, capabilities, skills}`，外加两个条件键：`runtime`（Runtime Contract 状态，取到才出现）与 `chat_engine`（对话引擎面：mode/keys/inflight——facade 唯一引擎的健康快照，同样只有结构化字段）。消费方是 `deploy/process.py` 的 `_fetch_live_status()`（回环查询、1 秒超时）与 GUI/WebUI 面板。
+**实现**：`stella_project/plugins/bot_main/status_api.py`。`setup_status_api()` 在 ai_gateway 的启动段（扩展加载之后）调用；`build_payload()` 原样透传 `link_status()`，聚合 `core.llm.snapshot()`、`usage_store.usage_snapshot()`、`capability.inventory.snapshot()`、skills 运行时状态与版本/进程信息，返回 `{version, instance_id, pid, uptime_seconds, allowed_group_count, link, scheduler, usage, capabilities, skills}`，外加两个条件键：`runtime`（Runtime Contract 状态，取到才出现）与 `chat_engine`（对话引擎面：mode/keys/inflight——facade 唯一引擎的健康快照，同样只有结构化字段）。`link` 包含 `applicable`、每条连接的健康信息；非 OneBot V11 的健康度为 `null`，连接实例只用不透明引用标识。消费方是 `deploy/process.py` 的 `_fetch_live_status()`（回环查询、1 秒超时）与 GUI/WebUI 面板。
 
 **安全约束**：`HOST` 可能是 `0.0.0.0`（NapCat 在另一台机器时必须如此），此时路由暴露到局域网。两道防护：① 只接受回环地址的请求，其余返回 403；② 响应体不含凭据与群聊内容——`allowed_group_count` 只给数量不给群号，`usage` 只有计数与比率（token 数、调用次数、缓存命中率、槽名与模型 ID），绝不含 prompt 与模型输出，`capabilities` 只有结构化字段（能力 id、域、来源层、是否可路由、provider 工具名与健康度、examples 条数），不含声明里的 `description` 与 `examples` 原文——那两个字段是唯一可能夹带 URL 与密钥的地方，不放进响应体就不必为它加一道守卫。`tests/test_status_api.py` 把这条约束钉成了断言：它拿 `usage_snapshot()` 的真实输出过一遍序列化，出现 `api_key` / `Bearer` / `http://` 即失败。
 ## 扩展机制
 
 `extensions/` 下的每个模块/包若提供 `setup(pipeline)`，启动时会被自动加载。扩展可以注册 Hook、注入实现、启动自己的定时任务。
 
-`link_monitor` 是参考实现：它在 import 时注册一个 `event_preprocessor`（任何 OneBot 事件刷新心跳）、两个 driver 钩子（`on_bot_connect` / `on_bot_disconnect`）与一个自己的定时任务（事件超时后主动探活，探活失败只告警不重启）。扩展无需改动业务主程序即可接入。
+`link_monitor` 是参考实现：它在 import 时注册一个 `event_preprocessor`（任何 OneBot V11 事件刷新心跳）、两个 driver 钩子（`on_bot_connect` / `on_bot_disconnect`）与一个自己的定时任务（逐 Bot 超时后主动探活，探活失败只告警不重启）。其他适配器只显示连接状态，不套用 OneBot 的心跳合同。扩展无需改动业务主程序即可接入。
 ## v2 控制面（WebUI 与桌面壳）
 
 浏览器与桌面壳共用的管理面板：`dashboard/`（Vue 3 + Vuetify 3）为前端，

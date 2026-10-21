@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+from core.transport.outbound import DeliveryTarget
+
 UTC = timezone.utc
 
 
@@ -171,6 +173,11 @@ class Task:
     notification_mode: NotificationMode = NotificationMode.ON_CONTENT
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # Persisted route and scope are authoritative for workers. ``group_id`` is
+    # retained for QQ context lookup and display compatibility only.
+    target: DeliveryTarget | None = None
+    subject_key: str = ""
+    scope_key: str = ""
 
 
 @dataclass(slots=True)
@@ -199,6 +206,9 @@ class Run:
     queued_at_utc: datetime | None = None
     claimed_at_utc: datetime | None = None
     finished_at_utc: datetime | None = None
+    target: DeliveryTarget | None = None
+    subject_key: str = ""
+    scope_key: str = ""
 
     @property
     def is_manual(self) -> bool:
@@ -216,6 +226,9 @@ class AuditEntry:
     task_id: str
     action: str
     detail: str = ""
+    actor_subject_key: str = ""
+    scope_key: str = ""
+    target: DeliveryTarget | None = None
 
 
 __all__ = [

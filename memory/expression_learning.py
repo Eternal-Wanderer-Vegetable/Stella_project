@@ -99,6 +99,8 @@ def on_reply_sent(
     trace_id: str = "",
     intent: str = "",
     source_msg_id: int = 0,
+    bot_id: str = "",
+    connection_id: str = "",
 ) -> None:
     """登记一次发言并派生异步学习任务。同步部分只有一次 DB 插入。
 
@@ -127,7 +129,11 @@ def on_reply_sent(
                 from core.social.contracts import ConversationScope, MessageEvidence
                 from memory import expression_selector, social_store
 
-                scope = ConversationScope.for_qq(group_id)
+                scope = ConversationScope.for_qq(
+                    group_id,
+                    bot_id=bot_id if connection_id else "",
+                    connection_id=connection_id,
+                )
                 ev_id = social_store.find_event_id(
                     scope, str(source_msg_id),
                     fallback=MessageEvidence(
@@ -152,6 +158,8 @@ def on_reply_sent(
                     turn_id=turn_id,
                     trace_id=trace_id,
                     intent=intent,
+                    bot_id=bot_id,
+                    connection_id=connection_id,
                 )
             # 没有 turn_id 的调用（旧测试/未走 facade）没有投递事实可依，
             # 不伪造效果行——表达采样仍然生效
@@ -172,7 +180,14 @@ def on_reply_sent(
 
 
 def note_passive_message(
-    group_shared_space: str, user_id: int, text: str, *, group_id: int = 0, event_id: str = ""
+    group_shared_space: str,
+    user_id: int,
+    text: str,
+    *,
+    group_id: int = 0,
+    event_id: str = "",
+    bot_id: str = "",
+    connection_id: str = "",
 ) -> None:
     """被动消息的黑话信号采集（静默监听器热路径调用）。
 
@@ -193,7 +208,11 @@ def note_passive_message(
             from core.social.contracts import ConversationScope
             from memory import jargon_service
 
-            scope = ConversationScope.for_qq(group_id)
+            scope = ConversationScope.for_qq(
+                group_id,
+                bot_id=bot_id if connection_id else "",
+                connection_id=connection_id,
+            )
             for term in terms:
                 jargon_service.note_occurrence(
                     scope, term, event_id=event_id, author_user=str(user_id), excerpt=text or ""

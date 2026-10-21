@@ -275,5 +275,95 @@
         ]
       }
     }
+  },
+  "target_ref_protocol_revision": {
+    "date": "2026-10-21",
+    "reason": "WP02 replaces the current reply protocol with turn-bound target_ref tokens. Only the prompt/system_prompt and their derived token diagnostics change; responses, hooks, input, and raw output remain frozen.",
+    "allowed_changed_paths": [
+      "trace.diagnostics.prompt_budget_tokens",
+      "trace.diagnostics.prompt_estimated_tokens",
+      "trace.diagnostics.system_prompt_len",
+      "trace.llm_calls.0.prompt",
+      "trace.llm_calls.0.system_prompt"
+    ],
+    "scenarios": {
+      "normal_single_call": {
+        "before_sha256": "7e91eb4405f13d87177bbd0ab97a82cdc8f1cf921aaa4667766f09b135a3a1bb",
+        "after_sha256": "cf187d80ed45bfb48eb9d0bbe80535271884e645360a9b3a5ac5afd9332ab47c",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.prompt_estimated_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.prompt",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "planner_deep_then_reply": {
+        "before_sha256": "4bc73a80f84a5dc1ac13ce7b938db7d9cf6d7ef29d92dd431726dcd412a2a88c",
+        "after_sha256": "090f1b5c8ae4b110eafe785cf28ce66ef30b0705788e841344509d32c15c1523",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.prompt_estimated_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.prompt",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "timeout_fallback": {
+        "before_sha256": "d0afeb5ef26f401b54b1d2ccace97eb8119863d60ffa72b893d26adf048b2acd",
+        "after_sha256": "c5840e1738246e48311b486ac9d552e05537cf6f9162d39b272049b5421893c6",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.prompt_estimated_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.prompt",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "backend_error_fallback": {
+        "before_sha256": "920e248cf15f54b22e5d3f1ea0638a078e8ddaa708bf5f6d61ccac94e1984f9e",
+        "after_sha256": "9fb56af6bd4a00689ee963312ee1b1cbed5a91b6edefcc64d50249f6d27dbad7",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.prompt_estimated_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.prompt",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "bad_phrase_fallback": {
+        "before_sha256": "4aefe2e36c3ebc0abda59de67c7a358357707fbf070513dd3b855e5d0449369c",
+        "after_sha256": "5ed78f41fe60480e5b1fecde785f1e8ea02d0fda8842bccbed40161b86f952ca",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.prompt_estimated_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.prompt",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "proactive_at_instruction_first": {
+        "before_sha256": "271f53ab9eae6c2bebf097ec22f63f059420ad7522d5f8277c51dab6b349d7c0",
+        "after_sha256": "a2deac4ca6d6706ab64d0dd418575415c99c8c23a5fd06d6fad8bae3676607ae",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.prompt_estimated_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.prompt",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      },
+      "tool_and_evidence_sections": {
+        "before_sha256": "167998778324cc05374c9ca0e25da1dd99f91503054d01e6f2327a098214202f",
+        "after_sha256": "df784dafde8d656211849a78bf773b5a3018b068808060e0addc3d2c318b5fcf",
+        "changed_paths": [
+          "trace.diagnostics.prompt_budget_tokens",
+          "trace.diagnostics.prompt_estimated_tokens",
+          "trace.diagnostics.system_prompt_len",
+          "trace.llm_calls.0.prompt",
+          "trace.llm_calls.0.system_prompt"
+        ]
+      }
+    }
   }
 }

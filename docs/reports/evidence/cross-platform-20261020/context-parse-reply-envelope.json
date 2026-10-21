@@ -1,0 +1,96 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:core/dialogue_attribution.py:parse_reply_envelope",
+    "name": "parse_reply_envelope",
+    "kind": "Function",
+    "filePath": "core/dialogue_attribution.py",
+    "startLine": 428,
+    "endLine": 547
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:core/dialogue_attribution.py:apply_attribution_guard",
+        "name": "apply_attribution_guard",
+        "filePath": "core/dialogue_attribution.py"
+      },
+      {
+        "uid": "Function:memory/post_processors.py:parse_output",
+        "name": "parse_output",
+        "filePath": "memory/post_processors.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_attributed_current_slot_is_rejected#0",
+        "name": "test_attributed_current_slot_is_rejected",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_complete_typed_fragment_uses_all_strict_envelope_checks#0",
+        "name": "test_complete_typed_fragment_uses_all_strict_envelope_checks",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_merges_repeated_bare_current_slots_as_multiline#0",
+        "name": "test_merges_repeated_bare_current_slots_as_multiline",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_parses_one_typed_envelope_and_roundtrips_projection#0",
+        "name": "test_parses_one_typed_envelope_and_roundtrips_projection",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_projection_rejects_unknown_and_mutated_fields#0",
+        "name": "test_projection_rejects_unknown_and_mutated_fields",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_rejects_conflicting_roots_raw_tail_dtd_and_legacy_dual_output#0",
+        "name": "test_rejects_conflicting_roots_raw_tail_dtd_and_legacy_dual_output",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_rejects_typed_slot_author_text_and_unknown_tags#0",
+        "name": "test_rejects_typed_slot_author_text_and_unknown_tags",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_repeated_current_drops_empty_parts#0",
+        "name": "test_repeated_current_drops_empty_parts",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_typed_fragment_cannot_bypass_evidence_guard#0",
+        "name": "test_typed_fragment_cannot_bypass_evidence_guard",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      },
+      {
+        "uid": "Method:tests/test_dialogue_attribution_repair.py:TestReplyEnvelopeParser.test_typed_fragment_rejects_ambiguous_or_forged_output#0",
+        "name": "test_typed_fragment_rejects_ambiguous_or_forged_output",
+        "filePath": "tests/test_dialogue_attribution_repair.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/dialogue_attribution.py:_parse_legacy_envelope",
+        "name": "_parse_legacy_envelope",
+        "filePath": "core/dialogue_attribution.py"
+      },
+      {
+        "uid": "Function:core/dialogue_attribution.py:_tree_within_protocol_limits",
+        "name": "_tree_within_protocol_limits",
+        "filePath": "core/dialogue_attribution.py"
+      },
+      {
+        "uid": "Function:core/dialogue_attribution.py:_valid_action",
+        "name": "_valid_action",
+        "filePath": "core/dialogue_attribution.py"
+      }
+    ]
+  },
+  "processes": []
+}

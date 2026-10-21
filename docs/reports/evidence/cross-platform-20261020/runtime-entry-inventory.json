@@ -1,0 +1,630 @@
+{
+  "validation": [],
+  "coverage": {
+    "catalog": {
+      "nodes": 141,
+      "edges": 149,
+      "source_anchored": 139,
+      "opaque": 11,
+      "derived": 3,
+      "note": "静态目录完整度；不冒充运行观测或数据集覆盖"
+    },
+    "runtime": {
+      "declared_entries": 50,
+      "with_flow_root": 39,
+      "explicit_boundaries": 13,
+      "families": 9,
+      "note": "运行入口 inventory；抽样 flow 不构成全集"
+    },
+    "dataset": {
+      "denominator": "declared_expected_cases",
+      "note": "由 experiments 报告；0 样本不允许 PASS"
+    }
+  },
+  "entries": [
+    {
+      "id": "gateway.record_group_chat",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "record_group_chat",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.handle_chat",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_chat",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.handle_private_chat",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_private_chat",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.handle_command",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_chat",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "webui.chat_ingress",
+      "family": "message",
+      "file": "webui/chat_ingress.py",
+      "symbol": "run_turn",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.group_silent_listener",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "group_silent_listener",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.plugin_handler",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "plugin_handler",
+      "origin": "message",
+      "boundary": "nonebot matcher 注册点"
+    },
+    {
+      "id": "gateway.chat_handler",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "chat_handler",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.private_chat_handler",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "private_chat_handler",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.addressing_handler",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "addressing_handler",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.toggle_handler",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "toggle_handler",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.capability_handler",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "capability_handler",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.reload_handler",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "reload_handler",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.scheduling_handler",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "scheduling_handler",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.proactive_speak_job",
+      "family": "proactive",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "proactive_speak_job",
+      "origin": "timer",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.proactive_at_user",
+      "family": "proactive",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_proactive_at_user",
+      "origin": "spawn",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.proactive_speak_for_group",
+      "family": "proactive",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_proactive_speak_for_group",
+      "origin": "spawn",
+      "boundary": ""
+    },
+    {
+      "id": "consolidator.consolidate_group",
+      "family": "memory",
+      "file": "memory/consolidator.py",
+      "symbol": "MemoryConsolidator.consolidate_group",
+      "origin": "spawn",
+      "boundary": ""
+    },
+    {
+      "id": "memory.process_new_candidates",
+      "family": "memory",
+      "file": "memory/memory_manager.py",
+      "symbol": "MemoryManager.process_new_candidates",
+      "origin": "spawn",
+      "boundary": ""
+    },
+    {
+      "id": "compressor.run_weekly",
+      "family": "memory",
+      "file": "memory/compressor.py",
+      "symbol": "MemoryCompressor.run_weekly",
+      "origin": "timer",
+      "boundary": ""
+    },
+    {
+      "id": "social.run_due_jobs",
+      "family": "social",
+      "file": "memory/social_worker.py",
+      "symbol": "run_due_jobs",
+      "origin": "worker",
+      "boundary": ""
+    },
+    {
+      "id": "reply_effect.resolve",
+      "family": "social",
+      "file": "memory/reply_effect_service.py",
+      "symbol": "resolve_effect",
+      "origin": "worker",
+      "boundary": ""
+    },
+    {
+      "id": "session_compact.compact_once",
+      "family": "maintenance",
+      "file": "memory/session_compact.py",
+      "symbol": "compact_once",
+      "origin": "spawn",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.idle_maintenance",
+      "family": "maintenance",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_proactive_speak_impl",
+      "origin": "timer",
+      "boundary": "noop/清理路径尚未逐一接入 flow root"
+    },
+    {
+      "id": "scheduling.tick_once",
+      "family": "scheduling",
+      "file": "stella_project/plugins/bot_main/scheduling/runtime.py",
+      "symbol": "tick_once",
+      "origin": "worker",
+      "boundary": ""
+    },
+    {
+      "id": "knowledge.ingest_content",
+      "family": "knowledge",
+      "file": "knowledge/ingest.py",
+      "symbol": "ingest_content",
+      "origin": "api",
+      "boundary": ""
+    },
+    {
+      "id": "cometa.worker.tick",
+      "family": "cometa",
+      "file": "cometa/worker.py",
+      "symbol": "CometaWorker._tick",
+      "origin": "worker",
+      "boundary": ""
+    },
+    {
+      "id": "bot_main.start_scheduling",
+      "family": "lifecycle",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_start_scheduling",
+      "origin": "startup",
+      "boundary": ""
+    },
+    {
+      "id": "bot_main.start_cometa",
+      "family": "lifecycle",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_start_cometa",
+      "origin": "startup",
+      "boundary": ""
+    },
+    {
+      "id": "bot_main.start_stop_watcher",
+      "family": "lifecycle",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_start_stop_watcher",
+      "origin": "startup",
+      "boundary": ""
+    },
+    {
+      "id": "bot_main.start_capture_gate",
+      "family": "lifecycle",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_start_capture_gate",
+      "origin": "startup",
+      "boundary": ""
+    },
+    {
+      "id": "bot_main.start_hot_reload_watcher",
+      "family": "lifecycle",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_start_hot_reload_watcher",
+      "origin": "startup",
+      "boundary": ""
+    },
+    {
+      "id": "bot_main.graceful_shutdown",
+      "family": "lifecycle",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_graceful_shutdown",
+      "origin": "shutdown",
+      "boundary": ""
+    },
+    {
+      "id": "bot_main.flow_ingress",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_flow_ingress_root",
+      "origin": "message",
+      "boundary": "nonebot event_preprocessor"
+    },
+    {
+      "id": "bot_main.flow_ingress_end",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "_flow_ingress_end",
+      "origin": "message",
+      "boundary": "nonebot event_postprocessor"
+    },
+    {
+      "id": "gateway.handle_plugin_fn",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_plugin",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.handle_addressing_fn",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_addressing",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.handle_toggle_fn",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_toggle",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.handle_capability_query_fn",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_capability_query",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.handle_reload_fn",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_reload",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.handle_scheduling_fn",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "handle_scheduling",
+      "origin": "message",
+      "boundary": ""
+    },
+    {
+      "id": "gateway.participation_tick_job",
+      "family": "proactive",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "participation_tick_job",
+      "origin": "timer",
+      "boundary": "apscheduler job"
+    },
+    {
+      "id": "gateway.expression_sweep_job",
+      "family": "maintenance",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "expression_sweep_job",
+      "origin": "timer",
+      "boundary": "apscheduler job"
+    },
+    {
+      "id": "gateway.session_idle_check_job",
+      "family": "maintenance",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "session_idle_check_job",
+      "origin": "timer",
+      "boundary": "apscheduler job"
+    },
+    {
+      "id": "gateway.consolidation_drain_job",
+      "family": "memory",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "consolidation_drain_job",
+      "origin": "timer",
+      "boundary": "apscheduler job"
+    },
+    {
+      "id": "gateway.trim_messages_job",
+      "family": "maintenance",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "trim_messages_job",
+      "origin": "timer",
+      "boundary": "apscheduler job"
+    },
+    {
+      "id": "gateway.weekly_compress",
+      "family": "memory",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "weekly_compress",
+      "origin": "timer",
+      "boundary": "apscheduler job"
+    },
+    {
+      "id": "social_worker.register_resolve_effect",
+      "family": "social",
+      "file": "memory/social_worker.py",
+      "symbol": "resolve_effect",
+      "origin": "worker",
+      "boundary": "进程内 worker 注册"
+    },
+    {
+      "id": "nonebot.matcher_dispatch",
+      "family": "message",
+      "file": "stella_project/plugins/bot_main/ai_gateway.py",
+      "symbol": "record_group_chat",
+      "origin": "message",
+      "boundary": "nonebot"
+    },
+    {
+      "id": "rust.promotion",
+      "family": "memory",
+      "file": "memory_rust/native/src/promotion.rs",
+      "symbol": "promote",
+      "origin": "spawn",
+      "boundary": "rust"
+    }
+  ],
+  "reconciliation": {
+    "discovered": [
+      {
+        "file": "memory/social_worker.py",
+        "symbol": "resolve_effect",
+        "kind": "worker_registration",
+        "handler": "_handle_resolve_effect",
+        "handler_body_hash": "47eb06b7e4751458",
+        "handler_closure": [
+          "core/social/contracts.py#utc_now_iso:a89997c7021bd8f7",
+          "memory/expression_selector.py#_connect:1907203555788ef5",
+          "memory/expression_selector.py#_now:4ab93f733493a77e",
+          "memory/expression_selector.py#handle_effect_feedback:8a41e70c3c00f3a7",
+          "memory/reply_effect_service.py#_aggregate_metrics:975c8c357450f260",
+          "memory/reply_effect_service.py#_claim_conflicts:e33b0541dda1ca8a",
+          "memory/reply_effect_service.py#_load_effect:3fc1510c5fdf6cc3",
+          "memory/reply_effect_service.py#attribute_events:f2b92a9c0f4ace96",
+          "memory/reply_effect_service.py#classify_dimensions:aa692210e32e35fe",
+          "memory/reply_effect_service.py#log_settlement:a507d0b0e0d82a45",
+          "memory/reply_effect_service.py#resolve_effect:b44c9d16ee3faac3",
+          "memory/social_schema.py#_backup:aa4b90644a04cbee",
+          "memory/social_schema.py#_connect:91a8d93f67e22ad8",
+          "memory/social_schema.py#_migrate_social_v2:424c5eeb1af2f3bc",
+          "memory/social_schema.py#_migrate_social_v3:2467f1f9a7ffb656",
+          "memory/social_schema.py#ensure_social_schema:23e4088ad71341cb",
+          "memory/social_schema.py#import_legacy_data:bbf1539ce8fa18e0",
+          "memory/social_schema.py#social_schema_version:e432b8b8d97e186f",
+          "memory/social_store.py#_connect:1907203555788ef5",
+          "memory/social_store.py#deliveries_for_turn:3c4510789a23eb95",
+          "memory/social_store.py#ensure_tables:2bf869bdce581f54",
+          "memory/social_store.py#events_since:5749787c03304903",
+          "memory/timeutil.py#log_sqlite_error:96db49ee62f1cd6e",
+          "memory/timeutil.py#utc_now:97a9ed8603d296e9"
+        ]
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "group_silent_listener",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "record_group_chat",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "plugin_handler",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "handle_plugin",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "chat_handler",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "handle_chat",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "private_chat_handler",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "handle_private_chat",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "addressing_handler",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "handle_addressing",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "toggle_handler",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "handle_toggle",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "capability_handler",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "handle_capability_query",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "reload_handler",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "handle_reload",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "scheduling_handler",
+        "kind": "matcher"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "handle_scheduling",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "_start_scheduling",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "_start_cometa",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "_start_capture_gate",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "_start_stop_watcher",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "_graceful_shutdown",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "_flow_ingress_root",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "_flow_ingress_end",
+        "kind": "matcher_handler"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "_start_hot_reload_watcher",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "proactive_speak_job",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "participation_tick_job",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "expression_sweep_job",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "session_idle_check_job",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "consolidation_drain_job",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "trim_messages_job",
+        "kind": "lifecycle_hook"
+      },
+      {
+        "file": "stella_project/plugins/bot_main/ai_gateway.py",
+        "symbol": "weekly_compress",
+        "kind": "lifecycle_hook"
+      }
+    ],
+    "undeclared": [],
+    "missing": []
+  }
+}

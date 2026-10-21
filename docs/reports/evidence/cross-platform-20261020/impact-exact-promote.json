@@ -1,0 +1,128 @@
+{
+  "target": {
+    "id": "Function:memory_rust/native/src/promotion.rs:promote",
+    "name": "promote",
+    "type": "Function",
+    "filePath": "memory_rust/native/src/promotion.rs"
+  },
+  "direction": "upstream",
+  "impactedCount": 9,
+  "risk": "MEDIUM",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "lower-bound",
+  "boundaries": [
+    "1 call site invoking `promote` was dropped at index time because the receiver's type could not be established (e.g. an unresolved constructor, factory or chained expression). Those callers are absent from this result — actual impact may be higher."
+  ],
+  "causes": {
+    "scopeExtractionFiles": 0,
+    "receiverTyping": 1,
+    "dispatchBoundary": 0,
+    "externalBoundary": 0,
+    "undecidedSatisfaction": 0
+  },
+  "summary": {
+    "direct": 9,
+    "processes_affected": 0,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 9
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "Cluster_640",
+      "hits": 8,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/lib.rs:promote",
+        "name": "promote",
+        "filePath": "memory_rust/native/src/lib.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.duplicate_invocation_is_a_noop",
+        "name": "duplicate_invocation_is_a_noop",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.high_confidence_without_evidence_is_rejected",
+        "name": "high_confidence_without_evidence_is_rejected",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.lower_confidence_conflict_stays_observing_without_new_memory",
+        "name": "lower_confidence_conflict_stays_observing_without_new_memory",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.malformed_fts_rolls_back_the_entire_transaction",
+        "name": "malformed_fts_rolls_back_the_entire_transaction",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.promotion_commits_memory_and_candidate_atomically",
+        "name": "promotion_commits_memory_and_candidate_atomically",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.quota_archives_the_weakest_memory_and_removes_fts",
+        "name": "quota_archives_the_weakest_memory_and_removes_fts",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.scope_mismatch_is_rejected_before_writing",
+        "name": "scope_mismatch_is_rejected_before_writing",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:memory_rust/native/src/promotion.rs:tests.similar_candidate_merges_and_refreshes_fts_once",
+        "name": "similar_candidate_merges_and_refreshes_fts_once",
+        "filePath": "memory_rust/native/src/promotion.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  }
+}

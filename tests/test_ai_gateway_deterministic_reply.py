@@ -50,6 +50,9 @@ async def test_handle_chat_sends_deterministic_reply_once(
     delivery_db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(settings, "DB_PATH", delivery_db)
     monkeypatch.setattr(gateway, "DB_PATH", delivery_db)
+    import config.spaces as spaces
+
+    monkeypatch.setattr(spaces, "resolve_space", lambda _group_id: "test-space")
     with sqlite3.connect(delivery_db) as conn:
         create_memory_scope_versions_table(conn)
     monkeypatch.setattr(social_store, "_TABLES_READY", False)
@@ -89,10 +92,20 @@ async def test_handle_chat_sends_deterministic_reply_once(
     monkeypatch.setattr(gateway.expression_learning, "on_reply_sent", Mock())
     monkeypatch.setattr(gateway, "_record_bot_lines", AsyncMock())
     monkeypatch.setattr(gateway, "_delivery_plan_is_current", lambda *a, **k: True)
-    # 新发送契约（计划 §6.1）：每段都走 send 并返回平台回执，finish 只结束
-    # matcher 流程不再携带消息；BOT_SELF 只记确认送达的片段。
-    send = AsyncMock(return_value={"message_id": 777})
-    monkeypatch.setattr(gateway.chat_handler, "send", send)
+    # 新发送契约（计划 §6.1）：入口使用可信事件构造目标，并由统一出站服务
+    # 返回 opaque 平台回执；matcher.finish 只结束流程。
+    from core.transport.outbound import DeliveryResult, DeliveryStatus
+
+    class FakeOutboundService:
+        def __init__(self):
+            self.calls = []
+
+        async def send(self, target, message, *, bot_handle=None):
+            self.calls.append((target, message, bot_handle))
+            return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("777",))
+
+    outbound = FakeOutboundService()
+    monkeypatch.setattr(gateway, "get_outbound_service", lambda: outbound)
     finish = AsyncMock(side_effect=FinishedException)
     monkeypatch.setattr(gateway.chat_handler, "finish", finish)
 
@@ -109,7 +122,16 @@ async def test_handle_chat_sends_deterministic_reply_once(
         await gateway.handle_chat(bot, event)
 
     gateway._run_turn_via_engine.assert_awaited_once()
-    send.assert_awaited_once()
+    ingress_ctx = gateway._run_turn_via_engine.await_args.args[1]
+    assert ingress_ctx.user_ref.raw_user_id == "111"
+    assert ingress_ctx.scene_ref.kind == "group"
+    assert ingress_ctx.connection_id == "legacy-qq:9"
+    assert len(outbound.calls) == 1
+    target, message, bot_handle = outbound.calls[0]
+    assert target.bot.self_id == "9"
+    assert target.scene.kind == "group"
+    assert message.segments[-1].text == ctx.reply
+    assert bot_handle is bot
     finish.assert_awaited_once_with()
     # v16 契约：origin（本轮 ctx）+ 确认回执随行（多人身份修复计划 §6.2）
     gateway._record_bot_lines.assert_awaited_once_with(

@@ -318,6 +318,26 @@ def test_onebot_mode_unknown():
     assert r is not None and r.level == "error"
 
 
+def test_onebot_checks_skip_when_adapter_is_disabled():
+    snap = _healthy_snapshot(
+        onebot_adapter_enabled=False,
+        onebot_mode="unknown",
+        onebot_endpoint_configured=False,
+        onebot_port_in_use=True,
+        onebot_forward_reachable=False,
+        onebot_token_consistent=False,
+    )
+
+    assert checks.check_onebot_mode(snap) is None
+    assert checks.check_onebot_endpoint(snap) is None
+    assert checks.check_onebot_reverse_port(snap) is None
+    assert checks.check_onebot_forward(snap) is None
+    assert checks.check_onebot_token(snap) is None
+    assert not any(
+        result.id.startswith("onebot_") for result in checks.run_all(snap)
+    )
+
+
 def test_onebot_invalid_endpoint_is_error():
     r = checks.check_onebot_endpoint(
         _healthy_snapshot(onebot_mode="forward", onebot_endpoint_configured=False)

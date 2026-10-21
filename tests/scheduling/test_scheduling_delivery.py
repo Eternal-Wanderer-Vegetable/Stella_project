@@ -35,10 +35,10 @@ class FakeSender:
         self.receipt = receipt
         self.error = error
         self.delay = delay
-        self.sent: list[tuple[int, str]] = []
+        self.sent: list[tuple[object, str]] = []
 
-    async def __call__(self, group_id: int, text: str) -> str | None:
-        self.sent.append((group_id, text))
+    async def __call__(self, target, text: str) -> str | None:
+        self.sent.append((target, text))
         if self.delay:
             await asyncio.sleep(self.delay)
         if self.error is not None:
@@ -89,7 +89,7 @@ async def test_happy_path_persists_ready_before_send(store):
 
     assert result.state is RunState.SENT
     assert result.receipt == "10001"
-    assert sender.sent == [(12345, "九点站会")]
+    assert sender.sent == [(task.target, "九点站会")]
     final = store.get_run(run.run_id)
     assert final.state is RunState.SENT
     assert final.delivery_receipt == "10001"

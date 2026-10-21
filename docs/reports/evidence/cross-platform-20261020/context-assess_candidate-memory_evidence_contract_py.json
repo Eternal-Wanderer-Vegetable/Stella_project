@@ -1,0 +1,71 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory/evidence_contract.py:assess_candidate",
+    "name": "assess_candidate",
+    "kind": "Function",
+    "filePath": "memory/evidence_contract.py",
+    "startLine": 229,
+    "endLine": 467
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:tests/test_memory_evidence_contract.py:_assess",
+        "name": "_assess",
+        "filePath": "tests/test_memory_evidence_contract.py"
+      },
+      {
+        "uid": "Method:memory/consolidator.py:MemoryConsolidator._write_memory_candidates#8",
+        "name": "_write_memory_candidates",
+        "filePath": "memory/consolidator.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:memory/evidence_contract.py:_hash",
+        "name": "_hash",
+        "filePath": "memory/evidence_contract.py"
+      },
+      {
+        "uid": "Function:memory/evidence_contract.py:_qualifiers",
+        "name": "_qualifiers",
+        "filePath": "memory/evidence_contract.py"
+      },
+      {
+        "uid": "Function:memory/evidence_contract.py:_resolve_sources",
+        "name": "_resolve_sources",
+        "filePath": "memory/evidence_contract.py"
+      },
+      {
+        "uid": "Function:memory/evidence_contract.py:_semantic_contract_matches",
+        "name": "_semantic_contract_matches",
+        "filePath": "memory/evidence_contract.py"
+      },
+      {
+        "uid": "Function:memory/evidence_contract.py:assess_candidate.unassessed@258:4",
+        "name": "unassessed",
+        "filePath": "memory/evidence_contract.py"
+      },
+      {
+        "uid": "Function:memory/evidence_contract.py:canonical_json",
+        "name": "canonical_json",
+        "filePath": "memory/evidence_contract.py"
+      },
+      {
+        "uid": "Function:memory/evidence_contract.py:parse_source_ids",
+        "name": "parse_source_ids",
+        "filePath": "memory/evidence_contract.py"
+      },
+      {
+        "uid": "Function:memory/evidence_contract.py:source_digest",
+        "name": "source_digest",
+        "filePath": "memory/evidence_contract.py"
+      }
+    ]
+  },
+  "processes": []
+}

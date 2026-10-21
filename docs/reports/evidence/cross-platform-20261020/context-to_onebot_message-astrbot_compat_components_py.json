@@ -1,0 +1,40 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:astrbot_compat/components.py:to_onebot_message",
+    "name": "to_onebot_message",
+    "kind": "Function",
+    "filePath": "astrbot_compat/components.py",
+    "startLine": 744,
+    "endLine": 763
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:tests/astrbot_compat/test_components.py:test_to_onebot_message_skips_forward_nodes",
+        "name": "test_to_onebot_message_skips_forward_nodes",
+        "filePath": "tests/astrbot_compat/test_components.py"
+      },
+      {
+        "uid": "Method:astrbot_compat/context.py:Context._deliver#4",
+        "name": "_deliver",
+        "filePath": "astrbot_compat/context.py"
+      },
+      {
+        "uid": "Method:astrbot_compat/events.py:AstrMessageEvent._send_components#1",
+        "name": "_send_components",
+        "filePath": "astrbot_compat/events.py"
+      }
+    ]
+  },
+  "outgoing": {},
+  "processes": [
+    {
+      "id": "proc_155_run_provider_request",
+      "name": "Run_provider_request → To_onebot_message",
+      "step_index": 4,
+      "step_count": 4
+    }
+  ]
+}

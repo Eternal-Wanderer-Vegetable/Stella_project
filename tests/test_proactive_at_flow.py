@@ -48,6 +48,14 @@ def ai_gateway_module():
     return ai_gateway
 
 
+@pytest.fixture()
+def registry_db(tmp_path, ai_gateway_module, monkeypatch):
+    """Give proactive group registration an isolated per-test SQLite file."""
+    path = tmp_path / "conversation-registry.db"
+    monkeypatch.setattr(ai_gateway_module, "DB_PATH", path)
+    return path
+
+
 class _FakeBot:
     self_id = "999"
 
@@ -187,6 +195,9 @@ async def test_targeted_context_reads_address_but_group_proactive_context_does_n
         msg_id=0,
         message="说句话",
         trigger="reply",
+        conversation_kind="group",
+        conversation_key="qq:9:group:1",
+        bot_id="9",
     )
     await pre_processors.build_user_context(targeted)
     assert targeted.preferred_address == "哥哥"
@@ -198,6 +209,9 @@ async def test_targeted_context_reads_address_but_group_proactive_context_does_n
         msg_id=0,
         message="随便聊聊",
         trigger="proactive",
+        conversation_kind="group",
+        conversation_key="qq:9:group:1",
+        bot_id="9",
     )
     await pre_processors.build_user_context(group_proactive)
     assert group_proactive.preferred_address is None
@@ -205,7 +219,7 @@ async def test_targeted_context_reads_address_but_group_proactive_context_does_n
 
 @pytest.mark.asyncio
 async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
-    ai_gateway_module, monkeypatch
+    ai_gateway_module, registry_db, monkeypatch
 ):
     """没有自然承接时，skip 不得发送、记账、统计或启动回应检测。"""
     gateway = ai_gateway_module
@@ -252,11 +266,12 @@ async def test_proactive_at_skip_has_no_visible_or_accounting_side_effects(
 
 @pytest.mark.asyncio
 async def test_proactive_at_normal_output_still_sends_and_records(
-    ai_gateway_module, monkeypatch, tmp_path
+    ai_gateway_module, registry_db, monkeypatch, tmp_path
 ):
     """正常生成结果仍沿用原有发送、主动发言统计与 @ 配额记账。"""
     gateway = ai_gateway_module
     from config import settings
+    from core.transport.outbound import DeliveryResult, DeliveryStatus
     from memory import social_store
     from memory.schema import create_memory_scope_versions_table
 
@@ -276,6 +291,7 @@ async def test_proactive_at_normal_output_still_sends_and_records(
     )
     record_at_mock = Mock()
     record_bot_lines = AsyncMock()
+    outbound_calls = []
     expression_sent = Mock()
     task = _FakeTask()
     create_task = Mock()
@@ -310,13 +326,30 @@ async def test_proactive_at_normal_output_still_sends_and_records(
     monkeypatch.setattr(gateway.expression_learning, "on_reply_sent", expression_sent)
     monkeypatch.setattr(gateway, "schedule_compact", Mock())
     monkeypatch.setattr(
+        gateway,
+        "get_outbound_service",
+        lambda: SimpleNamespace(
+            send=AsyncMock(
+                side_effect=lambda target, message, *, bot_handle: (
+                    outbound_calls.append((target, message, bot_handle))
+                    or DeliveryResult(target, DeliveryStatus.ACCEPTED, ("msg-1",))
+                )
+            )
+        ),
+    )
+    monkeypatch.setattr(
         gateway, "_delivery_plan_is_current", lambda _ctx, _plan, **_kw: True
     )
     create_task.side_effect = fake_create_task
     monkeypatch.setattr(gateway.asyncio, "create_task", create_task)
 
     assert await gateway._proactive_at_user(bot, 1) is True
-    bot.send_group_msg.assert_awaited_once()
+    assert len(outbound_calls) == 1
+    target_ref, outbound_message, bot_handle = outbound_calls[0]
+    assert target_ref.bot.self_id == "999"
+    assert target_ref.scene.kind == "group" and target_ref.scene.scene_id == "1"
+    assert bot_handle is bot
+    assert outbound_message.segments[0].target_id == "1001"
     assert proactive.marked == [1]
     assert proactive.recorded == [(1, ["你最近在玩什么游戏？"])]
     assert participation.notes == [(1, "proactive")]
@@ -332,7 +365,7 @@ async def test_proactive_at_normal_output_still_sends_and_records(
 
 @pytest.mark.asyncio
 async def test_proactive_group_skip_finishes_gate_without_side_effects(
-    ai_gateway_module, monkeypatch
+    ai_gateway_module, registry_db, monkeypatch
 ):
     """群级主动插话收到 skip 时，必须释放 ReplyGate 且不留下发送痕迹。"""
     gateway = ai_gateway_module
@@ -378,7 +411,7 @@ async def test_proactive_group_skip_finishes_gate_without_side_effects(
 
 @pytest.mark.asyncio
 async def test_participation_evidence_reaches_generation_and_skip_is_observed(
-    ai_gateway_module, monkeypatch
+    ai_gateway_module, registry_db, monkeypatch
 ):
     """Participation 的真实触发证据要进入 Prompt，skip 不得记为主动发言。"""
     gateway = ai_gateway_module

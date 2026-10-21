@@ -30,6 +30,11 @@
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
 doctor 也就报 warn），避免「明明能跑却提示 error」。
 
+当 `STELLA_ADAPTER_MODULES` 未启用 `nonebot.adapters.onebot.v11` 时，Doctor 会将
+OneBot 模式、端点、反向端口、正向连接和 token 检查标为不适用并跳过；因此
+`deploy start` 不会因 NapCat 未配置而阻止非 QQ Bot 启动。未设置该项时仍按默认
+OneBot V11 配置检查。其余环境检查照常执行。
+
 **每次改 `checks.py` 或 `report.py`，顺手重新导出一次 mock**（前端/安装器用真实结构预览，
 避免结构与后端漂移）：
 

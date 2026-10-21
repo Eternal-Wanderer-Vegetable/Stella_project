@@ -1,0 +1,2885 @@
+{
+  "schema_version": 1,
+  "assessment_date": "2026-10-21",
+  "environment": {
+    "venv": ".venv",
+    "python_version": "3.12.14",
+    "stella_home": "/tmp/stella-wp11-20261021",
+    "live_platform_connections": "not_used"
+  },
+  "source": {
+    "name": "NoneBot official adapter registry snapshot",
+    "url": "https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5",
+    "sha256": "6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+  },
+  "denominator": 32,
+  "interpretation": "An observed installed distribution is not a compatibility certification. Not-run and partial results never count as certified.",
+  "adapters": [
+    {
+      "platform": "OneBot V11",
+      "module_name": "nonebot.adapters.onebot.v11",
+      "package_name": "nonebot-adapter-onebot",
+      "priority": "P0",
+      "package_observation": {
+        "status": "observed_installed",
+        "version": "2.4.6",
+        "requires_python": ">=3.9,<4.0",
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "partial",
+        "observed": "WP09 isolated NoneBot driver registered the OneBot V11 adapter; no gateway transport lifecycle was exercised.",
+        "evidence": [
+          "docs/reports/2026-10-21-wp09-adapter-assembly-health.md"
+        ]
+      },
+      "normalizer": "core.transport.normalizers.OneBot11Normalizer",
+      "exporter": "core.transport.adapters.onebot_v11.OneBotV11Exporter",
+      "target_codec": "core.transport.adapters.onebot_v11.OneBotV11TargetCodec",
+      "capability_provider": "core.transport.capabilities.ONEBOT_V11_CAPABILITIES via StaticCapabilityProvider",
+      "scenarios": {
+        "status": "partial",
+        "covered": [
+          "OneBot V11 GroupMessageEvent plain-text normalization and reply to the same bot/group through fake UniMessage transport"
+        ],
+        "evidence": [
+          "tests/platforms/test_adapter_matrix.py::test_onebot_v11_real_group_event_routes_reply_to_same_bot_and_group"
+        ]
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "pass",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [
+            "docs/reports/2026-10-21-wp09-adapter-assembly-health.md"
+          ],
+          "reason": "Successful registration is confirmed only for the isolated local NoneBot driver."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "pass",
+          "live": "not_run",
+          "evidence": [
+            "tests/platforms/test_adapter_matrix.py::test_onebot_v11_real_group_event_routes_reply_to_same_bot_and_group"
+          ],
+          "reason": "Fixture covers a real adapter event and fake reply target; application dialogue flow and live exchange remain unverified."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "partial",
+          "live": "not_run",
+          "evidence": [
+            "tests/test_transport_outbound.py::test_onebot_exporter_preserves_opaque_ids_and_ordered_segments",
+            "tests/platforms/test_adapter_matrix.py::test_onebot_v11_real_group_event_routes_reply_to_same_bot_and_group"
+          ],
+          "reason": "Fake transport covers segment conversion, not OneBot endpoint acceptance or the full capability set."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: observed_installed."
+        },
+        {
+          "kind": "local_fixture_scope",
+          "result": "L0 local registration passed; L1 fixture passed; L3 fixture partial; no L2 or live certification."
+        }
+      ],
+      "blockers": [
+        "L2 fixture and live semantics are not fully verified.",
+        "L3 is partial fixture evidence only; media, permissions, send windows, and rate limits need adapter-specific acceptance.",
+        "No live OneBot account or gateway endpoint was used."
+      ]
+    },
+    {
+      "platform": "钉钉",
+      "module_name": "nonebot.adapters.ding",
+      "package_name": "nonebot-adapter-ding",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "飞书",
+      "module_name": "nonebot.adapters.feishu",
+      "package_name": "nonebot-adapter-feishu",
+      "priority": "P1",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Telegram",
+      "module_name": "nonebot.adapters.telegram",
+      "package_name": "nonebot-adapter-telegram",
+      "priority": "P1",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "QQ",
+      "module_name": "nonebot.adapters.qq",
+      "package_name": "nonebot-adapter-qq",
+      "priority": "P1",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "开黑啦",
+      "module_name": "nonebot.adapters.kaiheila",
+      "package_name": "nonebot-adapter-kaiheila",
+      "priority": "P1",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Mirai",
+      "module_name": "nonebot.adapters.mirai",
+      "package_name": "nonebot-adapter-mirai",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "OneBot V12",
+      "module_name": "nonebot.adapters.onebot.v12",
+      "package_name": "nonebot-adapter-onebot",
+      "priority": "P1",
+      "package_observation": {
+        "status": "observed_installed",
+        "version": "2.4.6",
+        "requires_python": ">=3.9,<4.0",
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: observed_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Console",
+      "module_name": "nonebot.adapters.console",
+      "package_name": "nonebot-adapter-console",
+      "priority": "P1",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "GitHub",
+      "module_name": "nonebot.adapters.github",
+      "package_name": "nonebot-adapter-github",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Ntchat",
+      "module_name": "nonebot.adapters.ntchat",
+      "package_name": "nonebot-adapter-ntchat",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Minecraft",
+      "module_name": "nonebot.adapters.minecraft",
+      "package_name": "nonebot-adapter-minecraft",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "BilibiliLive",
+      "module_name": "nonebot.adapters.bilibili",
+      "package_name": "nonebot-adapter-bilibili",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Walle-Q",
+      "module_name": "nonebot_adapter_walleq",
+      "package_name": "nonebot-adapter-walleq",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "大别野",
+      "module_name": "nonebot.adapters.villa",
+      "package_name": "nonebot-adapter-villa",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "RedProtocol",
+      "module_name": "nonebot.adapters.red",
+      "package_name": "nonebot-adapter-red",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Discord",
+      "module_name": "nonebot.adapters.discord",
+      "package_name": "nonebot-adapter-discord",
+      "priority": "P1",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Satori",
+      "module_name": "nonebot.adapters.satori",
+      "package_name": "nonebot-adapter-satori",
+      "priority": "P1",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "DoDo",
+      "module_name": "nonebot.adapters.dodo",
+      "package_name": "nonebot-adapter-dodo",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "RocketChat",
+      "module_name": "nonebot.adapters.rocketchat",
+      "package_name": "nonebot-adapter-rocketchat",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Kritor",
+      "module_name": "nonebot.adapters.kritor",
+      "package_name": "nonebot-adapter-kritor",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Tailchat",
+      "module_name": "nonebot_adapter_tailchat",
+      "package_name": "nonebot-adapter-tailchat",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Mail",
+      "module_name": "nonebot.adapters.mail",
+      "package_name": "nonebot-adapter-mail",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "黑盒语音",
+      "module_name": "nonebot.adapters.heybox",
+      "package_name": "nonebot-adapter-heybox",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "WXMP",
+      "module_name": "nonebot.adapters.wxmp",
+      "package_name": "nonebot-adapter-wxmp",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "nonebot-adapter-milky",
+      "module_name": "nonebot.adapters.milky",
+      "package_name": "nonebot-adapter-milky",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "nonebot-adapter-efchat",
+      "module_name": "nonebot.adapters.efchat",
+      "package_name": "nonebot-adapter-efchat",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "nonebot-adapter-vocechat",
+      "module_name": "nonebot.adapters.vocechat",
+      "package_name": "nonebot-adapter-vocechat",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "B站直播间",
+      "module_name": "nonebot.adapters.bilibili_live",
+      "package_name": "nonebot-adapter-bilibili-live",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "云湖适配器",
+      "module_name": "nonebot.adapters.yunhu",
+      "package_name": "nonebot-adapter-yunhu",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "WxClaw",
+      "module_name": "nonebot.adapters.wxclaw",
+      "package_name": "nonebot-adapter-wxclaw",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    },
+    {
+      "platform": "Matrix",
+      "module_name": "nonebot.adapters.matrix",
+      "package_name": "nonebot-adapter-matrix",
+      "priority": "P2",
+      "package_observation": {
+        "status": "not_installed",
+        "version": null,
+        "requires_python": null,
+        "source": "isolated execution environment importlib.metadata"
+      },
+      "driver_requirements": {
+        "status": "not_assessed",
+        "observed": null,
+        "evidence": []
+      },
+      "normalizer": null,
+      "exporter": null,
+      "target_codec": null,
+      "capability_provider": null,
+      "scenarios": {
+        "status": "not_assessed",
+        "covered": [],
+        "evidence": []
+      },
+      "permissions": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "send_windows": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "rate_limits": {
+        "status": "not_assessed",
+        "evidence": []
+      },
+      "maintenance": {
+        "status": "official_snapshot_only",
+        "evidence": [
+          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+        ]
+      },
+      "levels": {
+        "L0": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L1": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L2": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        },
+        "L3": {
+          "local": "not_run",
+          "fixture": "not_run",
+          "live": "not_run",
+          "evidence": [],
+          "reason": "No adapter-specific stage evidence was executed in WP11."
+        }
+      },
+      "final_status": "not_certified",
+      "status_evidence": [
+        {
+          "kind": "execution_scope",
+          "result": "No live platform endpoint or account was used in this isolated local work package."
+        },
+        {
+          "kind": "package_probe",
+          "result": "Package observation status: not_installed."
+        }
+      ],
+      "blockers": [
+        "L0-L3 platform-specific certification is incomplete.",
+        "No live exchange, account recovery, or clean-VM installation was executed."
+      ]
+    }
+  ]
+}

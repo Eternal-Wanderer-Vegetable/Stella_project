@@ -9,8 +9,9 @@
 复核整改后的硬合同：
 
 - **owner 绑定（F4）**：一切复制/已存在检查/撤回都按规范归属
-  ``owner_key = person:{platform}:{bot_id}:{user_id}``
-  （ownership.person_owner_key，检索缓存版本读的就是它）+ subject + fact_key；
+  ``owner_key = person:v2:{connection_id}:{subject_key}``
+  （检索缓存版本读的就是它）+ subject + connection + fact_key；
+  旧 QQ owner 只通过显式 legacy connection 别名读取；
   不再按 fact_key 全表匹配——不同用户同内容同键是正常数据，绝不能串。
 - **来源绑定（F4）**：授权前服务端核验 source row（group_messages 存在、
   作者=本人、会话匹配、非 Bot）；核验不过一律拒绝。
@@ -36,6 +37,8 @@ from typing import Literal
 
 from nonebot import logger
 
+from core.transport.keys import decode_subject_key_v2
+
 DEFAULT_PLATFORM = "qq"
 
 
@@ -52,8 +55,8 @@ class SharingGrant:
         platform: 平台（默认 qq）
         bot_id: Bot ID
         user_id: 用户 ID（授权发起者，必须是事实主体本人）
-        owner_key: 规范归属键 person:{platform}:{bot_id}:{user_id}
-        subject_key: 主体键 qq:{user_id}
+        owner_key: 规范归属键 person:v2:{connection_id}:{subject_key}
+        subject_key: 命名空间主体键
         fact_key: 事实键（memory 或 candidate 的 fact_key）
         source_conversation_key: 授权消息所在会话
         source_message_row_id: 授权消息的真实行 ID
@@ -76,6 +79,7 @@ class SharingGrant:
     status: Literal["pending", "active", "revoked"] = "pending"
     granted_at: str = ""
     revoked_at: str | None = None
+    connection_id: str = ""
 
 
 # ── 意图检测（有界词法，第一道防线；授权仍须来源核验） ──────────────────
@@ -147,26 +151,86 @@ def detect_revoke_intent(message_text: str) -> tuple[bool, str]:
 # ── 规范归属（复核 F4/F5 的单一真相） ──────────────────────────────────
 
 
-def canonical_owner(platform: str, bot_id: str | int, user_id: str | int) -> tuple[str, str, str]:
+def canonical_owner(
+    platform: str,
+    bot_id: str | int,
+    user_id: str | int,
+    *,
+    subject_key: str = "",
+    connection_id: str = "",
+) -> tuple[str, str, str]:
     """(owner_type, owner_key, subject_key)——与 ownership/retrieval_v2 同一键。"""
-    from memory.ownership import OWNER_TYPE_PERSON, person_owner_key
+    from memory.ownership import (
+        OWNER_TYPE_PERSON,
+        person_owner_key,
+        person_owner_key_for_subject,
+    )
 
     platform = str(platform or DEFAULT_PLATFORM)
     bot = str(bot_id or "")
     user = str(user_id or "")
-    return (
-        OWNER_TYPE_PERSON,
-        person_owner_key(platform, bot, user),
-        f"{platform}:{user}",
+    if subject_key and connection_id:
+        return (
+            OWNER_TYPE_PERSON,
+            person_owner_key_for_subject(connection_id, subject_key),
+            subject_key,
+        )
+    return OWNER_TYPE_PERSON, person_owner_key(platform, bot, user), f"{platform}:{user}"
+
+
+def _legacy_qq_subject_alias(subject_key: str, connection_id: str, bot_id: str) -> str:
+    """Return a legacy QQ subject only for the explicit legacy connection scope."""
+    if connection_id != f"legacy-qq:{bot_id}" or not subject_key:
+        return ""
+    try:
+        identity_domain, raw_user_id = decode_subject_key_v2(subject_key)
+    except ValueError:
+        return ""
+    return f"qq:{raw_user_id}" if identity_domain == "qq:client" else ""
+
+
+def _find_sharing_grant(
+    cursor: sqlite3.Cursor,
+    bot_id: str | int,
+    user_id: str | int,
+    fact_key: str,
+    *,
+    platform: str,
+    subject_key: str,
+    connection_id: str,
+) -> tuple[object, ...] | None:
+    """Find a grant within its identity, with one explicit legacy QQ alias."""
+    query = (
+        "SELECT grant_id, status, owner_key, subject_key, connection_id "
+        "FROM personal_memory_sharing WHERE bot_id = ? AND user_id = ? "
+        "AND fact_key = ? AND subject_key = ? AND connection_id = ?"
     )
+    if subject_key:
+        if not connection_id:
+            return None
+        row = cursor.execute(
+            query,
+            (str(bot_id), str(user_id), fact_key, subject_key, connection_id),
+        ).fetchone()
+        if row:
+            return row
+        alias = _legacy_qq_subject_alias(subject_key, connection_id, str(bot_id))
+        if alias:
+            return cursor.execute(
+                query,
+                (str(bot_id), str(user_id), fact_key, alias, ""),
+            ).fetchone()
+        return None
+    return cursor.execute(
+        query,
+        (str(bot_id), str(user_id), fact_key, f"{platform}:{user_id}", ""),
+    ).fetchone()
 
 
 # ── 表 ─────────────────────────────────────────────────────────────────
 
 
-def create_sharing_authorization_table(conn: sqlite3.Connection) -> None:
-    """创建共享授权表（幂等）。v18 起带规范归属绑定列。"""
-    conn.execute("""
+SHARING_AUTHORIZATION_TABLE_DDL = """
         CREATE TABLE IF NOT EXISTS personal_memory_sharing (
             grant_id INTEGER PRIMARY KEY AUTOINCREMENT,
             bot_id TEXT NOT NULL,
@@ -174,6 +238,7 @@ def create_sharing_authorization_table(conn: sqlite3.Connection) -> None:
             platform TEXT NOT NULL DEFAULT 'qq',
             owner_key TEXT NOT NULL DEFAULT '',
             subject_key TEXT NOT NULL DEFAULT '',
+            connection_id TEXT NOT NULL DEFAULT '',
             fact_key TEXT NOT NULL,
             source_conversation_key TEXT NOT NULL DEFAULT '',
             source_message_row_id INTEGER NOT NULL DEFAULT 0,
@@ -182,9 +247,14 @@ def create_sharing_authorization_table(conn: sqlite3.Connection) -> None:
             granted_at TEXT NOT NULL,
             revoked_at TEXT,
             scope_version INTEGER NOT NULL DEFAULT 0,
-            UNIQUE(bot_id, user_id, fact_key)
+            UNIQUE(bot_id, user_id, subject_key, connection_id, fact_key)
         )
-    """)
+    """
+
+
+def create_sharing_authorization_table(conn: sqlite3.Connection) -> None:
+    """创建共享授权表（幂等），按主体与连接区分同裸 ID 授权。"""
+    conn.execute(SHARING_AUTHORIZATION_TABLE_DDL)
 
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_sharing_bot_user_status
@@ -200,6 +270,61 @@ def create_sharing_authorization_table(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_sharing_fact_key
         ON personal_memory_sharing(fact_key)
     """)
+
+
+def migrate_sharing_authorization_table_v22(conn: sqlite3.Connection) -> int:
+    """Rebuild the legacy raw-ID unique key while preserving each grant row."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='personal_memory_sharing'"
+    ).fetchone()
+    if row is None:
+        create_sharing_authorization_table(conn)
+        return 0
+    columns = {str(item[1]) for item in conn.execute(
+        "PRAGMA table_info(personal_memory_sharing)"
+    ).fetchall()}
+    table_sql = str(row[0] or "").lower().replace(" ", "").replace("\n", "")
+    if "connection_id" in columns and "unique(bot_id,user_id,subject_key,connection_id,fact_key)" in table_sql:
+        return 0
+
+    expressions = {
+        "grant_id": "grant_id",
+        "bot_id": "bot_id",
+        "user_id": "user_id",
+        "platform": "platform" if "platform" in columns else "'qq'",
+        "owner_key": "owner_key" if "owner_key" in columns else "''",
+        "subject_key": "subject_key" if "subject_key" in columns else "''",
+        "connection_id": "connection_id" if "connection_id" in columns else "''",
+        "fact_key": "fact_key",
+        "source_conversation_key": (
+            "source_conversation_key" if "source_conversation_key" in columns else "''"
+        ),
+        "source_message_row_id": (
+            "source_message_row_id" if "source_message_row_id" in columns else "0"
+        ),
+        "audience": "audience" if "audience" in columns else "'USER_SHARED'",
+        "status": "status" if "status" in columns else "'pending'",
+        "granted_at": "granted_at" if "granted_at" in columns else "''",
+        "revoked_at": "revoked_at" if "revoked_at" in columns else "NULL",
+        "scope_version": "scope_version" if "scope_version" in columns else "0",
+    }
+    target_columns = ", ".join(expressions)
+    selected_values = ", ".join(expressions.values())
+    temp_name = "personal_memory_sharing_v22_new"
+    conn.execute(f"DROP TABLE IF EXISTS {temp_name}")
+    conn.execute(
+        SHARING_AUTHORIZATION_TABLE_DDL.replace(
+            "personal_memory_sharing", temp_name
+        )
+    )
+    copied = conn.execute(
+        f"INSERT INTO {temp_name} ({target_columns}) SELECT {selected_values} "
+        "FROM personal_memory_sharing"
+    ).rowcount
+    conn.execute("DROP TABLE personal_memory_sharing")
+    conn.execute(f"ALTER TABLE {temp_name} RENAME TO personal_memory_sharing")
+    create_sharing_authorization_table(conn)
+    return max(int(copied or 0), 0)
 
 
 def create_sharing_copies_table(conn: sqlite3.Connection) -> None:
@@ -219,6 +344,9 @@ def verify_grant_source(
     user_id: str | int,
     source_conversation_key: str,
     source_message_row_id: int,
+    *,
+    subject_key: str = "",
+    connection_id: str = "",
 ) -> tuple[bool, str]:
     """服务端核验授权来源消息：行存在、作者=本人、会话匹配、非 Bot。
 
@@ -229,16 +357,26 @@ def verify_grant_source(
     if not row_id or not key:
         return False, "source_unspecified"
     try:
+        requested_identity = bool(subject_key or connection_id)
+        if requested_identity:
+            columns = {
+                str(item[1])
+                for item in conn.execute("PRAGMA table_info(group_messages)").fetchall()
+            }
+            if not {"subject_key", "connection_id"}.issubset(columns):
+                return False, "source_identity_schema_incomplete"
+        selected = "user_id, conversation_key, bot_id, source_kind"
+        if requested_identity:
+            selected += ", subject_key, connection_id"
         row = conn.execute(
-            "SELECT user_id, conversation_key, bot_id, source_kind"
-            " FROM group_messages WHERE id = ?",
-            (row_id,),
+            f"SELECT {selected} FROM group_messages WHERE id = ?", (row_id,)
         ).fetchone()
     except sqlite3.OperationalError as e:
         return False, f"source_lookup_failed:{e}"
     if row is None:
         return False, "source_row_missing"
-    author, conv_key, row_bot, source_kind = (str(c or "") for c in row)
+    values = tuple(str(c or "") for c in row)
+    author, conv_key, row_bot, source_kind = values[:4]
     if author != str(user_id):
         return False, "source_author_mismatch"
     if conv_key != key:
@@ -247,6 +385,10 @@ def verify_grant_source(
         return False, "source_bot_mismatch"
     if source_kind == "BOT_SELF":
         return False, "source_is_bot"
+    if subject_key and values[4] != subject_key:
+        return False, "source_subject_mismatch"
+    if connection_id and values[5] != connection_id:
+        return False, "source_connection_mismatch"
     return True, "ok"
 
 
@@ -571,6 +713,9 @@ def grant_sharing_authorization(
     fact_key: str,
     source_conversation_key: str,
     source_message_row_id: int,
+    *,
+    subject_key: str = "",
+    connection_id: str = "",
 ) -> tuple[bool, str]:
     """授予共享授权（幂等；复核 F3/F4/F5/F13 合同）。
 
@@ -588,30 +733,54 @@ def grant_sharing_authorization(
         (success, reason)：reason ∈ already_active / granted / pending /
         pending_no_fact / regranted / source_unverified:* / invalid_input
     """
-    _owner_type, owner_key, subject_key = canonical_owner(platform, bot_id, user_id)
+    expected_subject_key = str(subject_key or "")
+    if expected_subject_key and not connection_id:
+        return False, "connection_identity_missing"
+    _owner_type, owner_key, subject_key = canonical_owner(
+        platform, bot_id, user_id,
+        subject_key=expected_subject_key,
+        connection_id=connection_id,
+    )
     fact_key = str(fact_key or "").strip()
     if not owner_key or not subject_key or not fact_key:
         return False, "invalid_input"
 
     ok, reason = verify_grant_source(
-        conn, platform, bot_id, user_id, source_conversation_key, source_message_row_id
+        conn, platform, bot_id, user_id, source_conversation_key, source_message_row_id,
+        subject_key=expected_subject_key,
+        connection_id=connection_id,
     )
     if not ok:
         return False, reason
 
     cursor = conn.cursor()
-    existing = cursor.execute(
-        """
-        SELECT grant_id, status FROM personal_memory_sharing
-        WHERE bot_id = ? AND user_id = ? AND fact_key = ?
-        """,
-        (str(bot_id), str(user_id), fact_key),
-    ).fetchone()
+    existing = _find_sharing_grant(
+        cursor,
+        bot_id,
+        user_id,
+        fact_key,
+        platform=platform,
+        subject_key=expected_subject_key,
+        connection_id=connection_id,
+    )
 
     now = _utcnow()
 
     if existing:
         grant_id, status = int(existing[0]), str(existing[1])
+        stored_owner_key, stored_subject_key, stored_connection_id = (
+            str(existing[2] or ""), str(existing[3] or ""), str(existing[4] or "")
+        )
+        # A permitted legacy QQ match stays attached to its legacy owner. Do not
+        # relabel historical copies as belonging to a newly introduced connection.
+        legacy_match = bool(
+            expected_subject_key
+            and stored_connection_id == ""
+            and stored_subject_key != expected_subject_key
+        )
+        grant_owner_key = stored_owner_key if legacy_match else owner_key
+        grant_subject_key = stored_subject_key if legacy_match else subject_key
+        grant_connection_id = stored_connection_id if legacy_match else connection_id
         if status == "active":
             return True, "already_active"
 
@@ -622,11 +791,12 @@ def grant_sharing_authorization(
                 UPDATE personal_memory_sharing
                 SET status = 'active', granted_at = ?, revoked_at = NULL,
                     source_conversation_key = ?, source_message_row_id = ?,
-                    owner_key = ?, subject_key = ?, platform = ?
+                    owner_key = ?, subject_key = ?, connection_id = ?, platform = ?
                 WHERE grant_id = ?
                 """,
                 (now, str(source_conversation_key), int(source_message_row_id),
-                 owner_key, subject_key, str(platform or DEFAULT_PLATFORM), grant_id),
+                 grant_owner_key, grant_subject_key, grant_connection_id,
+                 str(platform or DEFAULT_PLATFORM), grant_id),
             )
             restored = 0
             ledger = cursor.execute(
@@ -640,7 +810,7 @@ def grant_sharing_authorization(
                 cursor.execute(
                     f"UPDATE {table_name} SET status = ?, updated_at = CURRENT_TIMESTAMP"
                     " WHERE id = ? AND audience = 'USER_SHARED' AND owner_key = ?",
-                    (prior_status or "ACTIVE", record_id, owner_key),
+                    (prior_status or "ACTIVE", record_id, grant_owner_key),
                 )
                 if cursor.rowcount and cursor.rowcount > 0:
                     restored += 1
@@ -652,16 +822,16 @@ def grant_sharing_authorization(
             if restored == 0:
                 # 台账为空（旧数据）→ 重新复制兜底
                 restored = _replicate_as_user_shared(
-                    conn, grant_id, owner_key, subject_key, fact_key
+                    conn, grant_id, grant_owner_key, grant_subject_key, fact_key
                 )
             _write_copy_evidence(
-                conn, grant_id, owner_key, subject_key, fact_key,
+                conn, grant_id, grant_owner_key, grant_subject_key, fact_key,
                 str(source_conversation_key), int(source_message_row_id),
             )
             _write_audit(conn, "regrant", grant_id, bot_id, user_id, fact_key,
                          {"restored": restored,
                           "source_row": int(source_message_row_id)})
-            _bump_owner_version(conn, owner_key)
+            _bump_owner_version(conn, grant_owner_key)
             return True, "regranted"
 
         # pending → 事实仍未整合：更新来源绑定后维持 pending
@@ -669,13 +839,14 @@ def grant_sharing_authorization(
             """
             UPDATE personal_memory_sharing
             SET source_conversation_key = ?, source_message_row_id = ?,
-                granted_at = ?, owner_key = ?, subject_key = ?, platform = ?
+                granted_at = ?, owner_key = ?, subject_key = ?, connection_id = ?, platform = ?
             WHERE grant_id = ?
             """,
             (str(source_conversation_key), int(source_message_row_id), now,
-             owner_key, subject_key, str(platform or DEFAULT_PLATFORM), grant_id),
+             grant_owner_key, grant_subject_key, grant_connection_id,
+             str(platform or DEFAULT_PLATFORM), grant_id),
         )
-        fact_table = _find_private_fact(cursor, owner_key, subject_key, fact_key)
+        fact_table = _find_private_fact(cursor, grant_owner_key, grant_subject_key, fact_key)
         if fact_table is None:
             return True, "pending"
         cursor.execute(
@@ -683,15 +854,15 @@ def grant_sharing_authorization(
             (grant_id,),
         )
         copied = _replicate_as_user_shared(
-            conn, grant_id, owner_key, subject_key, fact_key
+            conn, grant_id, grant_owner_key, grant_subject_key, fact_key
         )
         _write_copy_evidence(
-            conn, grant_id, owner_key, subject_key, fact_key,
+            conn, grant_id, grant_owner_key, grant_subject_key, fact_key,
             str(source_conversation_key), int(source_message_row_id),
         )
         _write_audit(conn, "grant", grant_id, bot_id, user_id, fact_key,
                      {"copied": copied, "from": "pending"})
-        _bump_owner_version(conn, owner_key)
+        _bump_owner_version(conn, grant_owner_key)
         return True, "granted"
 
     # 全新授权
@@ -700,13 +871,13 @@ def grant_sharing_authorization(
     cursor.execute(
         """
         INSERT INTO personal_memory_sharing
-        (bot_id, user_id, platform, owner_key, subject_key, fact_key,
+        (bot_id, user_id, platform, owner_key, subject_key, connection_id, fact_key,
          source_conversation_key, source_message_row_id, audience, status,
          granted_at, scope_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'USER_SHARED', ?, ?, 0)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'USER_SHARED', ?, ?, 0)
         """,
         (str(bot_id), str(user_id), str(platform or DEFAULT_PLATFORM),
-         owner_key, subject_key, fact_key, str(source_conversation_key),
+         owner_key, subject_key, connection_id or "", fact_key, str(source_conversation_key),
          int(source_message_row_id), status, now),
     )
     grant_id = int(cursor.lastrowid)
@@ -736,7 +907,7 @@ def promote_pending_grants_for_fact(
 
     由整合写入路径在**同一事务**内调用（PERSON/PRIVATE_ONLY 行落库后）。
     owner_key/subject_key 直接传整合写入时的归属列
-    （person:{platform}:{bot}:{uid}，与授权表同一绑定键）；bot_id/user_id
+    （V2 connection+subject 或明确 legacy owner，与授权表同一绑定键）；bot_id/user_id
     仅用于审计行，可省略。返回提升的授权数。
     """
     owner_key = str(owner_key or "")
@@ -782,6 +953,9 @@ def revoke_sharing_authorization(
     bot_id: str | int,
     user_id: str | int,
     fact_key: str,
+    *,
+    subject_key: str = "",
+    connection_id: str = "",
 ) -> tuple[bool, str]:
     """撤回共享授权（复核 F4/F5/F13 合同）。
 
@@ -789,24 +963,34 @@ def revoke_sharing_authorization(
     grant 的副本），原状态记入台账 prior_status 供 regrant 恢复；bump 规范
     owner 版本键（strict，失败抛出让调用方整体回滚）。须在调用方事务内。
     """
-    _owner_type, owner_key, subject_key = canonical_owner(platform, bot_id, user_id)
+    if subject_key and not connection_id:
+        return False, "connection_identity_missing"
+    _owner_type, owner_key, subject_key = canonical_owner(
+        platform, bot_id, user_id,
+        subject_key=subject_key,
+        connection_id=connection_id,
+    )
     fact_key = str(fact_key or "").strip()
     if not owner_key or not fact_key:
         return False, "invalid_input"
 
     cursor = conn.cursor()
-    grant = cursor.execute(
-        """
-        SELECT grant_id, status FROM personal_memory_sharing
-        WHERE bot_id = ? AND user_id = ? AND fact_key = ?
-        """,
-        (str(bot_id), str(user_id), fact_key),
-    ).fetchone()
+    grant = _find_sharing_grant(
+        cursor,
+        bot_id,
+        user_id,
+        fact_key,
+        platform=platform,
+        subject_key=subject_key if connection_id else "",
+        connection_id=connection_id,
+    )
 
     if not grant:
         return False, "not_found"
 
     grant_id, status = int(grant[0]), str(grant[1])
+    stored_owner_key = str(grant[2] or "") or owner_key
+    stored_subject_key = str(grant[3] or "") or subject_key
     if status == "revoked":
         return True, "already_revoked"
 
@@ -842,7 +1026,7 @@ def revoke_sharing_authorization(
         cursor.execute(
             f"UPDATE {table_name} SET status = 'DEPRECATED', updated_at = CURRENT_TIMESTAMP"
             " WHERE id = ? AND audience = 'USER_SHARED' AND owner_key = ?",
-            (record_id, owner_key),
+            (record_id, stored_owner_key),
         )
         affected += cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
 
@@ -859,13 +1043,13 @@ def revoke_sharing_authorization(
                 f"UPDATE {table_name} SET status = 'DEPRECATED', updated_at = CURRENT_TIMESTAMP"
                 " WHERE fact_key = ? AND audience = 'USER_SHARED'"
                 " AND owner_key = ? AND subject_key = ?",
-                (fact_key, owner_key, subject_key),
+                (fact_key, stored_owner_key, stored_subject_key),
             )
             affected += cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
 
     _write_audit(conn, "revoke", grant_id, bot_id, user_id, fact_key,
                  {"affected": affected})
-    _bump_owner_version(conn, owner_key)
+    _bump_owner_version(conn, stored_owner_key)
     return True, "revoked"
 
 
@@ -874,9 +1058,16 @@ def get_user_shared_facts(
     bot_id: str | int,
     user_id: str | int,
     platform: str = DEFAULT_PLATFORM,
+    *,
+    subject_key: str = "",
+    connection_id: str = "",
 ) -> list[str]:
     """获取用户已授权共享的事实键列表（按规范 owner 绑定）。"""
-    _owner_type, owner_key, _subject_key = canonical_owner(platform, bot_id, user_id)
+    _owner_type, owner_key, _subject_key = canonical_owner(
+        platform, bot_id, user_id,
+        subject_key=subject_key,
+        connection_id=connection_id,
+    )
     rows = conn.execute(
         """
         SELECT fact_key FROM personal_memory_sharing

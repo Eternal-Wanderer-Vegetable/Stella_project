@@ -16,6 +16,15 @@
 
 > 「配置」页的环境变量表单由 `deploy/env_schema` 从 `settings.py` 的 `_env*` 调用自动生成、按键名前缀分组——新引入的配置节（如 `SOCIAL_*`）会作为原始字段自动出现，带服务端校验但没有定制文案；改动需重启 Bot 才生效。
 
+「平台」页（`/#/platforms`）可配置 Bot 适配器模块列表，并查看当前生效列表与
+进程环境变量覆盖状态。保存写入 `STELLA_HOME/.env`，需重启 Bot；适配器依赖由
+部署者自行安装，Stella 不会下载或执行未审核的第三方包。OneBot V11 仍可配置多条
+正向 WS 地址；读取时只返回 token 是否已设置，不返回 token 明文。其他适配器的
+连接健康度在当前探针不支持时显示为未知。相关 API 为
+`GET/PUT /api/v1/platform/adapters`、`GET/PUT /api/v1/platform/onebot` 与
+`GET /api/v1/platform/link`，均受管理鉴权保护；写操作记入审计。API 路由先于 SPA
+静态回退注册，因此 `/api/v1/*` 不会被前端页面接管。
+
 忘记密码 / 想重新初始化：
 
 ```bash

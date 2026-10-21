@@ -264,6 +264,19 @@ class SchedulerRuntime:
             or task.revision != run.task_revision
         ):
             return  # 认领扫描负责清扫；这里是防御
+        if (
+            task.target is None
+            or run.target is None
+            or task.target != run.target
+            or not task.scope_key
+            or task.scope_key != run.scope_key
+        ):
+            self.store.transition_run(
+                run.run_id, self.worker_id,
+                from_states=(RunState.CLAIMED,), to_state=RunState.FAILED,
+                error="delivery_target_unbound_or_mismatched",
+            )
+            return
         lock = self.group_locks.setdefault(run.group_id, asyncio.Lock())
         async with lock:
             await self._execute_locked(run, task)
@@ -310,7 +323,7 @@ class SchedulerRuntime:
         try:
             return message_flow.begin_trace(
                 root_kind="scheduled_task", origin="worker",
-                scope=f"qq:{run.group_id}",
+                scope=task.scope_key or f"qq:{run.group_id}",
                 source_message_key=f"sched:run:{run.run_id}",
                 trigger=task.task_id, trace_id=f"sch-{run.run_id}",
                 process_kind="scheduling")
@@ -329,7 +342,10 @@ class SchedulerRuntime:
                                    reason_code="runner_missing")
             return
         context = build_scheduled_context(
-            task.group_id, max_chars=self.context_max_chars
+            task.group_id,
+            connection_id=task.target.bot.connection_id if task.target else "",
+            conversation_key=task.scope_key,
+            max_chars=self.context_max_chars,
         )
         limits = AgentRunLimits(
             max_model_rounds=task.max_model_rounds,

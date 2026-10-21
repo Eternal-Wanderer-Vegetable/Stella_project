@@ -270,10 +270,10 @@ class TestScopeSql:
         assert run(other_user) == [5]
 
 
-# ── Origin v2 ────────────────────────────────────────────────
+# ── Origin v3 (with v1/v2 compatibility) ─────────────────────
 
 
-class TestOriginV2:
+class TestOriginV3:
     def _v1_qq(self):
         return {
             "schema_version": 1,
@@ -304,8 +304,26 @@ class TestOriginV2:
         origin = Origin.from_dict(data)
         assert origin.conversation_kind == "webchat"
         assert origin.peer_id == "webchat"
+        assert origin.delivery_target().bot.connection_id == "webchat-local"
 
-    def test_v2_roundtrip(self):
+    def test_v1_qq_without_verifiable_bot_fails_closed(self):
+        from cometa.models import Origin
+
+        data = self._v1_qq()
+        data["bot_id"] = ""
+        with pytest.raises(ValueError, match="refusing to guess"):
+            Origin.from_dict(data)
+
+    def test_v3_route_mismatch_is_rejected(self):
+        from cometa.models import Origin
+
+        origin = Origin.from_dict(self._v1_qq())
+        data = origin.to_dict()
+        data["delivery_target"]["scene"]["scene_id"] = "999"
+        with pytest.raises(ValueError):
+            Origin.from_dict(data)
+
+    def test_legacy_origin_serializes_with_v3_target(self):
         from cometa.models import ORIGIN_SCHEMA_VERSION, Origin
 
         origin = Origin(
@@ -319,12 +337,15 @@ class TestOriginV2:
             conversation_key="qq:10000:private:20001",
         )
         data = origin.to_dict()
-        assert data["origin_schema_version"] == ORIGIN_SCHEMA_VERSION == 2
+        assert data["origin_schema_version"] == ORIGIN_SCHEMA_VERSION == 3
+        assert data["bot_ref"]["connection_id"] == "legacy-qq:10000"
+        assert data["delivery_target"]["scene"]["scene_id"] == "20001"
         # 旧字段一个不少：旧读端仍能拿到 conversation_id 等
         for key in self._v1_qq():
             assert key in data
         restored = Origin.from_dict(data)
-        assert restored == origin
+        assert restored.delivery_target() == origin.delivery_target()
+        assert restored.conversation_key == origin.conversation_key
 
     def test_v2_missing_kind_rejected(self):
         from cometa.models import Origin
@@ -355,7 +376,7 @@ class TestOriginV2:
                 requester_id="r", conversation_kind="channel",
             )
 
-    def test_target_builder_v2_aware(self):
+    def test_target_builder_v3_aware(self):
         """_target_from_task_row：private 的 group_id 必须为空（计划 §6.8）。"""
         from cometa.models import Origin
         from cometa.store import CometaStore
@@ -380,9 +401,12 @@ class TestOriginV2:
         assert target["conversation_kind"] == "private"
         assert target["peer_id"] == "20001"
         assert target["group_id"] == ""  # 私聊绝不填群号
+        assert target["delivery_target"]["bot"]["self_id"] == "10000"
+        assert target["delivery_target"]["scene"]["kind"] == "private"
         legacy = CometaStore._target_from_task_row(conn, "t2")
         assert legacy["conversation_kind"] == "group"
         assert legacy["group_id"] == "263402786"  # 旧行为不变
+        assert legacy["delivery_target"]["bot"]["connection_id"] == "legacy-qq:10000"
 
 
 # ── 会话内身份声明与纠错（多人身份修复计划 §6.3，T03–T06/T15） ─────────
@@ -667,6 +691,14 @@ def test_resolve_correction_target_priority():
     ) == ""
     # 无目标 → unknown
     assert resolve_correction_target(author_user_id="2003") == ""
+
+
+def test_resolve_correction_target_accepts_opaque_user_ids():
+    assert resolve_correction_target(
+        author_user_id="actor:10",
+        mentioned_user_ids=("member:007/猫",),
+        bot_id="bot/01",
+    ) == "member:007/猫"
 
 
 def _bot_bubble_db(conn):

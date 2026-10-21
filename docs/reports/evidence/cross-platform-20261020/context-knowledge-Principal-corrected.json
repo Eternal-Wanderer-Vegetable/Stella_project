@@ -1,0 +1,73 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:knowledge/acl.py:Principal",
+    "name": "Principal",
+    "kind": "Class",
+    "filePath": "knowledge/acl.py",
+    "startLine": 45,
+    "endLine": 63
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "imports": [
+      {
+        "uid": "File:capability/providers/knowledge.py",
+        "name": "knowledge.py",
+        "filePath": "capability/providers/knowledge.py"
+      },
+      {
+        "uid": "File:knowledge/service.py",
+        "name": "service.py",
+        "filePath": "knowledge/service.py"
+      },
+      {
+        "uid": "File:knowledge/store.py",
+        "name": "store.py",
+        "filePath": "knowledge/store.py"
+      },
+      {
+        "uid": "File:tests/knowledge/test_domain_acl_lifecycle.py",
+        "name": "test_domain_acl_lifecycle.py",
+        "filePath": "tests/knowledge/test_domain_acl_lifecycle.py"
+      },
+      {
+        "uid": "File:tests/knowledge/test_service.py",
+        "name": "test_service.py",
+        "filePath": "tests/knowledge/test_service.py"
+      },
+      {
+        "uid": "File:webui/services/kb.py",
+        "name": "kb.py",
+        "filePath": "webui/services/kb.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:knowledge/acl.py:Principal.iter_principals#1",
+        "name": "iter_principals",
+        "filePath": "knowledge/acl.py"
+      }
+    ],
+    "has_property": [
+      {
+        "uid": "Property:knowledge/acl.py:Principal.group_id",
+        "name": "group_id",
+        "filePath": "knowledge/acl.py"
+      },
+      {
+        "uid": "Property:knowledge/acl.py:Principal.space",
+        "name": "space",
+        "filePath": "knowledge/acl.py"
+      },
+      {
+        "uid": "Property:knowledge/acl.py:Principal.user_id",
+        "name": "user_id",
+        "filePath": "knowledge/acl.py"
+      }
+    ]
+  },
+  "processes": []
+}

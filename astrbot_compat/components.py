@@ -17,6 +17,7 @@ import json
 import logging
 import tempfile
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -713,12 +714,58 @@ def _build_component(seg_type: str, data: dict) -> BaseMessageComponent:
 
 def from_onebot_dicts(segs: list) -> list[BaseMessageComponent]:
     """`[{"type":..., "data":{...}}, ...]` -> 组件列表。"""
+    return from_platform_message(segs)
+
+
+def from_platform_message(message: Any) -> list[BaseMessageComponent]:
+    """Convert common text/type/data message chains into AstrBot components.
+
+    This reader is adapter-neutral: it accepts strings, mappings, and segment
+    objects that expose ``type`` and ``data``. Sending still uses an explicit
+    platform exporter such as :func:`to_onebot_message`.
+    """
     result: list[BaseMessageComponent] = []
-    for seg in segs:
-        if not isinstance(seg, dict):
+    if message is None:
+        return result
+    if isinstance(message, str):
+        return [Plain(message)] if message else result
+    if isinstance(message, (Mapping, BaseMessageComponent)) or hasattr(message, "type"):
+        segments = [message]
+    else:
+        try:
+            segments = iter(message)
+        except TypeError:
+            return [Plain(str(message))]
+
+    aliases = {"plain": "text", "mention": "at", "quote": "reply"}
+    for seg in segments:
+        if isinstance(seg, BaseMessageComponent):
+            result.append(seg)
             continue
-        t = str(seg.get("type", ""))
-        data = seg.get("data") or {}
+        if isinstance(seg, str):
+            if seg:
+                result.append(Plain(seg))
+            continue
+        if isinstance(seg, Mapping):
+            raw_type = seg.get("type", "")
+            raw_data = seg.get("data")
+            if raw_data is None:
+                raw_data = {key: value for key, value in seg.items() if key != "type"}
+        else:
+            raw_type = getattr(seg, "type", "")
+            raw_data = getattr(seg, "data", {})
+            if not raw_type and isinstance(getattr(seg, "text", None), str):
+                result.append(Plain(seg.text))
+                continue
+        t = str(getattr(raw_type, "value", raw_type) or "").strip().lower()
+        t = aliases.get(t, t)
+        if t == "atall":
+            t = "at"
+            if isinstance(raw_data, Mapping):
+                raw_data = {**raw_data, "qq": raw_data.get("qq") or "all"}
+        data = dict(raw_data) if isinstance(raw_data, Mapping) else {}
+        if t == "at" and not data.get("qq") and data.get("id") is not None:
+            data["qq"] = data["id"]
         try:
             result.append(_build_component(t, data))
         except Exception as e:
@@ -728,17 +775,8 @@ def from_onebot_dicts(segs: list) -> list[BaseMessageComponent]:
 
 
 def from_onebot_message(msg: Message) -> list[BaseMessageComponent]:
-    """OneBot Message -> 组件列表，未知 type 降级为 `Unknown`。"""
-    result: list[BaseMessageComponent] = []
-    for seg in msg:
-        t = seg.type
-        data = seg.data or {}
-        try:
-            result.append(_build_component(t, data))
-        except Exception as e:
-            logger.warning(f"[components] seg 转换失败 {t}: {e}")
-            result.append(Unknown(text=f"[{t}]"))
-    return result
+    """Compatibility alias for :func:`from_platform_message`."""
+    return from_platform_message(msg)
 
 
 def to_onebot_message(chain: list) -> Message:
@@ -804,6 +842,7 @@ __all__ = [
     "Video",
     "from_onebot_dicts",
     "from_onebot_message",
+    "from_platform_message",
     "split_forward_nodes",
     "to_onebot_message",
 ]

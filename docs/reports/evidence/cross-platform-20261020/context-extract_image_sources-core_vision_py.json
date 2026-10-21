@@ -1,0 +1,76 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:core/vision.py:extract_image_sources",
+    "name": "extract_image_sources",
+    "kind": "Function",
+    "filePath": "core/vision.py",
+    "startLine": 117,
+    "endLine": 140
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_chat",
+        "name": "handle_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+        "name": "handle_private_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:is_chat_trigger",
+        "name": "is_chat_trigger",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:is_private_trigger",
+        "name": "is_private_trigger",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:record_group_chat",
+        "name": "record_group_chat",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:tests/test_vision.py:test_extract_dedupes_and_caps",
+        "name": "test_extract_dedupes_and_caps",
+        "filePath": "tests/test_vision.py"
+      },
+      {
+        "uid": "Function:tests/test_vision.py:test_extract_falls_back_to_file_and_path",
+        "name": "test_extract_falls_back_to_file_and_path",
+        "filePath": "tests/test_vision.py"
+      },
+      {
+        "uid": "Function:tests/test_vision.py:test_extract_includes_quoted_message_images",
+        "name": "test_extract_includes_quoted_message_images",
+        "filePath": "tests/test_vision.py"
+      },
+      {
+        "uid": "Function:tests/test_vision.py:test_extract_picks_image_segments_only",
+        "name": "test_extract_picks_image_segments_only",
+        "filePath": "tests/test_vision.py"
+      },
+      {
+        "uid": "Function:tests/test_vision.py:test_extract_quoted_can_be_disabled",
+        "name": "test_extract_quoted_can_be_disabled",
+        "filePath": "tests/test_vision.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/vision.py:_collect_segment_images",
+        "name": "_collect_segment_images",
+        "filePath": "core/vision.py"
+      }
+    ]
+  },
+  "processes": []
+}

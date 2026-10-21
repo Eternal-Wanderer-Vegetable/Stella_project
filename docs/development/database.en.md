@@ -2,13 +2,17 @@
 
 [中文](database.md) | English · [Documentation](../README.en.md)
 
+### Scheduling Database
+
+The scheduling database is managed by `stella_project/plugins/bot_main/scheduling/migrations.py` and currently uses `SCHEMA_VERSION = 2`. The service applies migrations by version; migration tests must use temporary databases. The v1→v2 migration adds exact delivery target, subject, and scope fields to task/run/audit/quota records. A legacy task becomes sendable only when its QQ Bot and group destination can be bound without ambiguity; unverifiable historical tasks are retained but never sent. Historical quota stays in an isolated legacy scope and is not counted against a new connection. The executor resolves BotRef and validates the complete target again before every delivery.
+
 ```bash
 python -m memory.schema --dry-run    # Preview pending migrations
 python -m memory.schema              # Run migrations
 python -m memory.schema --backup     # Back up only
 ```
 
-**Migration principle: Additive Migration** -- only add fields and indexes; never delete data. Every `ALTER` is preceded by a `PRAGMA table_info` check and is idempotent and rerunnable. Before the first migration, an automatic backup is created as `stella_memory_backup.db`.
+**Migration principle: add first, preserve every row.** Ordinary upgrades add fields and indexes. When a unique or primary-key constraint must change, use a versioned transaction to create a replacement table, copy every row, and swap tables. Every `ALTER` is preceded by a `PRAGMA table_info` check and is idempotent and rerunnable. Before the first migration, an automatic backup is created as `stella_memory_backup.db`.
 
 ### Correct Way to Add a Column
 

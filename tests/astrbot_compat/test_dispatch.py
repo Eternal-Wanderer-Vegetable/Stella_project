@@ -120,6 +120,14 @@ def test_dispatch_is_cheap_without_plugins(make_event, fake_bot):
     assert _run(make_event("/echo hi"), fake_bot) is False
 
 
+def test_dispatch_does_not_run_qq_plugins_for_other_adapters(
+    demo_plugin, make_event, fake_bot,
+):
+    fake_bot.adapter.get_name = lambda: "Telegram"
+    assert _run(make_event("/echo hello"), fake_bot) is False
+    assert fake_bot.sent == []
+
+
 def test_command_group_dispatch(register_plugin, make_event, fake_bot):
     class GroupDemo(Star):
         @filter.command_group("math")

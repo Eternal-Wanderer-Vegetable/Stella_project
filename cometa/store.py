@@ -584,15 +584,16 @@ class CometaStore:
 
     @staticmethod
     def _target_from_origin(origin: Origin, task_id: str, group_id: str = "") -> dict:
-        """从 Origin 构造 v2 投递 target（计划 §6.8）。
+        """从 Origin 构造含版本化 DeliveryTarget 的通知 target（计划 §6.8）。
 
         submit_task 的 ack 与 _target_from_task_row（deadline/finish/input/cancel）
         共用同一构造器——两条路径 target 字段必须一致，否则「同一任务一半通知
         群格式一半私聊格式」。private 的 group_id 恒空。
         """
-        kind = origin.conversation_kind or (
-            "webchat" if origin.platform == "webchat" else "group"
-        )
+        delivery_target = origin.delivery_target()
+        if delivery_target is None:
+            raise ValueError("Origin route is not verifiable; refusing to queue a notification")
+        kind = delivery_target.scene.kind
         return {
             "platform": origin.platform,
             "bot_id": origin.bot_id,
@@ -600,10 +601,11 @@ class CometaStore:
             "requester_id": origin.requester_id,
             "reply_to_message_id": origin.reply_to_message_id,
             "conversation_kind": kind,
-            "peer_id": origin.peer_id or origin.conversation_id,
+            "peer_id": delivery_target.scene.scene_id,
             "conversation_key": origin.conversation_key,
             "group_id": group_id if kind == "group" else "",
             "task_id": task_id,
+            "delivery_target": delivery_target.dump(),
         }
 
     @staticmethod

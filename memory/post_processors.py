@@ -55,7 +55,12 @@ async def parse_output(ctx: ChatContext) -> ChatContext:
         return ctx
     from core.dialogue_attribution import parse_reply_envelope
 
-    envelope, error = parse_reply_envelope(raw)
+    envelope, error = parse_reply_envelope(
+        raw,
+        allow_legacy_qq_targets=(
+            getattr(getattr(ctx, "user_ref", None), "identity_domain", "") == "qq:client"
+        ),
+    )
     if envelope is None:
         # 解析失败不把块外 raw 当台词；只允许一个受限服务器澄清退路。
         ctx.typed_reply = {}

@@ -8,7 +8,7 @@
 |---|---|
 | `lint` | `ruff check .` (Python 3.11) |
 | `security` | `pip-audit -r requirements.txt` (blocking) + `bandit` (non-blocking; report uploaded as an artifact) |
-| `test` | 3.10 / 3.11 / 3.12 version matrix, `pytest tests/ --cov=. --cov-branch -n auto`, and coverage report uploaded as an artifact |
+| `test` | 3.10 / 3.11 / 3.12 version matrix; installs base and optional platform bridge dependencies from `requirements-platform.lock`, runs `pytest tests/ --cov=. --cov-branch -n auto`, and uploads coverage as an artifact |
 | `cli` | The Rust CLI (`cli/`): `cargo fmt --check` + `clippy -- -D warnings` + `cargo test`, plus a help-text smoke test over the subcommand list (doctor/init/start/stop/restart/status/logs/upgrade/migrate/plugin/capabilities/manifest/compose) so refactors cannot silently drop commands |
 | `windows-native` | Runs `pytest tests/windows` on windows-latest — the native matrix for process trees, upgrades, and installation reliability (sentinels/PIDs/activation records depend on real Windows semantics) |
 | `documentation` | Stdlib link/anchor, language-pair, redirect, state checks and six positive/negative contract tests |
@@ -21,10 +21,12 @@
 **Reproduce the CI environment locally**:
 
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt pytest pytest-cov pytest-xdist
+pip install -r requirements-platform.lock -r requirements-dev.txt pytest pytest-asyncio pytest-cov pytest-xdist pytest-timeout
 ruff check .
 pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 ```
+
+`requirements-platform.lock` includes the base runtime dependencies and the Alconna / Uninfo bridge dependencies declared by `requirements-platform.in`. The default QQ/WebChat installation continues to use only `requirements.txt`.
 
 `pip-audit` is blocking, so CI goes red when an upstream dependency exposes a CVE. If you determine that an upstream issue cannot be fixed immediately, you may temporarily add `|| true` to that step, but record the reason.
 

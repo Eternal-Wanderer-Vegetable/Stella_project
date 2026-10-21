@@ -497,7 +497,33 @@ class PlatformAdapterTypeFilter(HandlerFilter):
 
     def filter(self, event: Any, cfg: Any = None) -> bool:
         _ = (event, cfg)
-        return bool(self.platform_adapter_type & PlatformAdapterType.AIOCQHTTP)
+        get_platform_name = getattr(event, "get_platform_name", None)
+        if not callable(get_platform_name):
+            return False
+        try:
+            platform_name = "".join(
+                char.lower() for char in str(get_platform_name()) if char.isalnum()
+            )
+        except Exception:
+            return False
+        actual_type = {
+            "aiocqhttp": PlatformAdapterType.AIOCQHTTP,
+            "onebotv11": PlatformAdapterType.AIOCQHTTP,
+            "qqofficial": PlatformAdapterType.QQOFFICIAL,
+            "qqofficialwebhook": PlatformAdapterType.QQOFFICIAL,
+            "wechatpadpro": PlatformAdapterType.WECHATPADPRO,
+            "telegram": PlatformAdapterType.TELEGRAM,
+            "discord": PlatformAdapterType.DISCORD,
+            "lark": PlatformAdapterType.LARK,
+            "dingtalk": PlatformAdapterType.DINGTALK,
+            "wecom": PlatformAdapterType.WECOM,
+            "wecomaibot": PlatformAdapterType.WECOM,
+            "slack": PlatformAdapterType.SLACK,
+            "webchat": PlatformAdapterType.WEBCHAT,
+            "satori": PlatformAdapterType.SATORI,
+            "misskey": PlatformAdapterType.MISSKEY,
+        }.get(platform_name)
+        return actual_type is not None and bool(self.platform_adapter_type & actual_type)
 
 
 # ============================================================

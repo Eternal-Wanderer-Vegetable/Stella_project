@@ -1,0 +1,138 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Class:core/runtime/turn_service.py:TurnService",
+    "name": "TurnService",
+    "kind": "Class",
+    "filePath": "core/runtime/turn_service.py",
+    "startLine": 261,
+    "endLine": 747
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "extends": [
+      {
+        "uid": "Class:core/pipeline.py:Pipeline",
+        "name": "Pipeline",
+        "filePath": "core/pipeline.py"
+      },
+      {
+        "uid": "Class:scripts/evaluate_dialogue_attribution.py:EvaluationTurnService",
+        "name": "EvaluationTurnService",
+        "filePath": "scripts/evaluate_dialogue_attribution.py"
+      }
+    ],
+    "imports": [
+      {
+        "uid": "File:core/pipeline.py",
+        "name": "pipeline.py",
+        "filePath": "core/pipeline.py"
+      },
+      {
+        "uid": "File:core/runtime/facade.py",
+        "name": "facade.py",
+        "filePath": "core/runtime/facade.py"
+      },
+      {
+        "uid": "File:scripts/evaluate_dialogue_attribution.py",
+        "name": "evaluate_dialogue_attribution.py",
+        "filePath": "scripts/evaluate_dialogue_attribution.py"
+      },
+      {
+        "uid": "File:tests/conftest.py",
+        "name": "conftest.py",
+        "filePath": "tests/conftest.py"
+      },
+      {
+        "uid": "File:tests/observability/test_message_flow_runtime.py",
+        "name": "test_message_flow_runtime.py",
+        "filePath": "tests/observability/test_message_flow_runtime.py"
+      },
+      {
+        "uid": "File:tests/runtime/regen_traces.py",
+        "name": "regen_traces.py",
+        "filePath": "tests/runtime/regen_traces.py"
+      },
+      {
+        "uid": "File:tests/runtime/runtime_harness.py",
+        "name": "runtime_harness.py",
+        "filePath": "tests/runtime/runtime_harness.py"
+      },
+      {
+        "uid": "File:tests/runtime/test_turn_service.py",
+        "name": "test_turn_service.py",
+        "filePath": "tests/runtime/test_turn_service.py"
+      },
+      {
+        "uid": "File:tests/test_jargon_service.py",
+        "name": "test_jargon_service.py",
+        "filePath": "tests/test_jargon_service.py"
+      },
+      {
+        "uid": "File:tests/webui/test_webui_chat.py",
+        "name": "test_webui_chat.py",
+        "filePath": "tests/webui/test_webui_chat.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "has_method": [
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.__init__#1",
+        "name": "__init__",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService._finalize_trace#1",
+        "name": "_finalize_trace",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService._run_post_hooks#3",
+        "name": "_run_post_hooks",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.finalize_turn#1",
+        "name": "finalize_turn",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.generate_reply#1",
+        "name": "generate_reply",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.prepare_turn#1",
+        "name": "prepare_turn",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.register_post_hook#2",
+        "name": "register_post_hook",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.register_pre_hook#2",
+        "name": "register_pre_hook",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.run#1",
+        "name": "run",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.set_llm_backend#1",
+        "name": "set_llm_backend",
+        "filePath": "core/runtime/turn_service.py"
+      },
+      {
+        "uid": "Method:core/runtime/turn_service.py:TurnService.set_planner#1",
+        "name": "set_planner",
+        "filePath": "core/runtime/turn_service.py"
+      }
+    ]
+  },
+  "processes": []
+}

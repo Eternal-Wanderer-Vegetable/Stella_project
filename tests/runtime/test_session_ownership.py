@@ -74,6 +74,27 @@ async def test_reset_cancels_inflight_and_bumps_epoch(tmp_path):
         await h.stop()
 
 
+async def test_reset_fence_is_local_to_its_session(tmp_path):
+    h = harness.RuntimeHarness(tmp_path)
+    try:
+        await h.start()
+        await h.facade.submit_turn(KEY_A, h.pipeline, h.ctx("A session"))
+        await h.facade.submit_turn(KEY_B, h.pipeline, h.ctx("B session"))
+        state_a = h.facade._key_state(KEY_A)
+        state_b = h.facade._key_state(KEY_B)
+        turn_a, epoch_a = state_a.last_turn_id, state_a.owner_epoch
+        turn_b, epoch_b = state_b.last_turn_id, state_b.owner_epoch
+
+        assert h.facade.delivery_is_current(KEY_A, turn_a, epoch_a)
+        assert h.facade.delivery_is_current(KEY_B, turn_b, epoch_b)
+        await h.facade.reset_session(KEY_A)
+
+        assert not h.facade.delivery_is_current(KEY_A, turn_a, epoch_a)
+        assert h.facade.delivery_is_current(KEY_B, turn_b, epoch_b)
+    finally:
+        await h.stop()
+
+
 async def test_turn_records_written_to_independent_store(tmp_path):
     h = harness.RuntimeHarness(tmp_path)
     try:

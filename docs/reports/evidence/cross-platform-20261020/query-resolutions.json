@@ -1,0 +1,27 @@
+{
+  "resolutions": {
+    "impact-file-session-handoff.md.json": "impact-file-session-handoff-retry.json",
+    "context-conversation_key-core_conversation_py.json": "context-exact-conversation-key.json",
+    "impact-conversation_key-core_conversation_py.json": "impact-exact-conversation-key.json",
+    "context-RetrievalRequest-memory_rust_native_src_retrieval_rs.json": "context-exact-rust-retrieval-request.json",
+    "impact-RetrievalRequest-memory_rust_native_src_retrieval_rs.json": "impact-exact-rust-retrieval-request.json",
+    "context-promote_candidate_atomic-memory_rust_native_src_promotion_rs.json": "context-exact-promote.json",
+    "impact-promote_candidate_atomic-memory_rust_native_src_promotion_rs.json": "impact-exact-promote.json",
+    "context-knowledge-Principal.json": "context-knowledge-Principal-corrected.json",
+    "impact-knowledge-Principal.json": "impact-knowledge-Principal-corrected.json",
+    "graph-label-counts.json": "graph-node-types-fixed.json",
+    "pdg-evidence-slice.json": "pdg-evidence-slice-depth64.json",
+    "impact-file-docs_plans_2026-10-20-gitnexus-cross-platform-plan.md.json": "new plan absent from baseline index; exact reference search empty; documentation-only addition",
+    "process-proc_464_handle_toggle.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_439_handle_toggle.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_181_handle_reload.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_184_handle_toggle.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_272_handle_reload.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs",
+    "process-proc_185_handle_toggle.json": "trace-2.json through trace-5.json (resource label, not process id); graph-processes-all.json retains all IDs"
+  },
+  "notes": [
+    "Initial Date.now durations can be negative due host clock adjustment; followup uses monotonic time; timing is not a correctness gate.",
+    "API requests for upstream commit hashes hit anonymous GitHub rate limit; registry frozen by content SHA256, no upstream commit claim.",
+    "Opaque callbacks and native serde/PyO3 remain graph boundaries, supplemented by source references."
+  ]
+}

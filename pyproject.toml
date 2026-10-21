@@ -28,6 +28,12 @@ dev = [
     "pyright[nodejs]",
     "ruff"
 ]
+# 跨平台消息桥接与结构化会话信息。适配器仍按所选平台单独安装；
+# 此 extra 只提供通用消息/会话合同，避免默认 QQ 部署增加依赖。
+platform = [
+    "nonebot-plugin-alconna==0.62.1",
+    "nonebot-plugin-uninfo==0.11.2",
+]
 # MCP Client 的可选依赖（capability/providers/mcp）。刻意不进默认依赖：
 # MCP_ENABLED 默认 false，绝大多数部署用不到；SDK 缺失时对应 Server 报
 # degraded，Stella 其余功能不受影响（见 capability/providers/mcp/client.py）。
@@ -50,13 +56,9 @@ include = ["stella_project*"]
 [tool.nonebot]
 plugin_dirs = ["stella_project/plugins"]
 builtin_plugins = ["echo", "single_session"]
-
-[tool.nonebot.adapters]
-nonebot-adapter-onebot = [
-    { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" },
-    { name = "OneBot V12", module_name = "nonebot.adapters.onebot.v12" }
-]
-"@local" = []
+# bot.py resolves this list from STELLA_ADAPTER_MODULES. Keeping the CLI-side
+# pre-registration list empty ensures disabled adapters are not loaded implicitly.
+adapters = []
 
 [tool.nonebot.plugins]
 "@local" = []

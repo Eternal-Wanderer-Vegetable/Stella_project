@@ -154,7 +154,7 @@ def _provision_db(db_path: Path, sessions: list[dict[str, Any]]) -> None:
                         ts.strftime("%Y-%m-%d %H:%M:%S"),
                         # conversation_key 必须显式：留空会让快照（空串）与证据列
                         # （legacy 回填值）不一致，晋升期 verify 断链
-                        f"replay:group:{session['group_id']}",
+                        f"qq:stella-replay:group:{session['group_id']}",
                         "stella-replay",
                     ),
                 )

@@ -1166,6 +1166,18 @@ Anthropic 风格任务技能（`SKILL.md` + `scripts/` + `references/`）的发�
 配置校验在启动期执行：负数预算、非法 workspace 根、以及「开网络但无
 白名单」会**拒绝启动**并在日志里逐条点名。
 
+## 多适配器注册
+
+`STELLA_ADAPTER_MODULES` 控制 Bot 启动时导入并注册的 NoneBot 适配器模块，逗号分隔，按填写顺序注册：
+
+```env
+STELLA_ADAPTER_MODULES=nonebot.adapters.onebot.v11
+```
+
+默认只启用 OneBot V11。其他适配器需先由用户安装对应包，再填写模块路径；Stella 不会自动下载第三方代码。启用项缺少包或传递依赖、或与当前 `DRIVER` 不兼容时，启动会给出适配器与原因并失败，不会悄悄回退到 QQ。留空、`none`、`off` 或 `disabled` 表示不注册 Bot 适配器，WebChat 等非 Bot 入口仍可使用。
+
+只有 OneBot V11 有本项目当前使用的事件心跳与 `get_status()` 探活。状态接口会为其他适配器保留连接状态，并把健康度标为未知；不会将其显示成断线。多条 OneBot V11 连接分别监测，整体健康状态要求每条连接都健康。
+
 ## OneBot 连接
 
 Bot 通过 OneBot V11 WebSocket 与 NapCat 通信。**NapCat 侧必须先登录**：用
@@ -1263,7 +1275,7 @@ PID 文件与 ownership manifest 同样位于 `.stella/instances/<instance-id>/`
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `LINK_MONITOR_ENABLED` | `true` | 是否启用链路监测 |
-| `LINK_MONITOR_TIMEOUT` | `300` | 距上次收到**任何** OneBot 事件（含心跳元事件）超过该秒数，才做一次主动探活 |
+| `LINK_MONITOR_TIMEOUT` | `300` | 每条 OneBot V11 连接距上次收到**任何** OneBot 事件（含心跳元事件）超过该秒数，才对该 Bot 做一次主动探活 |
 | `LINK_MONITOR_CHECK_INTERVAL` | `60` | 定时检查间隔（秒） |
 | `LINK_MONITOR_ALERT_INTERVAL` | `300` | 告警节流（秒）：断线期间不重复刷同样的 error |
 
@@ -1271,7 +1283,7 @@ PID 文件与 ownership manifest 同样位于 `.stella/instances/<instance-id>/`
 没有收益（见 `design_docs/deprecated_napcat_manager.md`）。Bot 只负责监测链路并给出
 排查提示，NapCat 的启停与登录由 NapCatQQ Desktop 人工完成。
 
-> **静默 ≠ 断线。** NapCat 周期性发 `meta_event.heartbeat`（默认 15s），群里没人
+> 每条 OneBot V11 连接独立监测。NapCat 周期性发 `meta_event.heartbeat`（默认 15s），群里没人
 > 说话时心跳仍在。判定超时后 Bot 会主动调用一次 `get_status()` 二次确认：探活成功
 > 只说明「没人说话」，探活失败才是真断开。只挂 `on_message` 会把安静的群误判为
 > 链路中断（2026-08-14 重启循环的成因）。

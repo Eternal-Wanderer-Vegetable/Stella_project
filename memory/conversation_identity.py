@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from nonebot import logger
 
 from config import DB_PATH
-from memory.conversation_projection import canonical_message_id_text
+from memory.conversation_projection import parse_qq_message_id
 
 # 声明种类（claim_kind 持久化值）
 CLAIM_SELF_ALIAS = "self_alias"
@@ -475,7 +475,7 @@ def resolve_correction_target(
         )
     else:
         return ""
-    if not target or target == author or not target.isdigit():
+    if not target or target == author:
         return ""
     if bot and target == bot:
         return ""
@@ -500,8 +500,9 @@ def _bot_bubble_recipient(
     旧库缺该列时保守降级为 unknown——绝不只凭 group_key 独自推断跨 Bot
     归属（同群多 Bot 会共享 group_id）。
     """
-    target = canonical_message_id_text(reply_to_msg_id)
-    if not target:
+    # BOT_SELF recipients currently use the QQ legacy INTEGER message-id column.
+    target = parse_qq_message_id(reply_to_msg_id)
+    if target is None:
         return ""
     key = str(conversation_key or "")
     try:
@@ -512,7 +513,7 @@ def _bot_bubble_recipient(
             " WHERE group_id = ? AND msg_id = ? AND source_kind = 'BOT_SELF'"
             " AND user_id = ?"
         )
-        params: list = [str(group_key), int(target), str(bot_id)]
+        params: list = [str(group_key), target, str(bot_id)]
         if not _has_group_messages_column(cursor, "conversation_key") or not key:
             # 旧库缺 canonical 列，或调用方未提供 key：无法校验 scope，
             # 保守 unknown——绝不只凭 group_key 独自推断跨 Bot 归属

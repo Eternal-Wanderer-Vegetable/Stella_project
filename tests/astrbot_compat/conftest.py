@@ -30,6 +30,7 @@ class FakeBot:
         self.sent: list[str] = []
         self.actions: list[tuple[str, dict]] = []
         self.action_results: dict[str, Any] = {}
+        self.adapter = types.SimpleNamespace(get_name=lambda: "OneBot V11")
 
     async def send(self, event: Any, message: Any) -> None:
         _ = event

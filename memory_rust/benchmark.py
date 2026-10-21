@@ -50,16 +50,18 @@ def _case_request(
     case: dict[str, Any],
     db_path: Path,
     semantic_scores: dict[str, float] | None,
-) -> tuple[RetrievalRequest, int, int]:
+) -> tuple[RetrievalRequest, int, str]:
     scenario = case.get("scenario") or {}
     try:
         group_id = int(scenario.get("group_id", 1))
     except (TypeError, ValueError):
         group_id = 1
-    try:
-        user_id = int(scenario.get("user_id", 0))
-    except (TypeError, ValueError):
-        user_id = 0
+    raw_user_id = scenario.get("user_id", "0")
+    user_id = (
+        str(raw_user_id)
+        if isinstance(raw_user_id, (str, int)) and not isinstance(raw_user_id, bool)
+        else "0"
+    )
 
     query = case.get("input") or ""
     trigger = case.get(

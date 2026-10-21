@@ -1,0 +1,138 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:memory_rust/native/src/promotion.rs:verify_candidate_evidence",
+    "name": "verify_candidate_evidence",
+    "kind": "Function",
+    "filePath": "memory_rust/native/src/promotion.rs",
+    "startLine": 744,
+    "endLine": 942
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:promote_inner",
+        "name": "promote_inner",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:candidate_cas_digest",
+        "name": "candidate_cas_digest",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:evidence_set_digest",
+        "name": "evidence_set_digest",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Function:memory_rust/native/src/promotion.rs:source_snapshot_is_current",
+        "name": "source_snapshot_is_current",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Struct:memory_rust/native/src/promotion.rs:EvidenceDigestRow",
+        "name": "EvidenceDigestRow",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      }
+    ],
+    "accesses": [
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:Candidate.content",
+        "name": "content",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:Candidate.content",
+        "name": "content",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:Candidate.user_id",
+        "name": "user_id",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:EffectiveOwner.audience",
+        "name": "audience",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:EffectiveOwner.fact_key",
+        "name": "fact_key",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:EffectiveOwner.fact_key",
+        "name": "fact_key",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:EffectiveOwner.owner_key",
+        "name": "owner_key",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:EffectiveOwner.owner_key",
+        "name": "owner_key",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.candidate_id",
+        "name": "candidate_id",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.candidate_id",
+        "name": "candidate_id",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.candidate_id",
+        "name": "candidate_id",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.cas_schema_version",
+        "name": "cas_schema_version",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.expected_candidate_digest",
+        "name": "expected_candidate_digest",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.expected_candidate_digest",
+        "name": "expected_candidate_digest",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.expected_evidence_digest",
+        "name": "expected_evidence_digest",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.expected_evidence_digest",
+        "name": "expected_evidence_digest",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.expected_scope_versions",
+        "name": "expected_scope_versions",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      },
+      {
+        "uid": "Property:memory_rust/native/src/promotion.rs:PromotionRequest.expected_scope_versions",
+        "name": "expected_scope_versions",
+        "filePath": "memory_rust/native/src/promotion.rs"
+      }
+    ]
+  },
+  "processes": []
+}

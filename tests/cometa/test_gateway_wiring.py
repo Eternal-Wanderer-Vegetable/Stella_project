@@ -63,6 +63,9 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
     delivery_db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(settings, "DB_PATH", delivery_db)
     monkeypatch.setattr(gateway, "DB_PATH", delivery_db)
+    import config.spaces as spaces
+
+    monkeypatch.setattr(spaces, "resolve_space", lambda _group_id: "test-space")
     with sqlite3.connect(delivery_db) as conn:
         create_memory_scope_versions_table(conn)
     monkeypatch.setattr(social_store, "_TABLES_READY", False)
@@ -131,8 +134,18 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
         lambda: SimpleNamespace(has_new_messages_to_consolidate=lambda *a, **k: 0),
     )
     monkeypatch.setattr(gateway, "budget_blocked", lambda role: False)
-    send = AsyncMock(return_value=888)  # OneBot v11 send 返回 message_id
-    monkeypatch.setattr(gateway.chat_handler, "send", send)
+    from core.transport.outbound import DeliveryResult, DeliveryStatus
+
+    class FakeOutboundService:
+        def __init__(self):
+            self.calls = []
+
+        async def send(self, target, message, *, bot_handle=None):
+            self.calls.append((target, message, bot_handle))
+            return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("888",))
+
+    outbound = FakeOutboundService()
+    monkeypatch.setattr(gateway, "get_outbound_service", lambda: outbound)
     finish = AsyncMock(side_effect=FinishedException)
     monkeypatch.setattr(gateway.chat_handler, "finish", finish)
     monkeypatch.setattr(gateway, "_record_bot_lines", AsyncMock())
@@ -151,8 +164,11 @@ async def test_handle_chat_cometa_ack_branch_end_to_end(
         await gateway.handle_chat(bot, event)
 
     # ack 经 cometa_bridge.deliver_ack 认领并恰发送一次
-    send.assert_awaited_once()
-    assert ack_text[:12] in send.call_args.args[0].extract_plain_text()
+    assert len(outbound.calls) == 1
+    target, message, _bot_handle = outbound.calls[0]
+    assert target.bot.self_id == "9"
+    assert target.scene.kind == "group"
+    assert "".join(segment.text for segment in message.segments if segment.text) == ack_text
     finish.assert_awaited_once_with()
     # v16 契约：origin ctx 随行（多人身份修复计划 §6.2）
     gateway._record_bot_lines.assert_awaited_once_with(

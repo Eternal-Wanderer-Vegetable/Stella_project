@@ -24,6 +24,7 @@ class FakeBot:
 
     def __init__(self, self_id="10000", *, upload_error=None, forward_error=None):
         self.self_id = self_id
+        self.adapter = type("Adapter", (), {"get_name": lambda self: "OneBot V11"})()
         self.uploads: list[dict] = []
         self.forwards: list[dict] = []
         self.sent: list[dict] = []
@@ -62,7 +63,23 @@ def sender_factory(tmp_path: Path):
         if monkeypatch is not None:
             import nonebot
 
-            monkeypatch.setattr(nonebot, "get_bot", lambda bot_id=None: bot)
+            from core.transport.outbound import DeliveryResult, DeliveryStatus
+            from stella_project.plugins.bot_main import transport_delivery
+
+            monkeypatch.setattr(nonebot, "get_bots", lambda: {bot.self_id: bot})
+
+            async def fake_send(target, message):
+                body = "".join(
+                    segment.text if segment.kind.value == "text"
+                    else f"[{segment.kind.value}:{segment.target_id}]"
+                    for segment in message.segments
+                )
+                bot.sent.append({"group_id": target.scene.scene_id, "message": body})
+                return DeliveryResult(
+                    target, DeliveryStatus.ACCEPTED, (str(len(bot.sent) + 500),)
+                )
+
+            monkeypatch.setattr(transport_delivery, "send_background_message", fake_send)
         artifacts_dir = artifacts_dir or tmp_path / "artifacts"
         sender = cometa_bridge.make_notification_sender(
             artifacts_dir, delivery or DeliveryConfig()
@@ -144,7 +161,10 @@ class TestSenderFlows:
 
     @pytest.mark.asyncio
     async def test_upload_failure_falls_back_to_forward(self, sender_factory, tmp_path, monkeypatch):
-        bot = FakeBot(upload_error=RuntimeError("upload rejected"))
+        class ActionFailed(Exception):  # noqa: N818 - matches the adapter exception name
+            pass
+
+        bot = FakeBot(upload_error=ActionFailed("upload rejected"))
         sender, _, artifacts = sender_factory(bot=bot, monkeypatch=monkeypatch)
         ws = artifacts / "task-1"
         ws.mkdir(parents=True)
@@ -164,7 +184,10 @@ class TestSenderFlows:
     async def test_both_failures_fall_back_to_text_with_note(
         self, sender_factory, tmp_path, monkeypatch
     ):
-        bot = FakeBot(upload_error=RuntimeError("no"), forward_error=RuntimeError("nope"))
+        class ActionFailed(Exception):  # noqa: N818 - matches the adapter exception name
+            pass
+
+        bot = FakeBot(upload_error=ActionFailed("no"), forward_error=ActionFailed("nope"))
         sender, _, artifacts = sender_factory(bot=bot, monkeypatch=monkeypatch)
         ws = artifacts / "task-1"
         ws.mkdir(parents=True)
@@ -211,3 +234,39 @@ class TestSenderFlows:
         sender, _bot, _ = sender_factory(monkeypatch=monkeypatch)
         receipt = await sender(_target(platform="webchat"), "x", None)
         assert receipt == "server_emitted"
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_upload_does_not_fall_back_or_send_text(
+        self, sender_factory, tmp_path, monkeypatch
+    ):
+        sender, bot, artifacts = sender_factory(
+            bot=FakeBot(upload_error=RuntimeError("timed out")),
+            monkeypatch=monkeypatch,
+        )
+        task_dir = artifacts / "task-1"
+        task_dir.mkdir(parents=True)
+        (task_dir / "final_text.md").write_text("内容" * 400, encoding="utf-8")
+        with pytest.raises(RuntimeError, match="result unknown"):
+            await sender(_target(), "任务完成", _payload())
+        assert not bot.forwards
+        assert not bot.sent
+
+    @pytest.mark.asyncio
+    async def test_cover_unknown_after_upload_never_sends_another_fallback(
+        self, sender_factory, tmp_path, monkeypatch
+    ):
+        import stella_project.plugins.bot_main.transport_delivery as transport_delivery
+
+        sender, bot, artifacts = sender_factory(monkeypatch=monkeypatch)
+        task_dir = artifacts / "task-1"
+        task_dir.mkdir(parents=True)
+        (task_dir / "final_text.md").write_text("内容" * 400, encoding="utf-8")
+
+        async def ambiguous(target, message):
+            raise RuntimeError("cover timeout")
+
+        monkeypatch.setattr(transport_delivery, "send_background_message", ambiguous)
+        with pytest.raises(RuntimeError, match="cover timeout"):
+            await sender(_target(), "任务完成", _payload())
+        assert bot.uploads
+        assert not bot.forwards

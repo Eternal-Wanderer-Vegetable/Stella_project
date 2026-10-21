@@ -50,7 +50,28 @@ def space_owner_key(space: str) -> str:
 
 
 def person_owner_key(platform: str, bot_id: str, user_id: str | int) -> str:
+    """Legacy owner key retained for QQ rows and historical callers."""
     return f"person:{platform}:{bot_id}:{user_id}"
+
+
+def person_owner_key_for_subject(connection_id: str, subject_key: str) -> str:
+    """Build a connection-isolated owner key from a trusted transport subject."""
+    connection = str(connection_id or "").strip()
+    subject = str(subject_key or "").strip()
+    if not connection or not subject.startswith("u2."):
+        raise ValueError("transport person owner requires connection_id and a v2 subject key")
+    return f"person:v2:{connection}:{subject}"
+
+
+def _legacy_subject_aliases(
+    *, identity_domain: str, raw_user_id: str, bot_id: str
+) -> tuple[tuple[str, str], ...]:
+    """Return only the proven QQ-client alias for pre-v2 stored owner rows."""
+    raw = str(raw_user_id or "")
+    bot = str(bot_id or "")
+    if identity_domain != "qq:client" or not raw.isdecimal() or int(raw) <= 0 or not bot:
+        return ()
+    return ((person_owner_key("qq", bot, raw), f"qq:{raw}"),)
 
 
 def person_compat_space(owner_key: str, audience: str) -> str:
@@ -103,6 +124,8 @@ class MemoryAccessScope:
     person_owner_key: str = ""
     subject_key: str = ""
     person_audiences: tuple[str, ...] = ()
+    # Explicit compatibility pairs are read-only aliases, never used for new writes.
+    person_aliases: tuple[tuple[str, str], ...] = ()
 
     @property
     def has_person(self) -> bool:
@@ -115,6 +138,7 @@ class MemoryAccessScope:
                 "person": self.person_owner_key,
                 "subject": self.subject_key,
                 "audiences": list(self.person_audiences),
+                "aliases": [list(pair) for pair in self.person_aliases],
                 "policy": POLICY_VERSION,
             },
             ensure_ascii=False,
@@ -151,18 +175,44 @@ def scope_for_chat_context(ctx: Any, *, memory_space: str) -> "MemoryAccessScope
     kind = str(getattr(ctx, "conversation_kind", "") or "")
     if kind not in ("group", "private", "webchat"):
         return None
-    user_id = getattr(ctx, "user_id", 0) or 0
-    try:
-        if int(user_id) <= 0:
-            return None
-    except (TypeError, ValueError):
+    from core.transport.models import UserRef
+
+    user_ref = getattr(ctx, "user_ref", None)
+    if not isinstance(user_ref, UserRef):
         return None
-    return scope_for_conversation(
-        kind=kind,
-        memory_space=memory_space,
-        platform="webchat" if kind == "webchat" else "qq",
-        bot_id=str(getattr(ctx, "bot_id", "") or ""),
-        user_id=str(user_id),
+    bot_ref = getattr(ctx, "bot_ref", None)
+    bot_id = str(
+        getattr(bot_ref, "self_id", "") or getattr(ctx, "bot_id", "") or ""
+    )
+    connection_id = str(
+        getattr(bot_ref, "connection_id", "")
+        or getattr(ctx, "connection_id", "")
+        or ""
+    )
+    if not connection_id and user_ref.identity_domain == "qq:client" and bot_id:
+        # Old QQ entry points predate BotRef.connection_id. Preserve isolation by
+        # deriving a compatibility connection from the established QQ self ID.
+        connection_id = f"legacy-qq:{bot_id}"
+    if not connection_id:
+        return None
+    private_kind = "private" if kind in {"private", "webchat"} else kind
+    aliases = _legacy_subject_aliases(
+        identity_domain=user_ref.identity_domain,
+        raw_user_id=user_ref.raw_user_id,
+        bot_id=bot_id,
+    )
+    return MemoryAccessScope(
+        space_key=space_owner_key(memory_space),
+        person_owner_key=person_owner_key_for_subject(
+            connection_id, user_ref.subject_key
+        ),
+        subject_key=user_ref.subject_key,
+        person_audiences=(
+            (AUDIENCE_PRIVATE_ONLY, AUDIENCE_USER_SHARED)
+            if private_kind == "private"
+            else (AUDIENCE_USER_SHARED,)
+        ),
+        person_aliases=aliases,
     )
 
 
@@ -222,13 +272,17 @@ def owner_scope_sql(scope: MemoryAccessScope, *, alias: str = "") -> tuple[str, 
     person_clause = ""
     if scope.has_person:
         placeholders = ",".join("?" * len(scope.person_audiences))
+        identity_pairs = ((scope.person_owner_key, scope.subject_key), *scope.person_aliases)
+        identity_clause = " OR ".join(
+            f"({col}owner_key = ? AND {col}subject_key = ?)"
+            for _ in identity_pairs
+        )
         person_clause = (
-            f" OR ({col}owner_type = 'PERSON' AND {col}owner_key = ? "
-            f"AND {col}subject_key = ? AND {col}audience IN ({placeholders}))"
+            f" OR ({col}owner_type = 'PERSON' AND ({identity_clause}) "
+            f"AND {col}audience IN ({placeholders}))"
         )
-        params.extend(
-            [scope.person_owner_key, scope.subject_key, *scope.person_audiences]
-        )
+        params.extend([value for pair in identity_pairs for value in pair])
+        params.extend(scope.person_audiences)
     fragment = (
         f" AND (({col}owner_type = 'SPACE' AND "
         f"COALESCE({col}owner_key, 'space:' || {col}group_shared_space) = ?)"

@@ -46,6 +46,13 @@ from .models import (
     parse_iso_utc,
     utc_now,
 )
+from .targets import (
+    dump_target,
+    legacy_qq_target,
+    load_target,
+    qq_subject_key,
+    target_scope_key,
+)
 
 _ACTIVE_STATES_SQL = "('" + "', '".join(s.value for s in ACTIVE_RUN_STATES) + "')"
 
@@ -107,6 +114,9 @@ def _task_from_row(row: sqlite3.Row) -> Task:
         notification_mode=NotificationMode(row["notification_mode"]),
         created_at=parse_iso_utc(row["created_at"]),
         updated_at=parse_iso_utc(row["updated_at"]),
+        target=load_target(row["target_json"]),
+        subject_key=row["subject_key"] or "",
+        scope_key=row["scope_key"] or "",
     )
 
 
@@ -132,6 +142,9 @@ def _run_from_row(row: sqlite3.Row) -> Run:
         queued_at_utc=parse_iso_utc(row["queued_at_utc"]),
         claimed_at_utc=parse_iso_utc(row["claimed_at_utc"]),
         finished_at_utc=parse_iso_utc(row["finished_at_utc"]),
+        target=load_target(row["target_json"]),
+        subject_key=row["subject_key"] or "",
+        scope_key=row["scope_key"] or "",
     )
 
 
@@ -156,6 +169,9 @@ class TaskStore:
         bot_id: str,
         group_id: int,
         owner_id: int,
+        target=None,
+        subject_key: str = "",
+        scope_key: str = "",
         mode: TaskMode,
         objective: str,
         cron_expr: str,
@@ -177,13 +193,26 @@ class TaskStore:
         """
         now = now or utc_now()
         task_id = task_id or _new_id()
+        target = target if target is not None else legacy_qq_target(bot_id, group_id)
+        if target is not None:
+            if target.scene.kind != "group" or target.scene.scene_id != str(group_id):
+                raise ValueError("scheduling tasks require a target for the stored group")
+            if target.bot.self_id != str(bot_id) or target.bot.platform_scope != "qq":
+                raise ValueError("scheduling target must match its QQ Bot identity")
+            computed_scope = target_scope_key(target)
+            if scope_key and scope_key != computed_scope:
+                raise ValueError("scope_key does not match the persisted delivery target")
+            scope_key = computed_scope
+        else:
+            scope_key = ""
+        subject_key = subject_key or qq_subject_key(owner_id)
         conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
             if max_tasks_per_group > 0:
                 row = conn.execute(
-                    "SELECT COUNT(*) FROM tasks WHERE group_id = ? AND status != 'cancelled'",
-                    (group_id,),
+                    "SELECT COUNT(*) FROM tasks WHERE scope_key = ? AND status != 'cancelled'",
+                    (scope_key,),
                 ).fetchone()
                 if row and int(row[0]) >= max_tasks_per_group:
                     conn.rollback()
@@ -194,8 +223,8 @@ class TaskStore:
                 "INSERT INTO tasks (task_id, instance_id, bot_id, group_id, owner_id, mode, "
                 "objective, cron_expr, timezone, policy_json, revision, status, "
                 "max_model_rounds, max_tool_calls, run_timeout_seconds, output_max_chars, "
-                "notification_mode, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?)",
+                "notification_mode, created_at, updated_at, target_json, subject_key, scope_key) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     task_id,
                     instance_id,
@@ -214,6 +243,9 @@ class TaskStore:
                     notification_mode.value,
                     iso_utc(now),
                     iso_utc(now),
+                    dump_target(target),
+                    subject_key,
+                    scope_key,
                 ),
             )
             conn.commit()
@@ -239,11 +271,15 @@ class TaskStore:
         group_id: int,
         *,
         owner_id: int | None = None,
+        scope_key: str | None = None,
         include_cancelled: bool = False,
     ) -> list[Task]:
         """列出某群的（可选按属主过滤的）任务，创建时间升序。"""
         sql = "SELECT * FROM tasks WHERE group_id = ?"
         params: list[object] = [group_id]
+        if scope_key is not None:
+            sql += " AND scope_key = ?"
+            params.append(scope_key)
         if owner_id is not None:
             sql += " AND owner_id = ?"
             params.append(owner_id)
@@ -440,7 +476,8 @@ class TaskStore:
         try:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                "SELECT task_id, revision, group_id, status FROM tasks WHERE task_id = ?",
+                "SELECT task_id, revision, group_id, status, target_json, subject_key, scope_key "
+                "FROM tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if row is None:
@@ -456,8 +493,9 @@ class TaskStore:
                 idem = f"{task_id}:{revision}:manual:{request_id}"
             cursor = conn.execute(
                 "INSERT OR IGNORE INTO runs (run_id, task_id, task_revision, group_id, "
-                "idempotency_key, state, scheduled_for_utc, request_id, queued_at_utc) "
-                "VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?)",
+                "idempotency_key, state, scheduled_for_utc, request_id, queued_at_utc, "
+                "target_json, subject_key, scope_key) "
+                "VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)",
                 (
                     run_id,
                     task_id,
@@ -467,6 +505,9 @@ class TaskStore:
                     iso_utc(scheduled_for) if scheduled_for is not None else None,
                     request_id,
                     iso_utc(now),
+                    row["target_json"] or "{}",
+                    row["subject_key"] or "",
+                    row["scope_key"] or "",
                 ),
             )
             inserted = cursor.rowcount == 1
@@ -504,14 +545,22 @@ class TaskStore:
         finally:
             conn.close()
 
-    def count_group_active_runs(self, group_id: int) -> int:
-        """该群当前处于活跃状态的运行数（运行时并发上限的查询侧）。"""
+    def count_group_active_runs(
+        self, group_id: int, *, scope_key: str | None = None
+    ) -> int:
+        """该 QQ 会话当前处于活跃状态的运行数（不跨 Bot 混合）。"""
         conn = self._connect()
         try:
-            row = conn.execute(
-                f"SELECT COUNT(*) FROM runs WHERE group_id = ? AND state IN {_ACTIVE_STATES_SQL}",
-                (group_id,),
-            ).fetchone()
+            if scope_key is None:
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM runs WHERE group_id = ? AND state IN {_ACTIVE_STATES_SQL}",
+                    (group_id,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM runs WHERE scope_key = ? AND state IN {_ACTIVE_STATES_SQL}",
+                    (scope_key,),
+                ).fetchone()
             return int(row[0]) if row else 0
         finally:
             conn.close()
@@ -570,25 +619,27 @@ class TaskStore:
             for candidate in candidates:
                 candidate_id = candidate["run_id"]
                 group_row = conn.execute(
-                    "SELECT group_id FROM runs WHERE run_id = ?", (candidate_id,)
+                    "SELECT group_id, scope_key, target_json, subject_key "
+                    "FROM runs WHERE run_id = ?", (candidate_id,)
                 ).fetchone()
                 if group_row is None:
                     continue
                 group_id = int(group_row["group_id"])
+                scope_key = str(group_row["scope_key"] or "")
                 # 2a. 群内串行：已有**执行中**的其它运行时本轮不认领（保留在队列）。
                 #     只看 executing 状态、排除候选自身——queued 相互不算忙。
                 busy = conn.execute(
-                    f"SELECT 1 FROM runs WHERE group_id = ? AND run_id != ? "
+                    f"SELECT 1 FROM runs WHERE scope_key = ? AND run_id != ? "
                     f"AND state IN {_EXECUTING_STATES_SQL} LIMIT 1",
-                    (group_id, candidate_id),
+                    (scope_key, candidate_id),
                 ).fetchone()
                 if busy is not None:
                     conn.commit()
                     return None
                 # 2b. 每日配额：满则该运行跳过（终态），继续下一个候选
                 quota_row = conn.execute(
-                    "SELECT runs_used FROM quotas WHERE group_id = ? AND day = ?",
-                    (group_id, day),
+                    "SELECT runs_used FROM quotas WHERE scope_key = ? AND day = ?",
+                    (scope_key, day),
                 ).fetchone()
                 runs_used = int(quota_row["runs_used"]) if quota_row else 0
                 if daily_group_run_cap > 0 and runs_used >= daily_group_run_cap:
@@ -608,10 +659,11 @@ class TaskStore:
                 if claimed.rowcount != 1:
                     continue
                 conn.execute(
-                    "INSERT INTO quotas (group_id, day, runs_used, messages_used) "
-                    "VALUES (?, ?, 1, 0) "
-                    "ON CONFLICT(group_id, day) DO UPDATE SET runs_used = runs_used + 1",
-                    (group_id, day),
+                    "INSERT INTO quotas (group_id, scope_key, target_json, subject_key, day, "
+                    "runs_used, messages_used) VALUES (?, ?, ?, ?, ?, 1, 0) "
+                    "ON CONFLICT(scope_key, day) DO UPDATE SET runs_used = runs_used + 1",
+                    (group_id, scope_key, group_row["target_json"] or "{}",
+                     group_row["subject_key"] or "", day),
                 )
                 conn.commit()
                 return self.get_run(candidate_id)
@@ -762,31 +814,45 @@ class TaskStore:
         return counts
 
     # ── 配额查询 ─────────────────────────────────────────
-    def quota_usage(self, group_id: int, *, now: datetime | None = None) -> dict[str, int]:
+    def quota_usage(
+        self, group_id: int, *, scope_key: str | None = None, now: datetime | None = None
+    ) -> dict[str, int]:
         now = now or utc_now()
         conn = self._connect()
         try:
-            row = conn.execute(
-                "SELECT runs_used, messages_used FROM quotas WHERE group_id = ? AND day = ?",
-                (group_id, day_key(now)),
-            ).fetchone()
+            if scope_key is None:
+                row = conn.execute(
+                    "SELECT COALESCE(SUM(runs_used), 0) AS runs_used, "
+                    "COALESCE(SUM(messages_used), 0) AS messages_used "
+                    "FROM quotas WHERE group_id = ? AND day = ?",
+                    (group_id, day_key(now)),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT runs_used, messages_used FROM quotas WHERE scope_key = ? AND day = ?",
+                    (scope_key, day_key(now)),
+                ).fetchone()
             if row is None:
                 return {"runs_used": 0, "messages_used": 0}
             return {"runs_used": int(row["runs_used"]), "messages_used": int(row["messages_used"])}
         finally:
             conn.close()
 
-    def record_delivered_message(self, group_id: int, *, count: int = 1, now: datetime | None = None) -> None:
+    def record_delivered_message(
+        self, group_id: int, *, scope_key: str = "", count: int = 1,
+        target=None, subject_key: str = "", now: datetime | None = None,
+    ) -> None:
         """投递侧消息计数（observability；不拦截，拦截在认领时按 runs 口径）。"""
         now = now or utc_now()
+        scope_key = scope_key or f"legacy-unscoped:group:{group_id}"
         conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(
-                "INSERT INTO quotas (group_id, day, runs_used, messages_used) "
-                "VALUES (?, ?, 0, ?) "
-                "ON CONFLICT(group_id, day) DO UPDATE SET messages_used = messages_used + ?",
-                (group_id, day_key(now), count, count),
+                "INSERT INTO quotas (group_id, scope_key, target_json, subject_key, day, "
+                "runs_used, messages_used) VALUES (?, ?, ?, ?, ?, 0, ?) "
+                "ON CONFLICT(scope_key, day) DO UPDATE SET messages_used = messages_used + ?",
+                (group_id, scope_key, dump_target(target), subject_key, day_key(now), count, count),
             )
             conn.commit()
         except Exception:
@@ -872,6 +938,9 @@ class TaskStore:
         group_id: int,
         task_id: str = "",
         detail: str = "",
+        actor_subject_key: str = "",
+        scope_key: str = "",
+        target=None,
         now: datetime | None = None,
     ) -> None:
         """记录一次受控变更。审计写入失败只告警不阻断业务（与 memory/ 同哲学）。"""
@@ -880,9 +949,11 @@ class TaskStore:
             conn = self._connect()
             try:
                 conn.execute(
-                    "INSERT INTO audit_log (created_at, actor_id, group_id, task_id, action, detail) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (iso_utc(now), actor_id, group_id, task_id, action, detail),
+                    "INSERT INTO audit_log (created_at, actor_id, group_id, task_id, action, detail, "
+                    "actor_subject_key, scope_key, target_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (iso_utc(now), actor_id, group_id, task_id, action, detail,
+                     actor_subject_key, scope_key, dump_target(target)),
                 )
                 conn.commit()
             finally:
@@ -891,13 +962,16 @@ class TaskStore:
             logger.warning(f"⚠️ [Scheduling] 审计写入失败: {e}")
 
     def list_audit(
-        self, group_id: int | None = None, *, limit: int = 50
+        self, group_id: int | None = None, *, scope_key: str | None = None, limit: int = 50
     ) -> list[AuditEntry]:
         sql = "SELECT * FROM audit_log"
         params: list[object] = []
         if group_id is not None:
             sql += " WHERE group_id = ?"
             params.append(group_id)
+        if scope_key is not None:
+            sql += " AND scope_key = ?" if group_id is not None else " WHERE scope_key = ?"
+            params.append(scope_key)
         sql += " ORDER BY audit_id DESC LIMIT ?"
         params.append(max(int(limit), 1))
         conn = self._connect()
@@ -912,6 +986,9 @@ class TaskStore:
                     task_id=row["task_id"] or "",
                     action=row["action"] or "",
                     detail=row["detail"] or "",
+                    actor_subject_key=row["actor_subject_key"] or "",
+                    scope_key=row["scope_key"] or "",
+                    target=load_target(row["target_json"]),
                 )
                 for row in rows
             ]

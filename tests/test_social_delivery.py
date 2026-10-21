@@ -19,6 +19,7 @@ from core.social.contracts import (
     AGGREGATE_PARTIAL,
     ConversationScope,
     DeliveryReceipt,
+    MessageEvidence,
     aggregate_delivery_status,
     delivered_texts,
 )
@@ -29,6 +30,13 @@ from core.social.delivery import (
     deliver_lines,
     delivery_draft_from_context,
     seal_delivery_plan,
+)
+from core.transport import (
+    BotRef,
+    DeliveryResult,
+    DeliveryStatus,
+    DeliveryTarget,
+    SceneRef,
 )
 from memory import social_store
 
@@ -248,8 +256,42 @@ class TestCoercePlatformMessageId:
 
     def test_none_and_garbage(self):
         assert coerce_platform_message_id(None) is None
-        assert coerce_platform_message_id("ok") is None
+        assert coerce_platform_message_id("ok") == "ok"
+        assert coerce_platform_message_id("007") == "007"
         assert coerce_platform_message_id(True) is None
+
+
+class TestOpaqueDeliveryIds:
+    async def test_all_ids_are_persisted_and_indexed(self, social_db):
+        target = DeliveryTarget(
+            BotRef("legacy-qq:10001", "onebot-v11", "qq", "10001"),
+            SceneRef("group", "123"),
+        )
+
+        async def send(_line, _index):
+            return DeliveryResult(
+                target,
+                DeliveryStatus.ACCEPTED,
+                message_ids=("opaque:α", "007"),
+            )
+
+        receipts = await deliver_lines(
+            _sealed_plan(["delivered"], "multi-id-trace", "multi-id-turn"),
+            scope=SCOPE,
+            trace_id="multi-id-trace",
+            turn_id="multi-id-turn",
+            send_one=send,
+        )
+
+        assert receipts[0].status == "acknowledged"
+        assert receipts[0].platform_message_id == "opaque:α"
+        assert receipts[0].platform_message_ids == ("opaque:α", "007")
+        assert social_store.deliveries_for_turn("multi-id-turn")[0]["platform_message_ids"] == [
+            "opaque:α", "007"
+        ]
+        assert social_store.find_delivery_by_platform_id("opaque:α", scope=SCOPE)["turn_id"] == "multi-id-turn"
+        assert social_store.find_delivery_by_platform_id("007", scope=SCOPE)["turn_id"] == "multi-id-turn"
+        assert social_store.acked_bot_message_ids(SCOPE, "multi-id-turn") == ["opaque:α", "007"]
 
 
 class TestStrictScopeVersions:
@@ -394,6 +436,26 @@ class TestNeutralReceipts:
         found = social_store.find_delivery_by_platform_id(
             "900", scope=ConversationScope.for_qq(1, bot_id="10001"))
         assert found is not None and found["turn_id"] == "a"
+
+
+def test_social_message_id_dedupe_and_lookup_include_connection(social_db):
+    scope_a = ConversationScope("qq", "bot", "123", "connection-a")
+    scope_b = ConversationScope("qq", "bot", "123", "connection-b")
+    for scope, event_id in ((scope_a, "event-a"), (scope_b, "event-b")):
+        assert social_store.record_event(
+            MessageEvidence(
+                scope=scope,
+                event_id=event_id,
+                platform_message_id="same-platform-id",
+                text_excerpt="测试消息",
+            )
+        ) == event_id
+    assert [e["event_id"] for e in social_store.events_since(scope_a, "2000-01-01")] == [
+        "event-a"
+    ]
+    assert [e["event_id"] for e in social_store.events_since(scope_b, "2000-01-01")] == [
+        "event-b"
+    ]
 
 
 class TestRealConversationRefNeutralReceipt:

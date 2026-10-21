@@ -1,0 +1,1194 @@
+[
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 1100,
+    "categories": [
+      "nonebot_entry_registration"
+    ],
+    "text": "group_silent_listener = on_message(priority=_PRIORITY_SILENT, block=False)"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 1103,
+    "categories": [
+      "nonebot_entry_registration"
+    ],
+    "text": "@group_silent_listener.handle()"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 1461,
+    "categories": [
+      "nonebot_entry_registration"
+    ],
+    "text": "chat_handler = on_message(rule=Rule(is_chat_trigger), priority=_PRIORITY_CHAT, block=True)"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 1464,
+    "categories": [
+      "nonebot_entry_registration"
+    ],
+    "text": "@chat_handler.handle()"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 1816,
+    "categories": [
+      "nonebot_entry_registration"
+    ],
+    "text": "private_chat_handler = on_message("
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 1946,
+    "categories": [
+      "nonebot_entry_registration"
+    ],
+    "text": "@private_chat_handler.handle()"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 3174,
+    "categories": [
+      "scheduling_callback"
+    ],
+    "text": "async def _scheduling_sender(group_id: int, text: str) -> str | None:"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 3220,
+    "categories": [
+      "scheduling_callback"
+    ],
+    "text": "        store, sender=_scheduling_sender, send_timeout_seconds=SCHEDULING_SEND_TIMEOUT"
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 3318,
+    "categories": [
+      "scheduling_callback"
+    ],
+    "text": "            sender=cometa_bridge.make_notification_sender("
+  },
+  {
+    "file": "stella_project/plugins/bot_main/ai_gateway.py",
+    "line": 4228,
+    "categories": [
+      "scheduling_callback"
+    ],
+    "text": "        f\"- sender={item.get('sender_id', 0)} msg_id={item.get('msg_id', 0)}: \""
+  },
+  {
+    "file": "memory/conversation_registry.py",
+    "line": 140,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "def get_or_register_group(conn: sqlite3.Connection, bot_id: str, group_id: int) -> ConversationRef:"
+  },
+  {
+    "file": "memory_rust/native/src/lib.rs",
+    "line": 11,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "fn retrieve(request_json: &str) -> PyResult<String> {"
+  },
+  {
+    "file": "memory_rust/native/src/lib.rs",
+    "line": 12,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    let request = serde_json::from_str(request_json)"
+  },
+  {
+    "file": "memory_rust/native/src/lib.rs",
+    "line": 15,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    serde_json::to_string(&output)"
+  },
+  {
+    "file": "memory_rust/native/src/lib.rs",
+    "line": 20,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "fn promote(request_json: &str) -> PyResult<String> {"
+  },
+  {
+    "file": "memory_rust/native/src/lib.rs",
+    "line": 21,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    let request = serde_json::from_str(request_json)"
+  },
+  {
+    "file": "memory_rust/native/src/lib.rs",
+    "line": 24,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    serde_json::to_string(&output)"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 56,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    pub trace: serde_json::Value,"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 67,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    let parsed: serde_json::Value = serde_json::from_str(value).unwrap_or_else(|_| {"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 68,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        serde_json::Value::Array("
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 73,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                .map(|item| serde_json::Value::String(item.trim().to_string()))"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 81,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        .filter_map(serde_json::Value::as_str)"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 93,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            .unwrap_or_else(|| \"FACT\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 98,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            .unwrap_or_else(|| \"OPEN\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 129,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            \" AND m.group_shared_space = ?\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 162,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        \" AND m.user_id = ?\".to_string()"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 176,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        values.push(request.user_id.to_string());"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 178,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    values.extend(visibility_values.into_iter().map(str::to_string));"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 179,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    values.push(request.pool_limit.to_string());"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 242,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        \" AND m.user_id = ?\".to_string()"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 257,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        values.push(request.user_id.to_string());"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 259,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    values.extend(visibility_values.into_iter().map(str::to_string));"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 261,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    values.push(request.pool_limit.to_string());"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 281,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "pub fn retrieve(request: RetrievalRequest) -> Result<RetrievalOutput, String> {"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 286,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    let mode = normalize_mode(&request.mode).to_string();"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 295,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    let trace = serde_json::json!({"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 306,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        \"ranked_all\": merged.iter().map(|item| serde_json::json!({"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 328,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            db_path: db_path.to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 329,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            group_shared_space: space.to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 331,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            query: \"推荐游戏\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 332,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            trigger: \"reply\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 333,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            mode: \"RECOMMEND\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 367,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            &file.path().display().to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 409,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        let mut request = test_request(&file.path().display().to_string(), \"space-a\", 2);"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 410,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        request.scope_space_key = \"space:space-a\".to_string();"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 411,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        request.scope_person_owner_key = \"person:qq:10000:2\".to_string();"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 412,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        request.scope_subject_key = \"qq:2\".to_string();"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 413,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        request.scope_person_audiences = vec![\"USER_SHARED\".to_string()];"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 480,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        let mut request = test_request(&file.path().display().to_string(), \"space-a\", 1);"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 481,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        request.query = \"有什么游戏推荐吗\".to_string();"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 493,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        let mut punct = test_request(&file.path().display().to_string(), \"space-a\", 1);"
+  },
+  {
+    "file": "memory_rust/native/src/retrieval.rs",
+    "line": 494,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        punct.query = \"！！！???\".to_string();"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 6,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "use serde_json::Value as JsonValue;"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 105,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            \"SPACE\".to_string()"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 131,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                \"CURRENT_SPACE\".to_string()"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 159,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    let parsed = serde_json::from_str::<serde_json::Value>(raw).unwrap_or_default();"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 164,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        .filter_map(serde_json::Value::as_str)"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 177,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    serde_json::to_string(&merged).unwrap_or_else(|_| \"[]\".to_string())"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 202,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            NaiveDateTime::parse_from_str(value, \"%Y-%m-%d %H:%M:%S\")"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 420,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    .unwrap_or_else(|| \"FACT\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 426,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    .unwrap_or_else(|| \"NEW\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 430,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    .unwrap_or_else(|| \"[]\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 433,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    .unwrap_or_else(|| \"OPEN\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 437,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    .unwrap_or_else(|| \"PASSIVE\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 443,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    .unwrap_or_else(|| \"CURRENT_SPACE\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 450,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    .unwrap_or_else(|| \"[\\\"PASSIVE\\\"]\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 453,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    .unwrap_or_else(|| \"[]\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 492,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                return Err(\"CAS float must be finite\".to_string());"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 511,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        return Err(\"CAS object type must be ASCII\".to_string());"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 626,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    let bytes = serde_json::to_vec(snapshot)"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 638,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                .map_err(|_| \"source integer column is not UTF-8\".to_string())?"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 640,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                .map_err(|_| \"source integer column is invalid\".to_string())?,"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 641,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            ValueRef::Blob(_) => return Err(\"source integer column is a blob\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 647,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        ValueRef::Integer(number) => number.to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 648,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        ValueRef::Real(number) => number.to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 650,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            .map_err(|_| \"source text column is not UTF-8\".to_string())?"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 651,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            .to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 652,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        ValueRef::Blob(_) => return Err(\"source text column is a blob\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 720,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            let mut values = serde_json::Map::new();"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 851,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        let provenance: JsonValue = serde_json::from_str(&row.provenance_json)"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 852,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            .map_err(|_| \"accepted evidence provenance is malformed\".to_string())?;"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 857,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            .to_string();"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 866,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        let provenance: JsonValue = match serde_json::from_str(&row.provenance_json) {"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 944,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "fn promote_inner("
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 953,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        return Err(\"promotion scope does not match the candidate row\".to_string());"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 962,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            action: \"noop\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 975,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            action: evidence_status.to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1033,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                    action: \"observing_conflict\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1091,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                            .unwrap_or_else(|| \"[]\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1093,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                            .unwrap_or_else(|| \"OPEN\".to_string()),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1138,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        let memory_id = Uuid::new_v4().simple().to_string();"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1277,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                Uuid::new_v4().simple().to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1310,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        return Err(\"candidate changed before confirmation; transaction rolled back\".to_string());"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1316,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            \"merge\".to_string()"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1318,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            \"create\".to_string()"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1327,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "pub fn promote(request: PromotionRequest) -> Result<PromotionOutput, String> {"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1339,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            action: \"missing\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1360,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "    use serde_json::{json, Value as JsonValue};"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1385,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            id: \"e-2\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1387,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            source_conversation_key: \"conv\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1389,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            fact_subject_key: \"qq:7\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1390,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            owner_key: \"space:1\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1391,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            audience: \"CURRENT_SPACE\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1392,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            fact_key: \"claim:v1:x\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1393,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            verification_status: \"accepted\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1394,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            assessment_version: \"2026-10-08.1\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1395,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            provenance_json: \"{}\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1406,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            group_shared_space: \"1\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1407,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            user_id: \"7\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1408,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            memory_type: \"PREFERENCE\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1409,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            content: \"我喜欢桌游\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1412,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            status: \"NEW\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1413,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            content_raw: \"我喜欢桌游\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1414,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            usage_tags: \"[\\\"PERSONALIZE\\\"]\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1415,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            visibility: \"OPEN\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1417,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            source_kind: \"AT_MENTION\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1418,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            owner_type: \"SPACE\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1419,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            owner_key: \"space:1\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1421,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            audience: \"CURRENT_SPACE\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1422,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            source_conversation_key: \"conv\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1423,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            fact_key: \"claim:v1:x\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1424,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            policy_version: \"v1\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1426,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            source_kinds: \"[\\\"AT_MENTION\\\"]\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1427,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            source_message_ids: \"[\\\"1\\\",\\\"2\\\"]\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1430,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            owner_type: \"SPACE\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1431,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            owner_key: \"space:1\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1433,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            audience: \"CURRENT_SPACE\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1434,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            source_conversation_key: \"conv\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1435,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            fact_key: \"claim:v1:x\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1436,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            policy_version: \"v1\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1448,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            db_path: path.display().to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1449,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            candidate_id: candidate_id.to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1450,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            group_shared_space: \"space\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1451,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            user_id: \"1\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1452,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "            memory_type: \"PREFERENCE\".to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1506,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                        let assessment_version = serde_json::from_str::<JsonValue>(&provenance)"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1512,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                                    .map(str::to_string)"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1545,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                .insert(key.to_string(), version);"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1600,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                serde_json::to_string(&vec![row_id]).expect(\"source message ids\"),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1619,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "                provenance.to_string(),"
+  },
+  {
+    "file": "memory_rust/native/src/promotion.rs",
+    "line": 1932,
+    "categories": [
+      "rust_serde_bridge"
+    ],
+    "text": "        promotion_request.user_id = \"other-user\".to_string();"
+  },
+  {
+    "file": "tests/test_conversation_registry.py",
+    "line": 32,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "        ref = registry.get_or_register_group(conn, \"10000\", 263402786)"
+  },
+  {
+    "file": "tests/test_conversation_registry.py",
+    "line": 45,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "        a = registry.get_or_register_group(conn, \"10000\", 263402786)"
+  },
+  {
+    "file": "tests/test_conversation_registry.py",
+    "line": 46,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "        b = registry.get_or_register_group(conn, \"10000\", 263402786)"
+  },
+  {
+    "file": "tests/test_conversation_registry.py",
+    "line": 127,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "        a = registry.get_or_register_group(conn, \"10000\", 263402786)"
+  },
+  {
+    "file": "tests/test_conversation_registry.py",
+    "line": 128,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "        b = registry.get_or_register_group(conn, \"20000\", 263402786)"
+  },
+  {
+    "file": "tests/test_conversation_registry.py",
+    "line": 138,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "        first = registry.get_or_register_group(conn, \"20000\", 263402786)"
+  },
+  {
+    "file": "tests/test_conversation_registry.py",
+    "line": 139,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "        again = registry.get_or_register_group(conn, \"20000\", 263402786)"
+  },
+  {
+    "file": "tests/test_conversation_registry.py",
+    "line": 145,
+    "categories": [
+      "group_registry"
+    ],
+    "text": "        registry.get_or_register_group(conn, \"10000\", 263402786)"
+  }
+]

@@ -9,11 +9,13 @@ QQ 发送入口（群/私聊普通回复、主动 @、主动群聊）统一走�
   平台消息 ID 只有真实拿到才记录（引用归因的锚点）；
 - 某段明确失败（平台异常）→ 该段 failed，**停止后续片段**（已 ACK 的片段
   不可撤销；继续发只会扩大半成功面），聚合状态由调用方计算（partial/failed）；
-- 网络超时等不确定失败按 unknown 处理的判定在平台适配层做不到——适配器
-  抛什么异常这里无法区分，统一按 failed 记录并保留错误文本；unknown 只来自
-  「发送成功但落库失败」与取消中断；
+- Plain callback exceptions retain the legacy failed behavior; the unified
+  outbound service classifies post-send ambiguity as unknown before it reaches
+  this module;
 - 每段回执**立即落库**（短事务、失败静默）：进程在多段发送中途崩溃时，
   已发事实不丢；
+- Adapter results preserve all opaque platform IDs returned for a planned part;
+  ambiguous results stop the plan and become ``unknown`` (never retried);
 - ``FinishedException``（NoneBot matcher 结束控制流）原样上抛，绝不当作
   发送失败。
 
@@ -44,9 +46,10 @@ from core.social.contracts import (
     aggregate_delivery_status,
     utc_now_iso,
 )
+from core.transport.outbound import DeliveryResult, DeliveryStatus
 from memory import social_store
 
-SendOne = Callable[[str, int], Awaitable[str | None]]
+SendOne = Callable[[str, int], Awaitable[str | DeliveryResult | None]]
 PlanGuard = Callable[[dict[str, Any]], bool | Awaitable[bool]]
 
 DELIVERY_PLAN_SCHEMA_VERSION = 1
@@ -294,23 +297,45 @@ def verify_delivery_plan(
 
 
 def coerce_platform_message_id(result) -> str | None:
-    """把平台 send 调用的返回值规约为消息 ID 字符串；拿不到返回 None。
+    """把平台 send 调用的首个真实消息 ID 规约为不透明字符串。
 
     OneBot v11 的 ``bot.send_group_msg`` 返回 ``{"message_id": int}`` 字典；
-    NoneBot ``Matcher.send`` 透传适配器返回值。识别不了的一律 None——
-    宁可没有归因锚点，不猜一个假 ID。
+    其他 adapter 可以返回非数字 ID。拿不到回执 ID 时返回 None——不猜一个假 ID。
     """
-    if result is None:
-        return None
-    if isinstance(result, bool):
-        return None
-    if isinstance(result, int):
-        return str(result)
+    values = coerce_platform_message_ids(result)
+    return values[0] if values else None
+
+
+def coerce_platform_message_ids(result) -> tuple[str, ...]:
+    """Extract all opaque platform IDs without converting Booleans to ``0/1``."""
+    if isinstance(result, DeliveryResult):
+        return result.message_ids
+    if result is None or isinstance(result, bool):
+        return ()
     if isinstance(result, dict):
-        mid = result.get("message_id")
-        return str(mid) if mid is not None else None
-    text = str(result)
-    return text if text.isdigit() else None
+        values = result.get("message_ids")
+        if values is None:
+            values = result.get("message_id")
+    else:
+        values = getattr(result, "msg_ids", None)
+        if values is None:
+            values = result
+    if isinstance(values, (str, int)) and not isinstance(values, bool):
+        values = (values,)
+    if values is None:
+        return ()
+    try:
+        iterator = iter(values)
+    except TypeError:
+        iterator = iter((values,))
+    ids: list[str] = []
+    for value in iterator:
+        if value is None or isinstance(value, bool):
+            continue
+        text = str(value)
+        if text and text not in ids:
+            ids.append(text)
+    return tuple(ids)
 
 
 def _flow(trace_id: str):
@@ -430,8 +455,34 @@ async def deliver_lines(
         seg_span = _flow_span(fctx, "send.segment", instance_key=f"seg:{i}")
         seg_span.__enter__()
         try:
-            platform_id = coerce_platform_message_id(await send_one(line, i))
-            status = DELIVERY_ACKNOWLEDGED
+            send_result = await send_one(line, i)
+            platform_ids = coerce_platform_message_ids(send_result)
+            platform_id = platform_ids[0] if platform_ids else None
+            if isinstance(send_result, DeliveryResult):
+                if send_result.status is DeliveryStatus.ACCEPTED:
+                    status = DELIVERY_ACKNOWLEDGED
+                elif send_result.status in {DeliveryStatus.UNKNOWN, DeliveryStatus.PARTIAL}:
+                    status = DELIVERY_UNKNOWN
+                else:
+                    status = DELIVERY_FAILED
+                if status != DELIVERY_ACKNOWLEDGED:
+                    detail = send_result.error_code or send_result.status.value
+                    seg_span.__exit__(None, None, None)
+                    _append_and_persist(
+                        receipts, scope, trace_id, turn_id, epoch, i,
+                        status=status, text=line, platform_id=platform_id,
+                        platform_ids=platform_ids, detail=detail,
+                        receipt_conversation=receipt_conversation,
+                        delivery_plan_id=plan_id, delivery_plan_digest=plan_digest,
+                        decision_digest=decision_digest,
+                    )
+                    _flow_decision(
+                        fctx, "send.segment", status="unknown" if status == DELIVERY_UNKNOWN else "failed",
+                        reason_code=detail, instance_key=f"seg:{i}",
+                    )
+                    break
+            else:
+                status = DELIVERY_ACKNOWLEDGED
         except FinishedException:
             seg_span.__exit__(FinishedException, None, None)
             raise
@@ -475,7 +526,7 @@ async def deliver_lines(
         seg_span.__exit__(None, None, None)
         _append_and_persist(
             receipts, scope, trace_id, turn_id, epoch, i,
-            status=status, text=line, platform_id=platform_id,
+            status=status, text=line, platform_id=platform_id, platform_ids=platform_ids,
             receipt_conversation=receipt_conversation,
             delivery_plan_id=plan_id, delivery_plan_digest=plan_digest,
             decision_digest=decision_digest,
@@ -553,6 +604,7 @@ def _append_and_persist(
     status: str,
     text: str,
     platform_id: str | None,
+    platform_ids: tuple[str, ...] = (),
     detail: str = "",
     receipt_conversation: Any = None,
     delivery_plan_id: str = "",
@@ -597,6 +649,7 @@ def _append_and_persist(
         status=status,
         epoch=epoch,
         platform_message_id=platform_id,
+        platform_message_ids=platform_ids,
         acknowledged_at_utc=utc_now_iso() if status == DELIVERY_ACKNOWLEDGED else "",
         text=text,
         scope=scope,

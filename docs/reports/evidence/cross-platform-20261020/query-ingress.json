@@ -1,0 +1,293 @@
+{
+  "processes": [
+    {
+      "id": "proc_192_chat_reset",
+      "summary": "Chat_reset → Get_shared_facade",
+      "priority": 0.081,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_193_chat_reset",
+      "summary": "Chat_reset → _advance_summary_revision",
+      "priority": 0.081,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_437_chat_reset",
+      "summary": "Chat_reset → _state",
+      "priority": 0.081,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_554_handle_private_chat",
+      "summary": "Handle_private_chat → Decision",
+      "priority": 0.079,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_815_handle_private_chat",
+      "summary": "Handle_private_chat → Alive",
+      "priority": 0.079,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_816_handle_private_chat",
+      "summary": "Handle_private_chat → _row_trace_id",
+      "priority": 0.079,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_275_record_group_chat",
+      "summary": "Record_group_chat → Clear_proactive_skips",
+      "priority": 0.076,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_149_maybe_plan",
+      "summary": "Maybe_plan → Space_owner_key",
+      "priority": 0.069,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_282_preview_repairs",
+      "summary": "Preview_repairs → Person_owner_key",
+      "priority": 0.067,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_283_preview_repairs",
+      "summary": "Preview_repairs → _private_conversation_keys",
+      "priority": 0.067,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/routers/chat.py:chat_reset",
+      "name": "chat_reset",
+      "filePath": "webui/routers/chat.py",
+      "startLine": 84,
+      "endLine": 113,
+      "module": "Routers",
+      "process_id": "proc_192_chat_reset",
+      "step_index": 1
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:handle_private_chat",
+      "name": "handle_private_chat",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 1947,
+      "endLine": 2223,
+      "module": "Bot_main",
+      "process_id": "proc_554_handle_private_chat",
+      "step_index": 1
+    },
+    {
+      "id": "Method:memory/proactive.py:ProactiveController.record_message#2",
+      "name": "record_message",
+      "filePath": "memory/proactive.py",
+      "startLine": 106,
+      "endLine": 120,
+      "module": "Tests",
+      "process_id": "proc_275_record_group_chat",
+      "step_index": 2
+    },
+    {
+      "id": "Function:memory/ownership.py:scope_for_conversation",
+      "name": "scope_for_conversation",
+      "filePath": "memory/ownership.py",
+      "startLine": 169,
+      "endLine": 203,
+      "module": "Tests",
+      "process_id": "proc_149_maybe_plan",
+      "step_index": 4
+    },
+    {
+      "id": "Function:tools/data_repair.py:preview_private_owner_repairs",
+      "name": "preview_private_owner_repairs",
+      "filePath": "tools/data_repair.py",
+      "startLine": 188,
+      "endLine": 244,
+      "module": "Tests",
+      "process_id": "proc_282_preview_repairs",
+      "step_index": 2
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/test_private_chat_ingress.py:test_private_chat_end_to_end_once_recorded",
+      "name": "test_private_chat_end_to_end_once_recorded",
+      "filePath": "tests/test_private_chat_ingress.py",
+      "startLine": 124,
+      "endLine": 158,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_private_chat_ingress.py:test_two_users_distinct_storage_and_scope",
+      "name": "test_two_users_distinct_storage_and_scope",
+      "filePath": "tests/test_private_chat_ingress.py",
+      "startLine": 162,
+      "endLine": 185,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_private_chat_ingress.py:test_plugin_handled_short_circuits_before_record",
+      "name": "test_plugin_handled_short_circuits_before_record",
+      "filePath": "tests/test_private_chat_ingress.py",
+      "startLine": 189,
+      "endLine": 198,
+      "module": "Bot_main"
+    },
+    {
+      "id": "Function:tests/test_capture_ingress_gating.py:test_private_closed_gate_skips_persist_reply_still_works",
+      "name": "test_private_closed_gate_skips_persist_reply_still_works",
+      "filePath": "tests/test_capture_ingress_gating.py",
+      "startLine": 227,
+      "endLine": 236,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_capture_ingress_gating.py:test_private_ready_gate_persists_with_sharing_and_trigger",
+      "name": "test_private_ready_gate_persists_with_sharing_and_trigger",
+      "filePath": "tests/test_capture_ingress_gating.py",
+      "startLine": 240,
+      "endLine": 250,
+      "module": "Tests"
+    },
+    {
+      "id": "File:tests/test_capture_ingress_gating.py",
+      "name": "test_capture_ingress_gating.py",
+      "filePath": "tests/test_capture_ingress_gating.py"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:is_private_trigger",
+      "name": "is_private_trigger",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 1802,
+      "endLine": 1813,
+      "module": "Tests"
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+      "name": "ai_gateway.py",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    {
+      "id": "Function:tests/test_multi_user_identity.py:_group_ctx",
+      "name": "_group_ctx",
+      "filePath": "tests/test_multi_user_identity.py",
+      "startLine": 86,
+      "endLine": 101,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_multi_user_identity.py:test_private_only_never_leaks_into_group_scope",
+      "name": "test_private_only_never_leaks_into_group_scope",
+      "filePath": "tests/test_multi_user_identity.py",
+      "startLine": 135,
+      "endLine": 163,
+      "module": "Tests"
+    },
+    {
+      "id": "File:tests/test_multi_user_identity.py",
+      "name": "test_multi_user_identity.py",
+      "filePath": "tests/test_multi_user_identity.py"
+    },
+    {
+      "id": "Variable:config/settings.py:PRIVATE_CHAT_ENABLED",
+      "name": "PRIVATE_CHAT_ENABLED",
+      "filePath": "config/settings.py",
+      "startLine": 599,
+      "endLine": 599
+    },
+    {
+      "id": "Variable:config/settings.py:PRIVATE_CHAT_ALLOWLIST",
+      "name": "PRIVATE_CHAT_ALLOWLIST",
+      "filePath": "config/settings.py",
+      "startLine": 601,
+      "endLine": 601
+    },
+    {
+      "id": "Variable:config/settings.py:ASTRBOT_COMPAT_ALLOW_PRIVATE",
+      "name": "ASTRBOT_COMPAT_ALLOW_PRIVATE",
+      "filePath": "config/settings.py",
+      "startLine": 1026,
+      "endLine": 1026
+    },
+    {
+      "id": "Function:tools/data_repair.py:_apply_private_owner_repair",
+      "name": "_apply_private_owner_repair",
+      "filePath": "tools/data_repair.py",
+      "startLine": 749,
+      "endLine": 825,
+      "module": "Tools"
+    },
+    {
+      "id": "Function:tools/data_repair.py:apply_repairs",
+      "name": "apply_repairs",
+      "filePath": "tools/data_repair.py",
+      "startLine": 828,
+      "endLine": 994,
+      "module": "Tools"
+    },
+    {
+      "id": "Class:tests/test_personal_memory_scope.py:TestAudienceMatrix",
+      "name": "TestAudienceMatrix",
+      "filePath": "tests/test_personal_memory_scope.py",
+      "startLine": 95,
+      "endLine": 179
+    },
+    {
+      "id": "Class:tests/test_personal_memory_scope.py:TestContextScopeDerivation",
+      "name": "TestContextScopeDerivation",
+      "filePath": "tests/test_personal_memory_scope.py",
+      "startLine": 378,
+      "endLine": 401
+    },
+    {
+      "id": "Method:tests/test_personal_memory_scope.py:TestContextScopeDerivation.test_scope_from_chat_context_identity#0",
+      "name": "test_scope_from_chat_context_identity",
+      "filePath": "tests/test_personal_memory_scope.py",
+      "startLine": 379,
+      "endLine": 401,
+      "module": "Memory"
+    },
+    {
+      "id": "Function:tests/test_personal_memory_sharing.py:_insert_private_fact",
+      "name": "_insert_private_fact",
+      "filePath": "tests/test_personal_memory_sharing.py",
+      "startLine": 93,
+      "endLine": 132,
+      "module": "Tests"
+    }
+  ],
+  "timing": {
+    "vector": 3.6,
+    "bm25": 1041.9,
+    "merge": 0.3,
+    "symbol_lookup": 84.6,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 1127.8
+  }
+}

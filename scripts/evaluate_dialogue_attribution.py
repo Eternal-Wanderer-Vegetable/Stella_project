@@ -557,7 +557,14 @@ def _guard_stage(fixture: dict, raw_output: str) -> dict:
 
     evidence = _fixture_evidence(fixture)
     final_output, decision = apply_attribution_guard(
-        raw_output, evidence, set(evidence.keys()), "enforce", identity_revision=0
+        raw_output,
+        evidence,
+        set(evidence.keys()),
+        "enforce",
+        identity_revision=0,
+        # Frozen fixtures are QQ history; old numeric-target envelopes are only
+        # readable in this explicitly QQ-scoped compatibility replay.
+        risk_context={"allow_legacy_qq_target_id": True},
     )
     return {"final_output": final_output, "decision": asdict(decision)}
 
@@ -902,6 +909,7 @@ async def run_production_batch(args) -> int:
             generation_epoch=int(ctx.generation_epoch or 0),
             risk_context=ctx.attribution_risk_context,
             parse_error=str(ctx.typed_reply_error or ""),
+            turn_id=str(ctx.turn_id or ""),
         )
         record = {
             "decision": decision.decision,
@@ -912,6 +920,7 @@ async def run_production_batch(args) -> int:
             "guard_mode": str(settings.REPLY_ATTRIBUTION_GUARD_MODE or "enforce"),
             "identity_revision": decision.identity_revision,
             "generation_epoch": decision.generation_epoch,
+            "turn_id": str(ctx.turn_id or ""),
             "semantic_status": decision.semantic_status,
             "verified": decision.verified,
             "checked_evidence_ids": decision.checked_evidence_ids,

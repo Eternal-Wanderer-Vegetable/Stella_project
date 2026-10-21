@@ -1,0 +1,23 @@
+{
+  "status": "ambiguous",
+  "message": "Found 2 symbols matching 'RetrievalRequest'. Use uid, file_path, or kind to disambiguate.",
+  "totalCandidates": 2,
+  "candidates": [
+    {
+      "uid": "Impl:memory_rust/native/src/retrieval.rs:RetrievalRequest",
+      "name": "RetrievalRequest",
+      "kind": "",
+      "filePath": "memory_rust/native/src/retrieval.rs",
+      "line": 38,
+      "score": 0.9
+    },
+    {
+      "uid": "Struct:memory_rust/native/src/retrieval.rs:RetrievalRequest",
+      "name": "RetrievalRequest",
+      "kind": "",
+      "filePath": "memory_rust/native/src/retrieval.rs",
+      "line": 15,
+      "score": 0.9
+    }
+  ]
+}

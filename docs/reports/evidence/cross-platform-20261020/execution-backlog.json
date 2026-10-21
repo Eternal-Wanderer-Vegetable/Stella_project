@@ -1,0 +1,156 @@
+{
+  "source_commit": "ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d",
+  "business_implementation": "not_started",
+  "packages": [
+    {
+      "id": "WP00",
+      "title": "WP00 合同冻结与基线",
+      "depends_on": [],
+      "dependency_note": "无",
+      "deliverables": "transport DTO/版本设计；冻结平台矩阵和 QQ/WebChat 行为；`tests/runtime/`、`tests/observability/`",
+      "acceptance": "迁移前可重复回放；所有待认证适配器都有一行；依赖版本/Python 范围验证并锁定",
+      "status": "planned"
+    },
+    {
+      "id": "WP01",
+      "title": "WP01 身份和注册表",
+      "depends_on": [
+        "WP00"
+      ],
+      "dependency_note": "WP00",
+      "deliverables": "新 keys/models；`core/conversation.py`、`memory/conversation_registry.py`、`config/spaces.py`、`space_map.py`",
+      "acceptance": "opaque/非数字/冒号/Unicode ID、parent/thread、同号多 Bot、并发分配、重启 alias 均通过",
+      "status": "planned"
+    },
+    {
+      "id": "WP02",
+      "title": "WP02 上下文和消息身份",
+      "depends_on": [
+        "WP01"
+      ],
+      "dependency_note": "WP01",
+      "deliverables": "`core/context.py`、`core/runtime/facade.py`、`turn_service.py`、`memory/conversation_projection.py`、`conversation_identity.py`、`summary_packet.py`；core/dialogue_attribution.py、SourceEvidence、回复协议/包络投影、QQ消息ID兼容codec",
+      "acceptance": "projection 6/7 转换；本地行号与外部消息 ID 分离；reset/cancel/过期回复保护不串会话；非数字用户目标经本轮可信target_ref映射，不盲放宽ID校验",
+      "status": "planned"
+    },
+    {
+      "id": "WP03",
+      "title": "WP03 存储迁移与双后端",
+      "depends_on": [
+        "WP01",
+        "WP02"
+      ],
+      "dependency_note": "WP01、WP02",
+      "deliverables": "`memory/schema.py`、`migrations.py`、`pre_processors.py`、`memory_manager.py`、`memory_rust/backend.py`、`python_backend.py`、`selector.py`、`native/src/{retrieval,promotion,schema,lib}.rs`",
+      "acceptance": "schema20副本升级/中断/重跑；API4 wheel 检验；Python/native 检索和晋升显式 parity，native 缺席不算通过",
+      "status": "planned"
+    },
+    {
+      "id": "WP04",
+      "title": "WP04 记忆/权限/社交作用域",
+      "depends_on": [
+        "WP02",
+        "WP03"
+      ],
+      "dependency_note": "WP02、WP03",
+      "deliverables": "`memory/ownership.py`、`evidence_contract.py`、`retrieval_v2.py`、`personal_sharing.py`、`addressing.py`、`social_*`、`knowledge/{acl,domain,store,schema}.py`、`capability/providers/knowledge.py`",
+      "acceptance": "同裸 ID 不串画像；私聊→群/频道泄漏为0；旧证据仍有效；分享撤回/KB ACL/主动目标校验均覆盖",
+      "status": "planned"
+    },
+    {
+      "id": "WP05",
+      "title": "WP05 通用入口与命令",
+      "depends_on": [
+        "WP02",
+        "WP04"
+      ],
+      "dependency_note": "WP02、WP04",
+      "deliverables": "新 normalizers/admission；`ai_gateway.py`、`webui/chat_ingress.py`、`core/vision.py`、`capability/hooks.py`",
+      "acceptance": "最先采集、插件接管、命令互斥、群/私聊/线程、纯图、self echo 和采集门语义通过；群入口统一登记",
+      "status": "planned"
+    },
+    {
+      "id": "WP06",
+      "title": "WP06 消息、媒体及统一发送",
+      "depends_on": [
+        "WP01",
+        "WP02"
+      ],
+      "dependency_note": "WP01、WP02",
+      "deliverables": "新 outbound/media/capabilities；`core/social/{delivery,contracts}.py`、`ai_gateway.py` 发送闭包",
+      "acceptance": "文本/图片/附件/引用转换；平台限长拆分；逐段回执；无数字 ID 假设；unknown 不重发",
+      "status": "planned"
+    },
+    {
+      "id": "WP07",
+      "title": "WP07 后台目标与任务恢复",
+      "depends_on": [
+        "WP03",
+        "WP04",
+        "WP06"
+      ],
+      "dependency_note": "WP03、WP04、WP06",
+      "deliverables": "`memory/proactive*`、`session_context.py`、`ai_gateway.py` 后台 jobs、`scheduling/*`、`cometa/{models,store,policy,delivery,service}.py`、`cometa_bridge.py`",
+      "acceptance": "多 Bot 离线/重启/令牌过期仍不串投；旧任务绑定明确；CAS/租约/unknown 状态机保留",
+      "status": "planned"
+    },
+    {
+      "id": "WP08",
+      "title": "WP08 AstrBot 兼容",
+      "depends_on": [
+        "WP05",
+        "WP06"
+      ],
+      "dependency_note": "WP05、WP06",
+      "deliverables": "`astrbot_compat/{events,components,context,filters,pipeline,po}.py`、`capability/hooks.py`、`capability/adapters/astrbot.py`",
+      "acceptance": "分发和工具两种事件构造都覆盖；通用链转换；真实平台过滤；QQ API 插件不在其他平台伪运行",
+      "status": "planned"
+    },
+    {
+      "id": "WP09",
+      "title": "WP09 多适配器装配与健康",
+      "depends_on": [
+        "WP05",
+        "WP06"
+      ],
+      "dependency_note": "WP05、WP06",
+      "deliverables": "`bot.py`、`pyproject.toml`、`requirements.txt`、`.env.example`、新平台装配、`extensions/link_monitor`、`status_api.py`",
+      "acceptance": "注册顺序/driver能力/依赖缺失错误明确；只注册启用项；按 Bot 隔离健康；无心跳平台不误报断线",
+      "status": "planned"
+    },
+    {
+      "id": "WP10",
+      "title": "WP10 控制面和交付",
+      "depends_on": [
+        "WP07",
+        "WP08",
+        "WP09"
+      ],
+      "dependency_note": "WP07、WP08、WP09",
+      "deliverables": "`webui/{routers,services}` 平台/会话/群/空间/cron/KB、`dashboard/src/views` 对应页、i18n、`deploy/*`、CLI/Rust桌面/安装器、Docker/release脚本",
+      "acceptance": "多连接可配置和脱敏；路由先于 SPA mount；非QQ模式不被NapCat检查阻挡；包布局、随包资源和可选依赖有效",
+      "status": "planned"
+    },
+    {
+      "id": "WP11",
+      "title": "WP11 全平台认证与发布",
+      "depends_on": [
+        "WP00",
+        "WP01",
+        "WP02",
+        "WP03",
+        "WP04",
+        "WP05",
+        "WP06",
+        "WP07",
+        "WP08",
+        "WP09",
+        "WP10"
+      ],
+      "dependency_note": "WP00…WP10",
+      "deliverables": "`tests/platforms/`（拟新增）、现有测试、flow catalog/inventory/manifest、CI、双语文档、版本/发行清单",
+      "acceptance": "每个矩阵行有最终状态与证据；L0/L1/L2/L3分开；代表平台live、多账号恢复、干净VM和QQ回归分别验收",
+      "status": "planned"
+    }
+  ]
+}

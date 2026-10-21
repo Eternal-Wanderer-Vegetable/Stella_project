@@ -72,7 +72,14 @@ def test_setup_status_api_registers_route_and_is_idempotent(monkeypatch):
 
 
 def test_build_payload_fields_complete():
-    link = {"healthy": True}
+    link = {
+        "healthy": True,
+        "applicable": True,
+        "bots": [{"instance_ref": "opaque-ref", "healthy": True}],
+        "connections": [
+            {"adapter": "Telegram", "instance_ref": "opaque-other", "health": None}
+        ],
+    }
     sched = {"chat": {"waiting": 2}}
     payload = status_api.build_payload(link, sched, pid=123, started_at=time.time())
     assert set(payload) == {

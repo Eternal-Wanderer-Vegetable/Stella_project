@@ -360,6 +360,63 @@ class TestSchemaV2:
         assert ensure_social_schema(db, backup=False) == {}
         assert social_schema_version(db) == SOCIAL_SCHEMA_VERSION
 
+    def test_v4_delivery_ids_migrate_to_json_list(self, tmp_path):
+        db = tmp_path / "social-v4.db"
+        conn = sqlite3.connect(db)
+        conn.executescript(
+            """
+            CREATE TABLE social_schema_meta (
+                component TEXT PRIMARY KEY,
+                version INTEGER NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO social_schema_meta (component, version) VALUES ('social', 4);
+            CREATE TABLE social_deliveries (
+                delivery_id TEXT PRIMARY KEY,
+                turn_id TEXT NOT NULL,
+                part_index INTEGER NOT NULL,
+                trace_id TEXT NOT NULL DEFAULT '',
+                epoch INTEGER NOT NULL DEFAULT 0,
+                platform TEXT NOT NULL DEFAULT '',
+                bot_id TEXT NOT NULL DEFAULT '',
+                connection_id TEXT NOT NULL DEFAULT '',
+                group_id TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'pending',
+                platform_message_id TEXT,
+                acknowledged_at_utc TEXT,
+                text TEXT NOT NULL DEFAULT '',
+                text_hash TEXT NOT NULL DEFAULT '',
+                delivery_plan_id TEXT NOT NULL DEFAULT '',
+                delivery_plan_digest TEXT NOT NULL DEFAULT '',
+                decision_digest TEXT NOT NULL DEFAULT '',
+                created_at_utc TEXT NOT NULL,
+                updated_at_utc TEXT NOT NULL,
+                conversation_key TEXT NOT NULL DEFAULT '',
+                conversation_kind TEXT NOT NULL DEFAULT '',
+                peer_id TEXT NOT NULL DEFAULT '',
+                storage_session_id INTEGER,
+                learning_eligible INTEGER NOT NULL DEFAULT 0,
+                UNIQUE (turn_id, part_index)
+            );
+            INSERT INTO social_deliveries (delivery_id, turn_id, part_index,
+                platform_message_id, created_at_utc, updated_at_utc)
+                VALUES ('d1', 't1', 0, 'opaque:007', '2026-10-20', '2026-10-20');
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        ensure_social_schema(db, backup=False)
+
+        conn = sqlite3.connect(db)
+        try:
+            assert conn.execute(
+                "SELECT platform_message_ids_json FROM social_deliveries WHERE delivery_id='d1'"
+            ).fetchone() == ('["opaque:007"]',)
+        finally:
+            conn.close()
+        assert social_schema_version(db) == SOCIAL_SCHEMA_VERSION
+
     def test_empty_database_directly_v2(self, tmp_path):
         db = tmp_path / "fresh.db"
         ensure_social_schema(db, backup=False)

@@ -10,6 +10,7 @@ from memory_rust.backend import (
     MEMORY_SCHEMA_VERSION,
     BackendContractError,
     BackendUnavailable,
+    RetrievalRequest,
 )
 from memory_rust.python_backend import PythonMemoryBackend
 from memory_rust.selector import (
@@ -93,10 +94,42 @@ def test_strict_exposes_native_failure():
 
 def test_rust_requires_matching_contract():
     def incompatible():
-        return _native(MEMORY_SCHEMA_VERSION=13)
+        return _native(MEMORY_SCHEMA_VERSION=MEMORY_SCHEMA_VERSION - 1)
 
     with pytest.raises(BackendContractError, match="schema mismatch"):
         get_backend("rust", native_loader=incompatible)
+
+
+def test_rust_requires_matching_api_version():
+    def incompatible():
+        return _native(BACKEND_API_VERSION=BACKEND_API_VERSION - 1)
+
+    with pytest.raises(BackendContractError, match="API mismatch"):
+        get_backend("rust", native_loader=incompatible)
+
+
+def test_retrieval_request_requires_opaque_string_user_id(tmp_path):
+    with pytest.raises(TypeError, match="must be a string"):
+        RetrievalRequest(
+            db_path=tmp_path / "memory.db",
+            group_shared_space="space-a",
+            user_id=42,
+            query="test",
+            trigger="reply",
+            mode="RECOMMEND",
+            pool_limit=5,
+        )
+
+    request = RetrievalRequest(
+        db_path=tmp_path / "memory.db",
+        group_shared_space="space-a",
+        user_id="007",
+        query="test",
+        trigger="reply",
+        mode="RECOMMEND",
+        pool_limit=5,
+    )
+    assert request.user_id == "007"
 
 
 def test_invalid_mode_is_rejected(monkeypatch):

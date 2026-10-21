@@ -1,0 +1,80 @@
+{
+  "target": {
+    "id": "Function:webui/services/runtime.py:platform_link",
+    "name": "platform_link",
+    "type": "Function",
+    "filePath": "webui/services/runtime.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 1,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 1,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 1
+  },
+  "affected_processes": [
+    {
+      "name": "platform_link",
+      "type": "Function",
+      "filePath": "webui/routers/platform.py",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Link_monitor",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:webui/routers/platform.py:platform_link",
+        "name": "platform_link",
+        "filePath": "webui/routers/platform.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_134_platform_link",
+            "label": "Platform_link → _extract_ws_url",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_135_platform_link",
+            "label": "Platform_link → _port_in_use",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_137_platform_link",
+            "label": "Platform_link → _tcp_reachable",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_136_platform_link",
+            "label": "Platform_link → _token_facts",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  }
+}

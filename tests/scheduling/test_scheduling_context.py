@@ -29,7 +29,7 @@ def memory_db(tmp_path, monkeypatch):
     conn.execute(
         "CREATE TABLE group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, "
         "group_id TEXT, user_id TEXT, content TEXT, source_kind TEXT DEFAULT 'PASSIVE', "
-        "timestamp TEXT)"
+        "connection_id TEXT NOT NULL DEFAULT '', timestamp TEXT)"
     )
     conn.execute(
         "CREATE TABLE short_term_context (group_id TEXT PRIMARY KEY, active_summary TEXT)"
@@ -40,12 +40,12 @@ def memory_db(tmp_path, monkeypatch):
     return db
 
 
-def _insert_messages(db, messages, *, source="PASSIVE", user="777"):
+def _insert_messages(db, messages, *, source="PASSIVE", user="777", connection_id=""):
     conn = sqlite3.connect(db)
     conn.executemany(
-        "INSERT INTO group_messages (group_id, user_id, content, source_kind) "
-        "VALUES (?, ?, ?, ?)",
-        [(str(GROUP), user, text, source) for text in messages],
+        "INSERT INTO group_messages (group_id, user_id, content, source_kind, connection_id) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [(str(GROUP), user, text, source, connection_id) for text in messages],
     )
     conn.commit()
     conn.close()
@@ -80,6 +80,20 @@ def test_context_includes_summary_and_tail(memory_db):
     # 顺序：摘要在前、消息旧→新在后
     assert ctx.text.index("【群近期话题】") < ctx.text.index("【最近消息】")
     assert ctx.text.index("周六出发吗") < ctx.text.index("已经订好车了")
+
+
+def test_background_context_is_connection_scoped_and_drops_legacy_summary(memory_db):
+    _set_summary(memory_db, "无法归属到具体 Bot 的旧摘要")
+    _insert_messages(
+        memory_db, ["属于 Bot A"], connection_id="legacy-qq:10000"
+    )
+    _insert_messages(
+        memory_db, ["属于 Bot B"], connection_id="legacy-qq:20000"
+    )
+    ctx = build_scheduled_context(GROUP, connection_id="legacy-qq:10000")
+    assert "属于 Bot A" in ctx.text
+    assert "属于 Bot B" not in ctx.text
+    assert "无法归属到具体 Bot 的旧摘要" not in ctx.text
 
 
 def test_bot_self_lines_are_labelled(memory_db):

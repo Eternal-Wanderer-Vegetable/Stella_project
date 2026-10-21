@@ -9,8 +9,11 @@ thought/action/reply、多行回复）以及供日志与 prompt 构建用的诊�
 上下文。全程由 Pipeline 各钩子和 LLM 后端共同读写，是各模块间传递数据的唯一通道。
 """
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
+
+from core.transport.models import BotRef, SceneRef, UserRef
 
 # 消息身份信封的边界值（多人身份修复计划 §6.2 字段规格）
 _ENVELOPE_DISPLAY_NAME_MAX = 64
@@ -56,10 +59,11 @@ class MessageIdentityEnvelope:
     全部字段来自**平台事件/可信 ctx/已入库行**，绝不从正文、昵称或话题连续性
     推导。uid 一律是项目现有的稳定 uid 字符串；平台 message ID 在持久化边界
     统一成字符串。``apply`` 把值落到 ChatContext 的扁平字段上（投影只传有界
-    JSON primitive，见 ChatContext._PROJECTION_FIELDS v4）。
+    JSON primitive，见 ChatContext._PROJECTION_FIELDS v7）。
     """
 
     sender_display_name: str = ""
+    platform_message_id: str = ""
     reply_to_msg_id: str = ""
     reply_target_user_id: str = ""
     mentioned_user_ids: tuple[str, ...] = ()
@@ -75,6 +79,7 @@ class MessageIdentityEnvelope:
         object.__setattr__(
             self, "sender_display_name", normalize_display_name(self.sender_display_name)
         )
+        object.__setattr__(self, "platform_message_id", str(self.platform_message_id or ""))
         object.__setattr__(self, "mentioned_user_ids", normalize_mentions(self.mentioned_user_ids))
         object.__setattr__(self, "part_index", max(0, int(self.part_index or 0)))
         object.__setattr__(self, "reply_to_msg_id", str(self.reply_to_msg_id or ""))
@@ -87,6 +92,8 @@ class MessageIdentityEnvelope:
     def apply(self, ctx: "ChatContext") -> "ChatContext":
         """把信封写入 ChatContext 的扁平字段（返回同一 ctx，链式友好）。"""
         ctx.sender_display_name = self.sender_display_name
+        if self.platform_message_id:
+            ctx.platform_message_id = self.platform_message_id
         ctx.reply_to_msg_id = self.reply_to_msg_id
         ctx.reply_target_user_id = self.reply_target_user_id
         ctx.mentioned_user_ids = self.mentioned_user_ids
@@ -105,6 +112,7 @@ class MessageIdentityEnvelope:
         """从已带信封字段的 ctx 取回（round-trip 用）。"""
         return cls(
             sender_display_name=ctx.sender_display_name,
+            platform_message_id=ctx.platform_message_id,
             reply_to_msg_id=ctx.reply_to_msg_id,
             reply_target_user_id=ctx.reply_target_user_id,
             mentioned_user_ids=tuple(ctx.mentioned_user_ids),
@@ -154,8 +162,21 @@ class ChatContext:
     bot_id: str = ""  # 接入 Bot 的 self_id（个人 owner 键 person:qq:<bot>:<uid> 用）
     peer_id: str = ""  # 群=群号；私聊=sender QQ 号；WebChat=主体
     storage_session_id: int = 0  # 0 = 未升级入口，按 group_id 兼容
+    # Transport DTO 仅携带可信身份字段；旧扁平字段继续服务现有消费者。
+    # WebChat 的合成 user_id 不自动成为账户主体，接入层需显式提供 UserRef。
+    user_ref: UserRef | None = field(default=None, repr=False)
+    bot_ref: BotRef | None = field(default=None, repr=False)
+    scene_ref: SceneRef | None = field(default=None, repr=False)
+    connection_id: str = ""
+    adapter_name: str = ""
+    platform_scope: str = ""
+    scene_kind: str = ""
+    scene_id: str = ""
+    scene_parent_path: tuple[str, ...] = ()
+    thread_id: str = ""
+    platform_message_id: str = ""  # 外部平台 ID；msg_id 仅为旧接口兼容
 
-    # ---- 消息身份信封（多人身份修复计划 §6.2，v4 投影） ----
+    # ---- 消息身份信封（多人身份修复计划 §6.2，v7 投影） ----
     # 全部来自平台事件/可信 ctx/已入库行；缺省空值 = 「关系未知」，消费方
     # （tail 渲染/纠正解析）按 unknown 处理，绝不按相邻文本或最近发言人补。
     # sender_display_name 是展示数据，不作稳定身份键。
@@ -365,7 +386,9 @@ class ChatContext:
     # 按 feature-off 处理）、处置为空（按 deliver 兼容）——不放宽任何权限。
     # v6：single typed reply、预算保留引用、风险上下文、DeliveryDraft/Plan、
     # guard decision 与 runtime generation fence。旧投影不提供 seal 或新权限。
-    PROJECTION_SCHEMA_VERSION = 6
+    # v7：BotRef/UserRef/SceneRef、opaque platform message ID 与线程路径；v6
+    # 仅按既有 QQ/WebChat 扁平语义读取，不给旧投影补出新的身份授权。
+    PROJECTION_SCHEMA_VERSION = 7
     # 显式白名单（never blacklist）：raw_event/bot 是平台句柄，**永不过桥**；
     # route/task_results/skill_results 承载任意 Python 对象，桥只传可 JSON 的
     # 摘要字段（tool_summaries / knowledge_evidence / skill_summaries 等）。
@@ -373,6 +396,9 @@ class ChatContext:
         # 输入标识
         "user_id", "group_id", "msg_id", "message", "source_kind",
         "group_shared_space", "trigger", "intent", "image_sources",
+        "user_ref", "bot_ref", "scene_ref", "connection_id", "adapter_name",
+        "platform_scope", "scene_kind", "scene_id", "scene_parent_path",
+        "thread_id", "platform_message_id",
         "trace_id", "turn_id",
         # 会话身份（v3）
         "conversation_kind", "conversation_key", "bot_id", "peer_id", "storage_session_id",
@@ -403,6 +429,11 @@ class ChatContext:
         "gate_path", "gate_score", "gate_reasons",
         "planner_trigger", "planner_action", "planner_wait", "deep_tool_calls",
     )
+    _V7_ONLY_FIELDS = (
+        "user_ref", "bot_ref", "scene_ref", "connection_id", "adapter_name",
+        "platform_scope", "scene_kind", "scene_id", "scene_parent_path",
+        "thread_id", "platform_message_id",
+    )
 
     def to_json_projection(self) -> dict:
         """跨进程桥的 JSON 投影：白名单字段 + schema 版本。
@@ -429,10 +460,94 @@ class ChatContext:
             elif name == "mentioned_user_ids":
                 # tuple → list：投影必须 JSON 安全（v4 信封）
                 value = list(value or [])
-            elif name in {"retained_evidence_ids", "reply_segments"}:
+            elif name in {"retained_evidence_ids", "reply_segments", "scene_parent_path"}:
                 value = list(value or [])
+            elif name == "user_ref" and value is not None:
+                value = {
+                    "identity_domain": value.identity_domain,
+                    "raw_user_id": value.raw_user_id,
+                    "display_name": value.display_name,
+                }
+            elif name == "bot_ref" and value is not None:
+                value = {
+                    "connection_id": value.connection_id,
+                    "adapter": value.adapter,
+                    "platform_scope": value.platform_scope,
+                    "self_id": value.self_id,
+                }
+            elif name == "scene_ref" and value is not None:
+                value = {
+                    "kind": value.kind,
+                    "scene_id": value.scene_id,
+                    "parent_path": list(value.parent_path),
+                    "thread_id": value.thread_id,
+                }
             out[name] = value
         return out
+
+    @classmethod
+    def from_json_projection(cls, projection: object) -> "ChatContext":
+        """Restore a known v6/v7 runtime projection; reject unknown contracts."""
+        if not isinstance(projection, dict):
+            raise ValueError("invalid ChatContext projection")
+        version = projection.get("projection_schema_version")
+        if type(version) is not int or version not in {6, cls.PROJECTION_SCHEMA_VERSION}:
+            raise ValueError("unsupported ChatContext projection version")
+        old_fields = set(cls._PROJECTION_FIELDS) - set(cls._V7_ONLY_FIELDS)
+        allowed_fields = old_fields if version == 6 else set(cls._PROJECTION_FIELDS)
+        unknown = set(projection) - allowed_fields - {"projection_schema_version"}
+        if unknown:
+            raise ValueError("unknown ChatContext projection field")
+        if not {"user_id", "group_id", "msg_id", "message"}.issubset(projection):
+            raise ValueError("incomplete ChatContext projection")
+        try:
+            encoded = json.dumps(projection, ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("ChatContext projection is not JSON-safe") from exc
+        if len(encoded.encode("utf-8")) > 2 * 1024 * 1024:
+            raise ValueError("ChatContext projection exceeds size limit")
+
+        values = {name: projection[name] for name in allowed_fields if name in projection}
+        for name in (
+            "mentioned_user_ids", "gate_reasons", "retained_evidence_ids",
+            "reply_segments", "scene_parent_path",
+        ):
+            if name not in values:
+                continue
+            raw = values[name]
+            if not isinstance(raw, (list, tuple)) or any(
+                not isinstance(item, str) for item in raw
+            ):
+                raise ValueError(f"invalid ChatContext projection field: {name}")
+            values[name] = tuple(raw)
+
+        ref_specs = {
+            "user_ref": (
+                UserRef, {"identity_domain", "raw_user_id", "display_name"},
+            ),
+            "bot_ref": (
+                BotRef, {"connection_id", "adapter", "platform_scope", "self_id"},
+            ),
+            "scene_ref": (
+                SceneRef, {"kind", "scene_id", "parent_path", "thread_id"},
+            ),
+        }
+        for name, (model, fields) in ref_specs.items():
+            raw = values.get(name)
+            if raw is None:
+                continue
+            if not isinstance(raw, dict) or set(raw) != fields:
+                raise ValueError(f"invalid ChatContext projection field: {name}")
+            args = dict(raw)
+            if name == "scene_ref":
+                parent_path = args.get("parent_path")
+                if not isinstance(parent_path, list) or any(
+                    not isinstance(item, str) for item in parent_path
+                ):
+                    raise ValueError("invalid ChatContext scene_ref")
+                args["parent_path"] = tuple(parent_path)
+            values[name] = model(**args)
+        return cls(**values)
 
     def __post_init__(self) -> None:
         """自动解析共享空间归属，不要求调用方逐个传参。
@@ -440,7 +555,12 @@ class ChatContext:
         ``resolve_space`` 延迟导入：避免 core 在 import 阶段依赖 config 子模块
         （与 settings.py 对 nonebot logger 的延迟导入同理）。
         """
-        if not self.group_shared_space and self.group_id:
+        if (
+            not self.group_shared_space
+            and isinstance(self.group_id, int)
+            and not isinstance(self.group_id, bool)
+            and self.group_id
+        ):
             from config.spaces import resolve_space
 
             self.group_shared_space = resolve_space(self.group_id)
@@ -450,3 +570,76 @@ class ChatContext:
             self.sender_display_name = normalize_display_name(self.sender_display_name)
         if self.mentioned_user_ids:
             self.mentioned_user_ids = normalize_mentions(self.mentioned_user_ids)
+        if isinstance(self.scene_parent_path, (str, bytes)):
+            raise ValueError("scene_parent_path must be a sequence of strings")
+        self.scene_parent_path = tuple(self.scene_parent_path or ())
+        if any(not isinstance(part, str) or not part for part in self.scene_parent_path):
+            raise ValueError("scene_parent_path entries must be non-empty strings")
+        for name in (
+            "connection_id", "adapter_name", "platform_scope", "scene_kind",
+            "scene_id", "thread_id",
+        ):
+            value = getattr(self, name)
+            if value is None:
+                setattr(self, name, "")
+            elif not isinstance(value, str):
+                raise ValueError(f"{name} must be a string")
+        if isinstance(self.platform_message_id, bool):
+            raise ValueError("platform_message_id must be an opaque string ID")
+        if isinstance(self.platform_message_id, int):
+            self.platform_message_id = str(self.platform_message_id)
+        elif self.platform_message_id is None:
+            self.platform_message_id = ""
+        elif not isinstance(self.platform_message_id, str):
+            raise ValueError("platform_message_id must be an opaque string ID")
+        if not self.platform_message_id and self.msg_id not in (None, 0):
+            self.platform_message_id = str(self.msg_id)
+        if self.user_ref is not None and not isinstance(self.user_ref, UserRef):
+            raise ValueError("user_ref must be a UserRef")
+        if self.bot_ref is not None and not isinstance(self.bot_ref, BotRef):
+            raise ValueError("bot_ref must be a BotRef")
+        if self.scene_ref is not None and not isinstance(self.scene_ref, SceneRef):
+            raise ValueError("scene_ref must be a SceneRef")
+        if self.user_ref is None and self.user_id not in (None, 0, ""):
+            # The legacy qq:<bot>:... key is an established QQ client account
+            # domain. Do not infer a WebChat account from its synthetic numeric ID.
+            is_legacy_qq = self.conversation_key.startswith("qq:")
+            domain = "qq:client" if is_legacy_qq else ""
+            if not domain and self.connection_id:
+                domain = f"connection:{self.connection_id}"
+            if domain:
+                self.user_ref = UserRef(
+                    domain,
+                    str(self.user_id),
+                    self.sender_display_name or None,
+                )
+        if self.scene_ref is None and self.conversation_kind in {"group", "private"}:
+            scene_id = self.scene_id or self.peer_id
+            if not scene_id and self.conversation_kind == "group":
+                scene_id = str(self.group_id)
+            if scene_id:
+                self.scene_ref = SceneRef(
+                    self.scene_kind or self.conversation_kind,
+                    str(scene_id),
+                    tuple(self.scene_parent_path),
+                    self.thread_id or None,
+                )
+        if self.bot_ref is None and all((
+            self.connection_id, self.adapter_name, self.platform_scope, self.bot_id
+        )):
+            self.bot_ref = BotRef(
+                self.connection_id,
+                self.adapter_name,
+                self.platform_scope,
+                self.bot_id,
+            )
+
+    @property
+    def raw_user_id(self) -> str:
+        """External user ID in its original domain; never a storage row ID."""
+        return self.user_ref.raw_user_id if self.user_ref else str(self.user_id or "")
+
+    @property
+    def subject_key(self) -> str:
+        """Stable account subject; empty when ingress supplied no trusted domain."""
+        return self.user_ref.subject_key if self.user_ref else ""

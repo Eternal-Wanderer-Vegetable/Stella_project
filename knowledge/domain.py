@@ -112,6 +112,7 @@ class KBGrant:
     role: str = ROLE_VIEWER
     granted_by: str = ""
     created_at: str = ""
+    principal_identity_domain: str = ""
 
     def __post_init__(self) -> None:
         if self.principal_kind not in PRINCIPAL_KINDS:
@@ -148,6 +149,7 @@ class KnowledgeBase:
     created_by: str = ""
     created_at: str = ""
     updated_at: str = ""
+    owner_identity_domain: str = ""
 
     def __post_init__(self) -> None:
         if self.mode not in KB_MODES:
