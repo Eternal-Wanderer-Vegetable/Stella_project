@@ -244,6 +244,21 @@ async def test_private_chat_end_to_end_once_recorded(private_env, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_private_deadline_exits_without_generic_fallback(private_env, monkeypatch):
+    from gravitas.errors import DeadlineExceeded
+
+    monkeypatch.setattr(
+        gateway,
+        "_run_turn_via_engine",
+        AsyncMock(side_effect=DeadlineExceeded("prepare")),
+    )
+    await gateway.handle_private_chat(Mock(self_id="10000"), _private_event())
+
+    assert private_env.outbound.calls == []
+    assert gateway._record_bot_lines.await_count == 0
+
+
+@pytest.mark.asyncio
 async def test_two_users_distinct_storage_and_scope(private_env, monkeypatch):
     """同 Bot 两个私聊：存储 ID 递增不冲突，runtime 键互不相同。"""
     env = private_env

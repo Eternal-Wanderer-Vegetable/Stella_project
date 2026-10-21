@@ -165,6 +165,7 @@ async def test_deadline_produces_fallback_not_hang(tmp_path):
 async def test_total_deadline_bounds_generation_below_legacy_phase_cap(tmp_path):
     from gravitas.clock import system_control_clock
     from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
 
     h = harness.RuntimeHarness(tmp_path)
     clock = system_control_clock()
@@ -174,19 +175,107 @@ async def test_total_deadline_bounds_generation_below_legacy_phase_cap(tmp_path)
     started = time.monotonic()
     try:
         await h.start()
-        out = await h.facade.submit_turn(
-            KEY,
-            h.pipeline,
-            ctx,
-            deadline=3.0,
-            turn_deadline=turn_deadline,
-        )
+        with pytest.raises(DeadlineExceeded) as exc:
+            await h.facade.submit_turn(
+                KEY,
+                h.pipeline,
+                ctx,
+                deadline=3.0,
+                turn_deadline=turn_deadline,
+            )
         elapsed = time.monotonic() - started
 
         assert h.provider_calls
         assert ctx.turn_deadline is turn_deadline
-        assert out.lines == ["......？"]
+        assert exc.value.phase == "generate"
+        assert not [r for r in h.store_lines() if r["state"] == "provider_fallback"]
         assert elapsed < 2.0
+    finally:
+        await h.stop()
+
+
+async def test_session_lock_wait_is_bounded_by_total_deadline(tmp_path):
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
+
+    h = harness.RuntimeHarness(tmp_path)
+    clock = system_control_clock()
+    await h.start()
+    state = h.facade._key_state(KEY)
+    await state.lock.acquire()
+    try:
+        deadline = Deadline(clock.now() + 0.05, clock.clock_id)
+        with pytest.raises(DeadlineExceeded) as exc:
+            await h.facade.submit_turn(
+                KEY, h.pipeline, h.ctx(), turn_deadline=deadline
+            )
+        assert exc.value.phase == "session_lock"
+        assert state.lock.locked(), "timed-out waiter released another turn's lock"
+        assert h.provider_calls == []
+    finally:
+        state.lock.release()
+        await h.stop()
+
+
+async def test_prepare_timeout_is_control_signal_and_cancels_hook(tmp_path):
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
+
+    h = harness.RuntimeHarness(tmp_path)
+    clock = system_control_clock()
+    entered = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def slow_hook(ctx):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+        return ctx
+
+    h.pipeline.register_pre_hook(slow_hook, priority=1000)
+    await h.start()
+    try:
+        deadline = Deadline(clock.now() + 0.15, clock.clock_id)
+        with pytest.raises(DeadlineExceeded) as exc:
+            await h.facade.submit_turn(
+                KEY, h.pipeline, h.ctx(), turn_deadline=deadline
+            )
+        assert exc.value.phase == "prepare"
+        assert entered.is_set() and cancelled.is_set()
+        assert h.provider_calls == []
+    finally:
+        await h.stop()
+
+
+async def test_finalize_timeout_is_control_signal(tmp_path):
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
+
+    h = harness.RuntimeHarness(tmp_path)
+    clock = system_control_clock()
+    entered = asyncio.Event()
+
+    async def slow_finalize(ctx):
+        entered.set()
+        await asyncio.Event().wait()
+        return ctx
+
+    h.pipeline.register_post_hook(slow_finalize, priority=200)
+    await h.start()
+    try:
+        deadline = Deadline(clock.now() + 0.4, clock.clock_id)
+        with pytest.raises(DeadlineExceeded) as exc:
+            await h.facade.submit_turn(
+                KEY, h.pipeline, h.ctx(), turn_deadline=deadline
+            )
+        assert exc.value.phase == "finalize"
+        assert entered.is_set()
+        assert h.provider_calls
     finally:
         await h.stop()
 

@@ -278,6 +278,12 @@ class RuntimeFacade:
         """完整轮次：prepare → 决策分流 → （GENERATE）进程内生成 → finalize。"""
         from gravitas.clock import system_control_clock
         from gravitas.contracts import Deadline as DeadlineContract
+        from gravitas.deadlines import (
+            lock_with_deadline,
+            raise_if_expired,
+            run_with_deadline,
+        )
+        from gravitas.errors import DeadlineExceeded
 
         control_clock = system_control_clock()
         turn_deadline = turn_deadline or ctx.turn_deadline or new_turn_deadline(
@@ -288,7 +294,12 @@ class RuntimeFacade:
         turn_deadline.remaining(control_clock.now(), clock_id=control_clock.clock_id)
         ctx.turn_deadline = turn_deadline
         state = self._key_state(key)
-        async with state.lock:
+        async with lock_with_deadline(
+            state.lock,
+            turn_deadline,
+            phase="session_lock",
+            clock=control_clock,
+        ):
             fctx = _flow_ctx(ctx)
             turn_id = uuid.uuid4().hex
             state.last_turn_id = turn_id
@@ -306,6 +317,55 @@ class RuntimeFacade:
                 turn_id=turn_id, key=key, trace_id=ctx.trace_id, owner_epoch=epoch_before,
                 outcome="", state="accepted", started_at=started,
             )
+
+            def record_deadline(phase: str) -> None:
+                _flow_decision(
+                    fctx,
+                    "turn.timeout",
+                    status="timed_out",
+                    reason_code=f"turn_deadline_{phase}",
+                )
+                self._record(
+                    turn_id=turn_id,
+                    key=key,
+                    trace_id=ctx.trace_id,
+                    owner_epoch=state.owner_epoch,
+                    outcome="deadline_exceeded",
+                    state=f"deadline_{phase}",
+                    started_at=started,
+                    finished_at=time.time(),
+                    detail={"phase": phase},
+                )
+                _trace(
+                    trace_id=ctx.trace_id,
+                    turn_id=turn_id,
+                    stage=phase,
+                    status="timed_out",
+                    reason_code="turn_deadline_exceeded",
+                    scope=ctx.trace_scope,
+                    started_at=started,
+                )
+
+            def check_deadline(phase: str) -> None:
+                try:
+                    raise_if_expired(
+                        turn_deadline, phase=phase, clock=control_clock
+                    )
+                except DeadlineExceeded as exc:
+                    record_deadline(exc.phase)
+                    raise
+
+            async def finalize() -> ChatContext:
+                try:
+                    return await run_with_deadline(
+                        lambda: pipeline.finalize_turn(ctx),
+                        turn_deadline,
+                        phase="finalize",
+                        clock=control_clock,
+                    )
+                except DeadlineExceeded as exc:
+                    record_deadline(exc.phase)
+                    raise
             _trace(
                 trace_id=ctx.trace_id, turn_id=turn_id, stage="ingress",
                 status="accepted", scope=ctx.trace_scope, started_at=started,
@@ -315,7 +375,16 @@ class RuntimeFacade:
                 if _detail_on(ctx) else None,
             )
             with _flow_span(fctx, "turn.prepare"):
-                plan = await pipeline.prepare_turn(ctx)
+                try:
+                    plan = await run_with_deadline(
+                        lambda: pipeline.prepare_turn(ctx),
+                        turn_deadline,
+                        phase="prepare",
+                        clock=control_clock,
+                    )
+                except DeadlineExceeded as exc:
+                    record_deadline(exc.phase)
+                    raise
             # fence：prepare 期间发生 reset → 本轮作废（epoch 已被推进）
             if state.owner_epoch != epoch_before:
                 self._record(
@@ -350,23 +419,34 @@ class RuntimeFacade:
                 _flow_transition(fctx, from_node="turn.prepare", to_node="turn.generate")
                 # 与 legacy generate_reply 同口径：进入生成即计一次调用、记耗时
                 # （prepare 的调用上限守卫与 thought 日志的「耗时」字段都依赖它们）。
-                ctx.llm_call_count += 1
                 gen_started = time.monotonic()
                 gen_span = _flow_span(fctx, "turn.generate")
                 gen_span.__enter__()
                 from gravitas.model_calls import ModelCallDeferred
 
-                task = asyncio.create_task(provider(key, prompt) if self._provider
-                                           else _pipeline_provider(pipeline, key, prompt, ctx))
-                state.inflight = task
+                def invoke_provider():
+                    ctx.llm_call_count += 1
+                    return (
+                        provider(key, prompt)
+                        if self._provider
+                        else _pipeline_provider(pipeline, key, prompt, ctx)
+                    )
+
                 try:
                     phase_timeout = deadline or self._default_deadline
-                    turn_timeout = turn_deadline.remaining(
-                        control_clock.now(), clock_id=control_clock.clock_id
+                    text = await run_with_deadline(
+                        invoke_provider,
+                        turn_deadline,
+                        phase="generate",
+                        timeout_cap=phase_timeout,
+                        clock=control_clock,
+                        on_task=lambda task: setattr(state, "inflight", task),
                     )
-                    text = await asyncio.wait_for(
-                        task, timeout=min(phase_timeout, turn_timeout)
-                    )
+                except DeadlineExceeded as e:
+                    gen_span.__exit__(type(e), e, e.__traceback__)
+                    ctx.llm_elapsed = time.monotonic() - gen_started
+                    record_deadline(e.phase)
+                    raise
                 except asyncio.TimeoutError:
                     # 有界失败：deadline 按 legacy 超时语义兜底（BC-5），不悬挂
                     gen_span.__exit__(asyncio.TimeoutError, None, None)
@@ -388,7 +468,7 @@ class RuntimeFacade:
                            reason_code="timeout", attempt=1,
                            metrics={"elapsed": ctx.llm_elapsed},
                            scope=ctx.trace_scope, started_at=started)
-                    return await pipeline.finalize_turn(ctx)
+                    return await finalize()
                 except asyncio.CancelledError:
                     gen_span.__exit__(asyncio.CancelledError, None, None)
                     if state.cancel_requested:
@@ -414,6 +494,14 @@ class RuntimeFacade:
                                      status="cancelled")
                     raise  # 外部取消（调用方断开等）：原样传播
                 except ModelCallDeferred as e:
+                    try:
+                        check_deadline("model_queue")
+                    except DeadlineExceeded as expired:
+                        gen_span.__exit__(
+                            type(expired), expired, expired.__traceback__
+                        )
+                        ctx.llm_elapsed = time.monotonic() - gen_started
+                        raise
                     gen_span.__exit__(None, None, None)
                     _flow_decision(fctx, "turn.generate", status="deferred",
                                    reason_code=e.reason_code)
@@ -430,7 +518,7 @@ class RuntimeFacade:
                            reason_code=e.reason_code, attempt=0,
                            metrics={"elapsed": ctx.llm_elapsed},
                            scope=ctx.trace_scope, started_at=started)
-                    return await pipeline.finalize_turn(ctx)
+                    return await finalize()
                 except Exception as e:
                     # provider 异常：与 legacy pipeline 内部 catch 一致（BC-5）——
                     # 兜底而非上抛，不让异常击穿整条消息链路
@@ -453,7 +541,7 @@ class RuntimeFacade:
                            reason_code="provider_error", attempt=1,
                            metrics={"elapsed": ctx.llm_elapsed},
                            scope=ctx.trace_scope, started_at=started)
-                    return await pipeline.finalize_turn(ctx)
+                    return await finalize()
                 finally:
                     state.inflight = None
                 gen_span.__exit__(None, None, None)
@@ -476,7 +564,7 @@ class RuntimeFacade:
                        detailed={"prompt_chars": len(prompt),
                                  "output_chars": len(ctx.raw_output)}
                        if _detail_on(ctx) else None)
-                return await pipeline.finalize_turn(ctx)
+                return await finalize()
 
             if plan.outcome in (DIRECT, SILENT):
                 # 与 legacy 直回/WAIT 早退语义一致——不执行 finalize
@@ -495,6 +583,7 @@ class RuntimeFacade:
                     outcome=plan.outcome, state="completed", started_at=started,
                     finished_at=time.time(),
                 )
+                check_deadline("direct")
                 return plan.ctx
 
             # BUDGET_LIMITED / NO_BACKEND：本地路径（无生成），仍产兜底 lines
@@ -509,7 +598,7 @@ class RuntimeFacade:
                 outcome=plan.outcome, state="completed_local", started_at=started,
                 finished_at=time.time(),
             )
-            return await pipeline.finalize_turn(ctx)
+            return await finalize()
 
     # ---- 取消 / 复位 / 排空 ----
 

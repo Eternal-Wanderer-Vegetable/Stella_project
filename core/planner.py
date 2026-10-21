@@ -272,6 +272,8 @@ class RestrictedPlanner:
         budgeted = fit_prompt_to_window(prompt, PLANNER_SYSTEM_PROMPT)
         from core.llm import ROLE_CHAT
         from gravitas.contracts import WorkClass
+        from gravitas.deadlines import raise_if_expired, run_with_deadline
+        from gravitas.errors import DeadlineExceeded
         from gravitas.model_calls import (
             ModelCallDeferred,
             execute_model_call,
@@ -280,8 +282,8 @@ class RestrictedPlanner:
 
         try:
             ctx.llm_call_count += 1
-            return await asyncio.wait_for(
-                execute_model_call(
+            def operation():
+                return execute_model_call(
                     self._backend,
                     budgeted.prompt,
                     PLANNER_SYSTEM_PROMPT,
@@ -290,14 +292,29 @@ class RestrictedPlanner:
                         work_class=WorkClass.INTERACTIVE,
                         tag="planner-turn",
                         conversation_key=ctx.conversation_key,
+                        deadline=ctx.turn_deadline,
                     ),
-                ),
+                )
+
+            if ctx.turn_deadline is not None:
+                return await run_with_deadline(
+                    operation,
+                    ctx.turn_deadline,
+                    phase="planner",
+                    timeout_cap=self._timeout,
+                )
+            return await asyncio.wait_for(
+                operation(),
                 timeout=self._timeout,
             )
+        except DeadlineExceeded:
+            raise
         except asyncio.TimeoutError:
             logger.warning("⏳ [Planner] 规划超时，按直接回复处理")
             return "REPLY"
         except ModelCallDeferred as e:
+            if ctx.turn_deadline is not None:
+                raise_if_expired(ctx.turn_deadline, phase="planner")
             logger.info(f"[Planner] 模型队列压力，本轮按直接回复处理（{e.reason_code}）")
             return "REPLY"
         except Exception as e:

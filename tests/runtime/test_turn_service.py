@@ -153,6 +153,45 @@ def test_prepare_silent_on_planner_wait():
     assert plan.outcome == SILENT
 
 
+def test_prepare_propagates_deadline_control_from_planner():
+    from gravitas.errors import DeadlineExceeded
+
+    svc, _ = _service([])
+
+    class Planner:
+        async def maybe_plan(self, ctx):
+            raise DeadlineExceeded("planner")
+
+    svc.set_planner(Planner())
+    with pytest.raises(DeadlineExceeded) as exc:
+        asyncio.run(svc.prepare_turn(_ctx()))
+    assert exc.value.phase == "planner"
+
+
+def test_direct_turn_service_generation_propagates_total_deadline():
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+    from gravitas.errors import DeadlineExceeded
+
+    svc, backend = _service([])
+    clock = system_control_clock()
+    ctx = _ctx(turn_deadline=Deadline(clock.now() + 0.1, clock.clock_id))
+
+    async def slow_generate(prompt: str, system_prompt: str = "") -> str:
+        await asyncio.Event().wait()
+        return "unreachable"
+
+    backend.generate = slow_generate
+
+    async def run_turn():
+        plan = await svc.prepare_turn(ctx)
+        return await svc.generate_reply(plan.ctx)
+
+    with pytest.raises(DeadlineExceeded) as exc:
+        asyncio.run(run_turn())
+    assert exc.value.phase == "generate"
+
+
 def test_budget_limited_skips_generation_but_finalizes_fallback(monkeypatch):
     from config import settings as settings_mod
 

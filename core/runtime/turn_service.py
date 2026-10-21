@@ -31,6 +31,7 @@ from config import MEMORY_V2_ENABLED, PLANNER_MAX_LLM_CALLS_PER_TURN
 from core.context import ChatContext
 from core.context_budget import fit_prompt_to_window
 from core.llm.base import LLMBackend
+from gravitas.errors import DeadlineExceeded
 
 PreHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
 PostHook = Callable[[ChatContext], Awaitable[ChatContext | None]]
@@ -359,6 +360,8 @@ class TurnService:
         if self._planner is not None:
             try:
                 ctx = await self._planner.maybe_plan(ctx)
+            except DeadlineExceeded:
+                raise
             except Exception as e:
                 logger.warning(f"[Planner] 规划异常（按快速路径继续）: {e}")
                 _flow_decision(fctx, "planner.preflight", status="failed",
@@ -619,8 +622,9 @@ class TurnService:
         import time as _time
 
         from core.llm import ROLE_CHAT
-        from gravitas.clock import system_control_clock
         from gravitas.contracts import WorkClass
+        from gravitas.deadlines import raise_if_expired, run_with_deadline
+        from gravitas.errors import DeadlineExceeded
         from gravitas.model_calls import (
             ModelCallDeferred,
             execute_model_call,
@@ -629,33 +633,37 @@ class TurnService:
 
         _t0 = _time.monotonic()
         turn_deadline = ctx.turn_deadline
-        phase_timeout = self._timeout
-        if turn_deadline is not None:
-            clock = system_control_clock()
-            phase_timeout = min(
-                phase_timeout,
-                turn_deadline.remaining(clock.now(), clock_id=clock.clock_id),
-            )
-        try:
+
+        async def invoke() -> str:
             ctx.llm_call_count += 1
-            raw = await asyncio.wait_for(
-                execute_model_call(
-                    self._llm,
-                    user_prompt,
-                    system_prompt,
-                    context=role_call_context(
-                        ROLE_CHAT,
-                        work_class=WorkClass.INTERACTIVE,
-                        tag="reply-turn",
-                        conversation_key=ctx.conversation_key,
-                        deadline=turn_deadline,
-                    ),
+            return await execute_model_call(
+                self._llm,
+                user_prompt,
+                system_prompt,
+                context=role_call_context(
+                    ROLE_CHAT,
+                    work_class=WorkClass.INTERACTIVE,
+                    tag="reply-turn",
+                    conversation_key=ctx.conversation_key,
+                    deadline=turn_deadline,
                 ),
-                timeout=phase_timeout,
             )
+
+        try:
+            if turn_deadline is None:
+                raw = await asyncio.wait_for(invoke(), timeout=self._timeout)
+            else:
+                raw = await run_with_deadline(
+                    invoke,
+                    turn_deadline,
+                    phase="generate",
+                    timeout_cap=self._timeout,
+                )
             ctx.llm_elapsed = _time.monotonic() - _t0
             ctx.raw_output = raw
             ctx.delivery_source_kind = "model"
+        except DeadlineExceeded:
+            raise
         except asyncio.TimeoutError:
             # 超时兜底：产出"卡顿"回复而非崩溃，保证用户能得到反馈
             ctx.llm_elapsed = _time.monotonic() - _t0
@@ -663,6 +671,8 @@ class TurnService:
             ctx.delivery_source_kind = "trusted-server-fallback"
             ctx.raw_output = "<thought>卡顿了一下</thought><action>NONE</action><reply>......？</reply>"
         except ModelCallDeferred as e:
+            if turn_deadline is not None:
+                raise_if_expired(turn_deadline, phase="model_queue")
             ctx.llm_elapsed = _time.monotonic() - _t0
             logger.info(f"模型队列压力导致本轮延期（{e.reason_code}）")
             ctx.delivery_source_kind = "trusted-server-fallback"
@@ -756,9 +766,23 @@ class TurnService:
         指令型 intent（如 proactive_at：见 _INSTRUCTION_INTENTS）下 ctx.message
         是任务指令而非用户输入，会被 _compose_prompt 前置到上下文之前。
         """
-        plan = await self.prepare_turn(ctx)
+        turn_deadline = ctx.turn_deadline
+        if turn_deadline is None:
+            plan = await self.prepare_turn(ctx)
+        else:
+            from gravitas.deadlines import run_with_deadline
+
+            plan = await run_with_deadline(
+                lambda: self.prepare_turn(ctx),
+                turn_deadline,
+                phase="prepare",
+            )
         if plan.outcome in (DIRECT, SILENT):
             # 直回与 WAIT：轮次立即结束，与 legacy 一致不执行后置 hooks
+            if turn_deadline is not None:
+                from gravitas.deadlines import raise_if_expired
+
+                raise_if_expired(turn_deadline, phase="direct")
             return plan.ctx
         if plan.outcome in (BUDGET_LIMITED, NO_BACKEND):
             # 与 legacy 一致：跳过生成但仍执行 trace 与后置 hooks（split_lines
@@ -767,6 +791,18 @@ class TurnService:
             ctx.delivery_source_kind = "trusted-server-fallback"
             if plan.outcome == BUDGET_LIMITED:
                 ctx.llm_backend = getattr(self._llm, "backend_name", type(self._llm).__name__)
-            return await self.finalize_turn(ctx)
+            if turn_deadline is None:
+                return await self.finalize_turn(ctx)
+            return await run_with_deadline(
+                lambda: self.finalize_turn(ctx),
+                turn_deadline,
+                phase="finalize",
+            )
         ctx = await self.generate_reply(plan.ctx)
-        return await self.finalize_turn(ctx)
+        if turn_deadline is None:
+            return await self.finalize_turn(ctx)
+        return await run_with_deadline(
+            lambda: self.finalize_turn(ctx),
+            turn_deadline,
+            phase="finalize",
+        )

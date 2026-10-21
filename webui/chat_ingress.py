@@ -84,6 +84,7 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
     兜底自建（直连调用方仍可观测）。
     """
     from core.runtime.facade import new_turn_deadline
+    from gravitas.deadlines import lock_with_deadline
 
     turn_deadline = new_turn_deadline()
     from core.context import ChatContext
@@ -186,7 +187,9 @@ async def run_turn(message: str, username: str, *, flow_ctx=None) -> dict:
     outcome = "delivered"
     pipeline = _resolve_pipeline()
     with _flow_span(flow_ctx, "web.session_lock"):
-        async with _lock:  # 同群串行（等价群级锁语义）
+        async with lock_with_deadline(
+            _lock, turn_deadline, phase="session_lock"
+        ):  # 同群串行（等价群级锁语义）
             # 轮次经 facade（prepare/finalize 留 Python，生成是进程内 provider
             # 调用）；锁语义由 facade per-key owner 接管
             from core.runtime.facade import ensure_shared_facade_started

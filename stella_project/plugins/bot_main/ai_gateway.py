@@ -141,6 +141,7 @@ from core.transport import (
 )
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
+from gravitas.errors import DeadlineExceeded
 from memory import addressing, capture_gate, expression_learning, social_store
 from memory.addressing_intent import (
     CLEAR_ADDRESS,
@@ -1710,6 +1711,12 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # FinishedException 应该被原样向上抛，避免把“已结束”当作异常处理
         except FinishedException:
             raise
+        except DeadlineExceeded as e:
+            _flow_decision(fctx, "chat.runtime_result", status="timed_out",
+                           reason_code=f"turn_deadline_{e.phase}")
+            _flow_set_outcome(fctx, "deadline_exceeded")
+            logger.info(f"⏳ [chat] 群 {event.group_id} 总期限耗尽，静默不发送（{e.phase}）")
+            return
         except RuntimeTurnError as e:
             # 取消不是失败（计划 §6.9 层 3）：绝不能落进通用兜底变成「......？」
             if e.code == E_CANCELLED:
@@ -2277,6 +2284,12 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 ctx = await _run_turn_via_engine(ref.runtime_key, ctx)
         except FinishedException:
             raise
+        except DeadlineExceeded as e:
+            _flow_decision(fctx, "chat.runtime_result", status="timed_out",
+                           reason_code=f"turn_deadline_{e.phase}")
+            _flow_set_outcome(fctx, "deadline_exceeded")
+            logger.info(f"⏳ [chat] 私聊 {ref.runtime_key} 总期限耗尽，静默不发送（{e.phase}）")
+            return
         except RuntimeTurnError as e:
             if e.code == E_CANCELLED:
                 _flow_decision(fctx, "chat.runtime_result", status="cancelled",
@@ -4207,6 +4220,13 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
             )
             try:
                 ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
+            except DeadlineExceeded as e:
+                logger.info(f"⏳ [主动@] 群 {group_id} 总期限耗尽，跳过发送（{e.phase}）")
+                _flow_decision(flow_ctx, "proactive.turn", status="timed_out",
+                               reason_code=f"turn_deadline_{e.phase}",
+                               instance_key=f"grp:{group_id}")
+                outcome = "deadline_exceeded"
+                return False
             except RuntimeTurnError as e:
                 # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
                 if e.code == E_CANCELLED:
@@ -4793,6 +4813,11 @@ async def _proactive_speak_impl(
         try:
             with _flow_span(fctx, "proactive.turn"):
                 ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
+        except DeadlineExceeded as e:
+            _flow_set_outcome(fctx, "deadline_exceeded")
+            _log_participation_event(decision, "generation_skip", f"turn_deadline_{e.phase}")
+            logger.info(f"⏳ [主动发言] 群 {group_id} 总期限耗尽，跳过发送（{e.phase}）")
+            return
         except RuntimeTurnError as e:
             # 取消（reset/新直接请求抢占）：无发送、无兜底、无记账
             if e.code == E_CANCELLED:
