@@ -55,6 +55,9 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
     assert "oneclick_rust=\"Stella-OneClick-Rust-v${python_version}" in main
     assert "products/*.exe" in main
     assert "products/*.zip" in main
+    from build_release_package import COMMON_DIRS
+
+    assert "gravitas" in COMMON_DIRS
     assert "build-oneclick-catalog-backend:" in main
     assert "LLAMA_CPP_COMMIT: 4a89937354190cef5a97baf8eeb17336105eb72d" in main
     assert "stella-oneclick-catalog-backend" in main

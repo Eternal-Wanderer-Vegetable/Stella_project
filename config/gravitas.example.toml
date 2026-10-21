@@ -1,0 +1,16 @@
+# 出厂参考配置。实际运行配置保存在 STELLA_HOME/config/gravitas.toml。
+schema_version = 1
+
+[controller]
+tick_seconds = 1.0
+fact_ttl_seconds = 5.0
+
+[limits]
+turn_timeout_seconds = 120.0
+interactive_queue = 16
+background_queue = 4
+max_pending_per_conversation = 1
+
+[resources.local_inference]
+slots = ["CHAT", "MEMORY"]
+concurrency = 1

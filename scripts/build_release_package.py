@@ -47,6 +47,7 @@ COMMON_DIRS = (
     "core",
     "deploy",
     "extensions",
+    "gravitas",
     "knowledge",
     "memory",
     "skills",
