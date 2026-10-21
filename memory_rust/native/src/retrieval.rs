@@ -15,7 +15,7 @@ use crate::schema::ensure_supported;
 pub struct RetrievalRequest {
     pub db_path: String,
     pub group_shared_space: String,
-    pub user_id: i64,
+    pub user_id: String,
     pub query: String,
     pub trigger: String,
     pub mode: String,
@@ -323,11 +323,11 @@ mod tests {
     use rusqlite::Connection;
     use tempfile::NamedTempFile;
 
-    fn test_request(db_path: &str, space: &str, user: i64) -> RetrievalRequest {
+    fn test_request(db_path: &str, space: &str, user: impl ToString) -> RetrievalRequest {
         RetrievalRequest {
             db_path: db_path.to_string(),
             group_shared_space: space.to_string(),
-            user_id: user,
+            user_id: user.to_string(),
             query: "推荐游戏".to_string(),
             trigger: "reply".to_string(),
             mode: "RECOMMEND".to_string(),
@@ -346,7 +346,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -374,6 +374,40 @@ mod tests {
     }
 
     #[test]
+    fn retrieval_preserves_opaque_string_user_ids() {
+        let file = NamedTempFile::new().expect("temp db");
+        let conn = Connection::open(file.path()).expect("open");
+        conn.execute_batch(
+            "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
+             CREATE TABLE memories (
+               id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
+               content TEXT, importance REAL, confidence REAL, status TEXT,
+               usage_tags TEXT, visibility TEXT, trigger_data TEXT, behavior_rule TEXT,
+               last_accessed_at TEXT, last_confirmed_at TEXT
+             );
+             INSERT INTO memories VALUES
+               ('opaque', 'space-a', 'discord:0042/猫', 'FACT', '用户喜欢游戏', .8, .9,
+                'active', '[\"RECOMMEND\"]', 'OPEN', NULL, NULL,
+                '2026-09-01 00:00:00', NULL),
+               ('other', 'space-a', 'discord:42/猫', 'FACT', '用户喜欢游戏', .8, .9,
+                'active', '[\"RECOMMEND\"]', 'OPEN', NULL, NULL,
+                '2026-09-01 00:00:00', NULL);",
+        )
+        .expect("schema");
+        drop(conn);
+
+        let output = retrieve(test_request(
+            &file.path().display().to_string(),
+            "space-a",
+            "discord:0042/猫",
+        ))
+        .expect("retrieve");
+        assert_eq!(output.conversation_memories.len(), 1);
+        assert_eq!(output.conversation_memories[0].id, "opaque");
+    }
+
+    #[test]
     fn scope_predicate_returns_space_and_shared_person_rows() {
         // v2 scope：SPACE 行经 COALESCE 兜底命中；USER_SHARED 的 PERSON 行
         // 命中；PRIVATE_ONLY / 他人 PERSON 行绝不出现（计划 §8.1 矩阵）。
@@ -381,7 +415,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,
@@ -446,7 +480,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
              CREATE TABLE memories (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, importance REAL, confidence REAL, status TEXT,

@@ -13,11 +13,14 @@
 
 from __future__ import annotations
 
+import copy
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
+import scripts.generate_message_flow as flow_generator
 from core.observability import flow_catalog
 from scripts.generate_message_flow import (
     DEFAULT_OUT,
@@ -36,10 +39,15 @@ def manifest() -> dict:
 
 
 def _committed_manifest(manifest: dict) -> dict:
+    candidates = []
     for path in sorted(FLOWS_DIR.glob("message-flow.*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("topology_version") == manifest["topology_version"]:
-            return data
+            candidates.append(data)
+            if content_hash(data) == content_hash(manifest):
+                return data
+    if candidates:
+        return candidates[0]
     pytest.fail(
         "no committed manifest for topology_version "
         f"{manifest['topology_version']}; run scripts/generate_message_flow.py"
@@ -150,6 +158,26 @@ class TestDriftGate:
             "flow manifest is stale: catalog or instrumented sources changed "
             "without regeneration (run python scripts/generate_message_flow.py)"
         )
+
+    def test_check_skips_older_archives_and_finds_matching_manifest(
+        self, manifest, tmp_path, monkeypatch, capsys
+    ):
+        stale = copy.deepcopy(manifest)
+        stale["coverage"]["total_nodes"] += 1
+        (tmp_path / "message-flow.000000000000.json").write_text(
+            json.dumps(stale), encoding="utf-8"
+        )
+        matching = tmp_path / "message-flow.zzzzzzzzzzzz.json"
+        matching.write_text(json.dumps(manifest), encoding="utf-8")
+        monkeypatch.setattr(
+            flow_generator, "build_manifest", lambda: (copy.deepcopy(manifest), [])
+        )
+        monkeypatch.setattr(
+            sys, "argv", ["generate_message_flow.py", "--check", "--output", str(tmp_path)]
+        )
+
+        assert flow_generator.main() == 0
+        assert f"check ok: {matching.name}" in capsys.readouterr().out
 
     def test_manifest_has_no_line_numbers_in_identity(self, manifest):
         """ID 身份与行号无关（计划 §6.1：不用行号当 ID）。"""

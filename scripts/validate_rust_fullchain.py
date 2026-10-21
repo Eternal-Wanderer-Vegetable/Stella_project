@@ -4,17 +4,17 @@
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
 """native Rust 晋升全链路验证（计划 §13.14 M6 硬件项）。
 
-前置：``memory_rust/_native.pyd`` 已构建（maturin build --release 后把
-target/release/_native.dll 拷为 memory_rust/_native.pyd）。脚本在临时库上跑：
+前置：当前 Python 环境可加载与 schema/API 合同匹配的
+``memory_rust._native`` wheel（由 maturin 构建并安装）。脚本在临时库上跑：
 
-1. **真实晋升 happy path**：MEMORY_BACKEND=rust + 真 native promote →
-   候选 CONFIRMED、长期记忆落行、flow 事件记录实际 backend 与 commit 事实
-   （fact_kind=commit 在业务事务确认之后）。
-2. **弱冲突 parity 实验**（计划 §6.3 登记的 Python/Rust 现存差异，只观测
-   不修）：同一 fixture 分别经 Python 与 Rust 后端，输出双方行为对照。
+1. **真实晋升 happy path**：通过 MemoryConsolidator 写入当前 accepted
+   source evidence，再运行 MEMORY_BACKEND=rust 与真 native promote；验证候选
+   CONFIRMED、长期记忆落行，以及 flow backend/commit 事实。
+2. **弱冲突 parity 实验**：同一份带 accepted evidence 的低置信冲突候选，
+   分别经 Python 与 Rust 后端；双方都应保留候选为 OBSERVING、旧记忆 active。
 3. **native retrieve 冒烟**。
 
-输出：控制台报告 + ``--json`` 机器可读结果（供汇总报告引用）。
+输出：控制台报告 + ``--output`` 指定的机器可读结果（供汇总报告引用）。
 不做任何生产写入；模型/网络零调用。
 """
 
@@ -33,25 +33,78 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def _prepare(db: Path) -> None:
+    import memory.consolidator as consolidator
     import memory.memory_manager as mm
 
+    consolidator.DB_PATH = db
     mm.DB_PATH = db
     mm.get_compressor = lambda: SimpleNamespace(
         maybe_compress=lambda reason=None: None)
     mm.MemoryManager()  # 建 schema
 
 
-def _seed_candidate(db: Path, cid: str, *, content: str, importance: float,
-                    confidence: float, status: str = "NEW",
-                    type_: str = "FACT", occurrence: int = 1) -> None:
+def _seed_candidate(db: Path, source_id: int, *, content: str, importance: float,
+                    confidence: float) -> str:
+    """Create a candidate through the production accepted-evidence writer."""
+    from memory.consolidator import MemoryConsolidator
+
     conn = sqlite3.connect(db)
     conn.execute(
-        "INSERT INTO memory_candidates "
-        "(id, group_shared_space, user_id, type, content, importance, "
-        "confidence, status, occurrence_count) VALUES (?, 'space', '100', ?, ?, ?, ?, ?, ?)",
-        (cid, type_, content, importance, confidence, status, occurrence))
+        "CREATE TABLE IF NOT EXISTS group_messages ("
+        "id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT, "
+        "source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT, "
+        "bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT, "
+        "mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER, "
+        "origin_msg_id TEXT, reply_recipient_user_id TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO group_messages "
+        "(id, group_id, user_id, content, source_kind, msg_id, conversation_key, bot_id) "
+        "VALUES (?, '1', '100', ?, 'AT_MENTION', ?, 'test-conversation', 'test-bot')",
+        (source_id, content, str(source_id)),
+    )
     conn.commit()
     conn.close()
+
+    proposal = {
+        "user_id": "100",
+        "type": "PREFERENCE",
+        "content": content,
+        "importance": importance,
+        "confidence": confidence,
+        "source_message_ids": [source_id],
+        "verification_contract": {
+            "fact_subject_user_id": "100",
+            "predicate_key": "preference.general",
+            "canonical_value": content.removeprefix("我喜欢").removeprefix("我不喜欢"),
+            "polarity": "negative" if content.startswith("我不喜欢") else "positive",
+            "statement_kind": "explicit_preference",
+            "temporal_qualifiers": [],
+            "context_qualifiers": [],
+            "supports": [
+                {"source_message_id": source_id, "exact_support_span": content}
+            ],
+        },
+    }
+    writer = MemoryConsolidator.__new__(MemoryConsolidator)
+    writer._write_memory_candidates(
+        "space",
+        [proposal],
+        sender_ids=["100"],
+        at_senders=["100"],
+        origin_group_id=1,
+        source_rows=[(source_id, "100", content, "AT_MENTION")],
+    )
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        "SELECT id FROM memory_candidates WHERE group_shared_space = 'space' "
+        "AND user_id = '100' AND content = ?",
+        (content,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        raise RuntimeError(f"production candidate writer rejected fixture: {content}")
+    return str(row[0])
 
 
 def _seed_memory(db: Path, mid: str, *, content: str, confidence: float,
@@ -84,15 +137,13 @@ def _run_promotion(mode: str) -> dict:
     try:
         _prepare(db)
         # 高质量候选走真实晋升
-        _seed_candidate(db, "c-strong", content="用户名叫小明，住在杭州",
-                        importance=0.8, confidence=0.95)
-        # 弱冲突 fixture（与 tests/observability M2 parity 用例同参：
-        # gate 通过 → conflict 扫描 → 弱候选 OBSERVING 后被晋升循环改写）
+        strong_candidate_id = _seed_candidate(
+            db, 1, content="我喜欢打羽毛球", importance=0.8, confidence=0.95)
+        # 低置信矛盾候选由 accepted AT_MENTION 来源进入冲突判断。
         _seed_memory(db, "m-old", content="用户喜欢Helldivers2",
                      confidence=0.9, type_="PREFERENCE", status="active")
-        _seed_candidate(db, "c-weak", content="用户不喜欢Helldivers2",
-                        importance=0.9, confidence=0.7, type_="PREFERENCE",
-                        occurrence=2)
+        weak_candidate_id = _seed_candidate(
+            db, 2, content="我不喜欢Helldivers2", importance=0.9, confidence=0.7)
 
         from core.observability import message_flow as mf
 
@@ -105,10 +156,12 @@ def _run_promotion(mode: str) -> dict:
 
         conn = sqlite3.connect(db)
         result["candidate_strong"] = conn.execute(
-            "SELECT status FROM memory_candidates WHERE id='c-strong'"
+            "SELECT status FROM memory_candidates WHERE id=?",
+            (strong_candidate_id,),
         ).fetchone()[0]
         result["candidate_weak"] = conn.execute(
-            "SELECT status FROM memory_candidates WHERE id='c-weak'"
+            "SELECT status FROM memory_candidates WHERE id=?",
+            (weak_candidate_id,),
         ).fetchone()[0]
         mem_row = conn.execute(
             "SELECT id, content, status FROM memories WHERE id NOT IN "
@@ -125,7 +178,8 @@ def _run_promotion(mode: str) -> dict:
         result["weak_candidate_events"] = [
             {"node": e[0], "kind": e[1], "status": e[2], "reason": e[3]}
             for e in events
-            if "c-weak" in (e[4] or "") or "cand:c-weak" in (e[4] or "")
+            if weak_candidate_id in (e[4] or "")
+            or f"cand:{weak_candidate_id}" in (e[4] or "")
             or (e[0] == "memory.promotion.conflict")]
         tconn.close()
         result["flow_backend_decisions"] = [
@@ -183,7 +237,7 @@ def _retrieve_smoke() -> dict:
     from memory_rust.backend import RetrievalRequest
 
     out = backend.retrieve(RetrievalRequest(
-        db_path=db, group_shared_space="space", user_id=100, query="test",
+        db_path=db, group_shared_space="space", user_id="100", query="test",
         trigger="smoke", mode="hybrid", pool_limit=5))
     return {"native_loaded": True, "retrieve_ok": out is not None}
 
@@ -213,27 +267,56 @@ def main() -> int:
 
     rust = report["rust_run"]
     py = report["python_run"]
-    ok = (
-        not rust.get("error") and not py.get("error")
-        and rust.get("candidate_strong") == "CONFIRMED"
-        and rust.get("flow_root_integrity", {}).get("integrity") == "complete"
-    )
-    # parity 观察（计划 §6.3：现存差异如实报告，不判对错）
+    # parity 对照：当前合同下 Python/native 对 accepted evidence 和弱冲突应一致。
     report["parity_observation"] = {
         "rust": {
             "old_memory": rust.get("old_memory_status"),
             "weak_candidate": rust.get("candidate_weak"),
-            "action": "observing_conflict(立即返回)" if rust.get(
+            "action": "observing_conflict" if rust.get(
                 "candidate_weak") == "OBSERVING" else "见 rust_run",
         },
         "python": {
             "old_memory": py.get("old_memory_status"),
             "weak_candidate": py.get("candidate_weak"),
-            "action": "weak_candidate_observing 后被晋升循环改写 CONFIRMED"
-            if py.get("candidate_weak") == "CONFIRMED" else "见 python_run",
+            "action": "observing_conflict" if py.get(
+                "candidate_weak") == "OBSERVING" else "见 python_run",
         },
         "differ": (rust.get("candidate_weak") != py.get("candidate_weak")),
     }
+    ok = (
+        not rust.get("error") and not py.get("error")
+        and rust.get("candidate_strong") == "CONFIRMED"
+        and py.get("candidate_strong") == "CONFIRMED"
+        and rust.get("candidate_weak") == "OBSERVING"
+        and py.get("candidate_weak") == "OBSERVING"
+        and rust.get("old_memory_status") == "active"
+        and py.get("old_memory_status") == "active"
+        and rust.get("new_memory") is not None
+        and py.get("new_memory") is not None
+        and not report["parity_observation"]["differ"]
+        and report["retrieve_smoke"].get("native_loaded") is True
+        and report["retrieve_smoke"].get("retrieve_ok") is True
+        and any(
+            event.get("metrics", {}).get("backend") == "rust"
+            and event.get("status") == "succeeded"
+            for event in rust.get("flow_backend_decisions", [])
+        )
+        and any(
+            event.get("metrics", {}).get("backend") == "python"
+            and event.get("status") == "succeeded"
+            for event in py.get("flow_backend_decisions", [])
+        )
+        and any(
+            event.get("status") == "succeeded"
+            for event in rust.get("flow_commit_facts", [])
+        )
+        and any(
+            event.get("status") == "succeeded"
+            for event in py.get("flow_commit_facts", [])
+        )
+        and rust.get("flow_root_integrity", {}).get("integrity") == "complete"
+        and py.get("flow_root_integrity", {}).get("integrity") == "complete"
+    )
     report["verdict"] = "PASS" if ok else "FAIL"
 
     payload = json.dumps(report, ensure_ascii=False, indent=1, default=str)

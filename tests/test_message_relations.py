@@ -18,6 +18,7 @@ import pytest
 
 import memory.pre_processors as pre
 from core.context import ChatContext, MessageIdentityEnvelope, normalize_mentions
+from core.transport.models import UserRef
 from memory.pre_processors import (
     _fetch_recent_tail,
     record_message,
@@ -457,3 +458,18 @@ def test_legacy_call_without_decision_persists_unchanged(msg_db):
     assert out.recorded_row_id > 0
     assert out.capture_result == CAPTURE_RESULT_OK
     assert len(_rows(msg_db)) == 1
+
+
+def test_record_message_persists_opaque_id_and_subject_separately(msg_db):
+    ctx = _ctx(
+        user_id="0042/猫",
+        user_ref=UserRef("discord:main", "0042/猫"),
+        msg_id=555,
+        platform_message_id="discord:main/007:猫",
+    )
+    asyncio.run(record_message(ctx))
+
+    row = _rows(msg_db)[0]
+    assert row["msg_id"] == 555
+    assert row["platform_message_id"] == "discord:main/007:猫"
+    assert row["subject_key"] == ctx.subject_key

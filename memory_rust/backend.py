@@ -11,15 +11,16 @@ from typing import Any, Protocol
 
 # v2（计划 §6.7）：请求携带受限 owner/subject/audience scope。无新 scope 的
 # 请求明确 SPACE-only（legacy 行为），绝不默认放开全部个人记录。
-BACKEND_API_VERSION = 3
+BACKEND_API_VERSION = 4
 # v19 新增 evidence source binding 与 claim lineage，promotion request 携带
 # evidence-set digest/scope epoch CAS；旧 native 必须因 API/schema 不匹配拒绝加载。
 # v20 是 FTS 分词重灌迁移（memory migrate_v20）：native 自身不做 FTS，但
-# ensure_supported 按**库的 schema_meta.version 严格相等**放行——SQLite schema
-# 升级必须连带本合同号与 .pyd 重编译，否则 native 拒读新库（auto 模式静默回退
-# python、strict rust 直接拒载）。与 memory.schema.SCHEMA_VERSION 数值有意保持
-# 同步，但语义是两套版本号（native 读库打分 vs SQLite 结构），勿互相替代。
-MEMORY_SCHEMA_VERSION = 20
+# ensure_supported 按**库的 schema_meta.version 严格相等**放行。SQLite schema
+# 升级必须连带本合同号与 .pyd 重编译，否则 native 拒读新库（auto 模式回退 Python，
+# strict rust 拒载）。v21 新增不透明 platform_message_id / subject_key 存储，且
+# RetrievalRequest 的 raw external user_id 改为字符串。两个版本号数值保持同步，
+# 但语义不同（native 读库兼容 vs SQLite 结构），不可互相替代。
+MEMORY_SCHEMA_VERSION = 21
 
 
 class MemoryBackendError(RuntimeError):
@@ -39,11 +40,15 @@ class BackendContractError(MemoryBackendError):
 
 @dataclass(frozen=True)
 class RetrievalRequest:
-    """Backend-neutral input for a scoped memory retrieval."""
+    """Backend-neutral input for a scoped memory retrieval.
+
+    ``user_id`` is the raw external identifier; it is text even when the platform
+    happens to use decimal IDs. ``scope_subject_key`` carries canonical identity.
+    """
 
     db_path: Path
     group_shared_space: str
-    user_id: int
+    user_id: str
     query: str
     trigger: str
     mode: str
@@ -55,6 +60,10 @@ class RetrievalRequest:
     scope_person_owner_key: str = ""  # "person:qq:<bot>:<uid>"
     scope_subject_key: str = ""  # "qq:<uid>"
     scope_person_audiences: tuple[str, ...] = ()  # 允许的 PERSON 受众
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.user_id, str):
+            raise TypeError("RetrievalRequest.user_id must be a string external ID")
 
     @property
     def has_person_scope(self) -> bool:

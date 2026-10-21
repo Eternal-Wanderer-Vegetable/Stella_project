@@ -4,17 +4,17 @@
 
 <a id="source-contracts-and-release-gates-in-610"></a>
 
-Verified against the 6.2.0 release baseline on 2026-10-13 (f4d6247). The application version is 6.2.0 and current source compatibility is schema 19/API 3. The published 6.1.0/P8 snapshot used schema 18/API 2; do not mix its native assets with 6.2.0.
+Verified against the WP03 implementation contract on 2026-10-21 (`codex/cross-platform-implementation`). The current source contract is schema 21/API 4. Released assets remain subject to their own build contract; an older native wheel must not load a schema 21 database.
 
 | Source | Current constant |
 | --- | --- |
-| [Python schema](../../memory/schema.py) | SCHEMA_VERSION = 19 |
-| [Python/native contract](../../memory_rust/backend.py) | BACKEND_API_VERSION = 3; MEMORY_SCHEMA_VERSION = 19 |
-| [Rust schema](../../memory_rust/native/src/schema.rs) | BACKEND_API_VERSION = 3; MEMORY_SCHEMA_VERSION = 19 |
+| [Python schema](../../memory/schema.py) | SCHEMA_VERSION = 21 |
+| [Python/native contract](../../memory_rust/backend.py) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 21 |
+| [Rust schema](../../memory_rust/native/src/schema.rs) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 21 |
 
 The values describe source compatibility, not proof that a particular wheel was built, loaded, or accepted. Recheck constants when changing branches.
 
-- Memory schema 19/API 3 must agree in `memory/schema.py`, `memory_rust/backend.py`, and `memory_rust/native/src/schema.rs`. Validate exported constants, not just the wheel package version.
+- Memory schema 21/API 4 must agree in `memory/schema.py`, `memory_rust/backend.py`, and `memory_rust/native/src/schema.rs`. Validate exported constants, not just the wheel package version. WP03 adds `group_messages.platform_message_id` and `subject_key`; the legacy integer `msg_id` remains for the QQ compatibility path.
 - `python scripts/generate_message_flow.py --check` validates source anchors, closure, and manifest. Regenerate archived topology after source changes; static reachability is not observed execution.
 - Frontend checks: `pnpm --dir dashboard test` and `pnpm --dir dashboard build`. Synchronize the local bundle with `pnpm --dir dashboard sync:webui`.
 - Isolated evaluation: `python scripts/run_flow_evaluation.py --mode isolated_pipeline --dataset <dataset_dir> --workdir <isolated_dir> --json`. Other modes are trace_playback, decision_recompute, and model_validation. Dataset/workdir are required; production is never a fallback database.

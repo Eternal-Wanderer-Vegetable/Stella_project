@@ -1656,7 +1656,7 @@ mod tests {
         let conn = Connection::open(file.path()).expect("open db");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 20);
+             INSERT INTO schema_meta (k, version) VALUES ('version', 21);
              CREATE TABLE memory_candidates (
                id TEXT PRIMARY KEY, group_shared_space TEXT, user_id TEXT, type TEXT,
                content TEXT, content_raw TEXT, importance REAL, confidence REAL,

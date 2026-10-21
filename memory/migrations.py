@@ -974,6 +974,50 @@ def migrate_v20(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v21(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v21：为消息行增加不透明平台 ID 与规范主体键。
+
+    只把旧 msg_id（历史上由整数 OneBot 回执写入）转成文本平台 ID；0 是
+    「无回执」哨兵，不迁移。subject_key 不从裸 user_id 或会话数字推断，旧行
+    保持空值，表示来源主体仍未知。DDL 与数据回填在同一版本事务中完成。
+    """
+    result = MigrationResult(version=21)
+    cursor = conn.cursor()
+    columns = _columns(cursor, "group_messages")
+    if not columns:
+        result.notes.append(
+            "group_messages absent; fresh message DDL will include v21 identity fields"
+        )
+        return result
+
+    if "platform_message_id" not in columns:
+        cursor.execute(
+            "ALTER TABLE group_messages ADD COLUMN platform_message_id TEXT"
+        )
+    if "subject_key" not in columns:
+        cursor.execute(
+            "ALTER TABLE group_messages ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''"
+        )
+    if "msg_id" in columns:
+        cursor.execute(
+            "UPDATE group_messages "
+            "SET platform_message_id = CAST(msg_id AS TEXT) "
+            "WHERE COALESCE(platform_message_id, '') = '' "
+            "AND typeof(msg_id) = 'integer' AND msg_id != 0"
+        )
+        result.changed_rows = max(cursor.rowcount, 0)
+        result.notes.append(
+            f"legacy nonzero msg_id values copied to platform_message_id ({result.changed_rows} rows); "
+            "msg_id retained and historical subject_key left unknown"
+        )
+    else:
+        result.notes.append(
+            "platform_message_id and subject_key added; legacy msg_id absent, "
+            "historical subject_key left unknown"
+        )
+    return result
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -989,6 +1033,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     18: migrate_v18,
     19: migrate_v19,
     20: migrate_v20,
+    21: migrate_v21,
 }
 
 

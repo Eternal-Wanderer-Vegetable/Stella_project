@@ -4,17 +4,17 @@
 
 <a id="610-的源码合同与发布门禁"></a>
 
-2026-10-13 按 6.2.0 发布基线核对（f4d6247）。应用版本为 6.2.0，当前源码合同是 schema 19/API 3；已发布 6.1.0 与 P8 报告对应 schema 18/API 2。旧 native 资产不能与 6.2.0 混用。
+2026-10-21 按 WP03 实施合同核对（`codex/cross-platform-implementation`）。当前源码合同为 schema 21/API 4；已发布资产仍按其各自构建合同校验，旧 native wheel 不得加载 schema 21 数据库。
 
 | 来源 | 当前常量 |
 | --- | --- |
-| [Python schema](../../memory/schema.py) | SCHEMA_VERSION = 19 |
-| [Python/native 合同](../../memory_rust/backend.py) | BACKEND_API_VERSION = 3; MEMORY_SCHEMA_VERSION = 19 |
-| [Rust schema](../../memory_rust/native/src/schema.rs) | BACKEND_API_VERSION = 3; MEMORY_SCHEMA_VERSION = 19 |
+| [Python schema](../../memory/schema.py) | SCHEMA_VERSION = 21 |
+| [Python/native 合同](../../memory_rust/backend.py) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 21 |
+| [Rust schema](../../memory_rust/native/src/schema.rs) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 21 |
 
 这些常量只证明源码的兼容要求，不证明某份 wheel 已构建、加载或验收。切换分支时重新核对。
 
-- 记忆 schema 19 / backend API 3：`memory/schema.py`、`memory_rust/backend.py` 与 `memory_rust/native/src/schema.rs` 必须一致。原生包版本不能替代导出常量校验。
+- 记忆 schema 21 / backend API 4：`memory/schema.py`、`memory_rust/backend.py` 与 `memory_rust/native/src/schema.rs` 必须一致。原生包版本不能替代导出常量校验。WP03 新增 `group_messages.platform_message_id` 和 `subject_key`；旧整数 `msg_id` 保留供 QQ 兼容路径使用。
 - 消息流程：`python scripts/generate_message_flow.py --check` 检查源码锚点、闭包与 manifest；源码变化后按生成器更新归档，不能把静态可达性当作实际执行。
 - 前端：`pnpm --dir dashboard test`、`pnpm --dir dashboard build`；本地随包快照用 `pnpm --dir dashboard sync:webui` 同步。
 - 隔离评估：`python scripts/run_flow_evaluation.py --mode isolated_pipeline --dataset <dataset_dir> --workdir <isolated_dir> --json`；还有 trace_playback / decision_recompute / model_validation 模式。workdir 与 dataset 必填，不能默认回落生产库。

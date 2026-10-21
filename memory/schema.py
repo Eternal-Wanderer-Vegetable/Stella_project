@@ -59,8 +59,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v20：FTS 存量索引按新分词全量重灌，见 migrate_v20）。
-SCHEMA_VERSION = 20
+# 当前 Schema 版本（v21：跨平台消息 ID 与规范主体键持久化，见 migrate_v21）。
+SCHEMA_VERSION = 21
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -344,6 +344,18 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
         "parser_version",
         "ALTER TABLE conversation_identity_claims ADD COLUMN parser_version TEXT DEFAULT '2026-09-27'",
     ),
+    # v21：外部平台消息 ID / 规范主体键。旧 msg_id INTEGER 保留给 QQ 图像回写和
+    # 兼容引用查询；新字段不做整数转换。subject_key 空串表示历史来源不足，不能猜。
+    (
+        "group_messages",
+        "platform_message_id",
+        "ALTER TABLE group_messages ADD COLUMN platform_message_id TEXT",
+    ),
+    (
+        "group_messages",
+        "subject_key",
+        "ALTER TABLE group_messages ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''",
+    ),
 ]
 
 # 新增索引：按检索高频字段建索引，避免 SQLite 全表扫描
@@ -457,6 +469,18 @@ _INDEXES: list[tuple[str, str, str]] = [
         "group_messages",
         "CREATE INDEX IF NOT EXISTS idx_group_messages_logical "
         "ON group_messages (conversation_key, logical_message_id, part_index)",
+    ),
+    (
+        "idx_group_messages_platform_ref",
+        "group_messages",
+        "CREATE INDEX IF NOT EXISTS idx_group_messages_platform_ref "
+        "ON group_messages (conversation_key, bot_id, platform_message_id)",
+    ),
+    (
+        "idx_group_messages_subject",
+        "group_messages",
+        "CREATE INDEX IF NOT EXISTS idx_group_messages_subject "
+        "ON group_messages (conversation_key, subject_key, id)",
     ),
 ]
 

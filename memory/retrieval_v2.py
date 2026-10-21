@@ -170,7 +170,7 @@ def _allowed_visibility_clause(mode: str) -> str:
 def _fetch_candidates(
     cursor: sqlite3.Cursor,
     group_shared_space: str,
-    user_id: int | None,
+    user_id: str | int | None,
     mode: str,
     query: str,
     pool_limit: int,
@@ -314,7 +314,7 @@ def _touch_accessed(ids: list[str]) -> None:
 def _query_fts(
     cursor: sqlite3.Cursor,
     group_shared_space: str,
-    user_id: int | None,
+    user_id: str | int | None,
     query: str,
     limit: int,
     mode: str,
@@ -467,7 +467,7 @@ def _backend_parity_report(
 
 def _retrieve_with_optional_backend(
     group_shared_space: str,
-    user_id: int,
+    user_id: str | int,
     query: str,
     trigger: str,
     mode: str | None,
@@ -494,7 +494,7 @@ def _retrieve_with_optional_backend(
     request = RetrievalRequest(
         db_path=DB_PATH,
         group_shared_space=group_shared_space,
-        user_id=user_id,
+        user_id=str(user_id),
         query=query,
         trigger=trigger,
         mode=resolved_mode,
@@ -555,7 +555,7 @@ def _retrieve_with_optional_backend(
 
 def retrieve_memories(
     group_shared_space: str,
-    user_id: int,
+    user_id: str | int,
     query: str,
     trigger: str = "reply",
     mode: str | None = None,
@@ -568,7 +568,7 @@ def retrieve_memories(
     检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
 
     :param group_shared_space: 群组共享空间标识（str，由 config.spaces.resolve_space 得到）
-    :param user_id: 当前用户 ID（主动发言时传 0）
+    :param user_id: 原始外部用户 ID（字符串；旧调用可传数字，主动发言时传 0 或 "0"）
     :param query: 当前消息/话题文本
     :param trigger: "reply"（@ 回复）或 "proactive"（主动插话）
     :param mode: 可显式指定行为模式；不传则自动检测
@@ -735,7 +735,7 @@ _CACHE: dict[tuple[str, str, str, str, str, int], tuple[float, RetrievalResult]]
 
 async def retrieve_memories_emb(
     group_shared_space: str,
-    user_id: int,
+    user_id: str | int,
     query: str,
     trigger: str = "reply",
     mode: str | None = None,

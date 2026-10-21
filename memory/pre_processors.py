@@ -72,7 +72,7 @@ _TAIL_SCAN_ROW_CAP = 48
 _TAIL_UNIT_TOKEN_CAP = 1400
 
 
-# v16 group_messages 的完整建表 DDL（新库直建全列；旧库靠自补 ALTER 逐列加）。
+# group_messages 的完整建表 DDL（新库直建全列；旧库靠自补 ALTER 逐列加）。
 # 关系列默认 NULL/[]/0 = 「关系未知」——消费方按 unknown 处理，绝不猜测。
 _GROUP_MESSAGES_V16_DDL = """
 CREATE TABLE IF NOT EXISTS group_messages (
@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS group_messages (
     content TEXT,
     source_kind TEXT DEFAULT 'PASSIVE',
     msg_id INTEGER,
+    platform_message_id TEXT,
+    subject_key TEXT NOT NULL DEFAULT '',
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     conversation_key TEXT,
     bot_id TEXT,
@@ -165,6 +167,16 @@ async def record_message(
             cursor.execute("ALTER TABLE group_messages ADD COLUMN source_kind TEXT DEFAULT 'PASSIVE'")
         with contextlib.suppress(sqlite3.OperationalError):
             cursor.execute("ALTER TABLE group_messages ADD COLUMN msg_id INTEGER")
+        if not _has_column(cursor, "group_messages", "platform_message_id"):
+            with contextlib.suppress(sqlite3.OperationalError):
+                cursor.execute(
+                    "ALTER TABLE group_messages ADD COLUMN platform_message_id TEXT"
+                )
+        if not _has_column(cursor, "group_messages", "subject_key"):
+            with contextlib.suppress(sqlite3.OperationalError):
+                cursor.execute(
+                    "ALTER TABLE group_messages ADD COLUMN subject_key TEXT NOT NULL DEFAULT ''"
+                )
         for column, decl in _ENVELOPE_COLUMNS:
             if not _has_column(cursor, "group_messages", column):
                 with contextlib.suppress(sqlite3.OperationalError):
@@ -186,17 +198,28 @@ async def record_message(
             ON group_messages (group_id, id)
         """)
         cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_group_messages_platform_ref
+            ON group_messages (conversation_key, bot_id, platform_message_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_group_messages_subject
+            ON group_messages (conversation_key, subject_key, id)
+        """)
+        cursor.execute("""
             INSERT INTO group_messages (
                 group_id, user_id, content, source_kind, msg_id,
+                platform_message_id, subject_key,
                 conversation_key, bot_id, sender_display_name,
                 reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json,
                 logical_message_id, part_index, origin_msg_id,
                 reply_recipient_user_id, turn_id, relation_version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(ctx.storage_key()), str(ctx.user_id), ctx.message,
             normalize_source_kind(ctx.source_kind), int(ctx.msg_id or 0),
+            str(getattr(ctx, "platform_message_id", "") or "") or None,
+            str(getattr(ctx, "subject_key", "") or ""),
             str(getattr(ctx, "conversation_key", "") or ""),
             str(getattr(ctx, "bot_id", "") or ""),
             str(getattr(ctx, "sender_display_name", "") or ""),

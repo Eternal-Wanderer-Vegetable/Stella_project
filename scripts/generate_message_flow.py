@@ -1134,6 +1134,20 @@ def semantic_diff(old: dict, new: dict) -> dict:
     }
 
 
+def _find_matching_manifest(output_dir: Path, manifest: dict,
+                            digest: str) -> Path | None:
+    """Find any current manifest among immutable, hash-named archives."""
+    for path in sorted(output_dir.glob("message-flow.*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if (data.get("topology_version") == manifest["topology_version"]
+                and content_hash(data) == digest):
+            return path
+    return None
+
+
 # ============================================================
 # 命令行
 # ============================================================
@@ -1157,18 +1171,21 @@ def main() -> int:
 
     if args.check:
         existing = sorted(args.output.glob("message-flow.*.json"))
+        matching = _find_matching_manifest(args.output, manifest, digest)
+        if matching is not None:
+            print(f"check ok: {matching.name} matches current source")
+            return 0
         for path in existing:
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
             if data.get("topology_version") == manifest["topology_version"]:
-                if content_hash(data) == digest:
-                    print(f"check ok: {path.name} matches current source")
-                    return 0
                 diff = semantic_diff(data, manifest)
                 print(
-                    f"DRIFT: {path.name} does not match current source.\n"
+                    f"DRIFT: none of {len(existing)} archived manifest(s) "
+                    f"matches current source; first same-topology candidate "
+                    f"is {path.name}.\n"
                     f"semantic diff: {json.dumps(diff, ensure_ascii=False)}\n"
                     "The flow catalog or instrumented sources changed; "
                     "regenerate with `python scripts/generate_message_flow.py` "
