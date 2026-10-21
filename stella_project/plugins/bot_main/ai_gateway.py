@@ -3576,6 +3576,57 @@ async def _start_cometa() -> None:
         return
     try:
         from cometa import runtime as cometa_runtime
+        from cometa.policy_transport import ClaimDirective
+        from config import STELLA_HOME
+        from gravitas.admission import snapshot_is_current
+        from gravitas.contracts import Operation
+
+        def env_enabled(name: str) -> bool:
+            return os.environ.get(name, "").strip().strip("\"'").lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+
+        policy_transport_enabled = env_enabled("COMETA_POLICY_TRANSPORT_ENABLED")
+        auto_restart_enabled = env_enabled("COMETA_AUTO_RESTART_ENABLED")
+        try:
+            from plugins.bot_main.gravitas_bootstrap import active_gravitas_runtime
+        except ImportError:
+            from stella_project.plugins.bot_main.gravitas_bootstrap import (
+                active_gravitas_runtime,
+            )
+
+        gravitas_runtime = active_gravitas_runtime()
+        controller = gravitas_runtime.controller if gravitas_runtime is not None else None
+
+        def cometa_directive() -> ClaimDirective | None:
+            active_runtime = active_gravitas_runtime()
+            if active_runtime is None:
+                return None
+            active_controller = active_runtime.controller
+            snapshot = active_controller.cached_policy()
+            if snapshot is None or not snapshot_is_current(
+                snapshot,
+                now=active_controller.clock.now(),
+                expected_boot_id=active_controller.controller_boot_id,
+            ):
+                return None
+            allowed = Operation.COMETA_CLAIM.value in snapshot.allowed_operations
+            restart_allowed = (
+                Operation.COMETA_RESTART.value in snapshot.allowed_operations
+            )
+            return ClaimDirective(
+                claim_allowed=allowed,
+                claim_limit=config.max_concurrent if allowed else 0,
+                restart_allowed=restart_allowed,
+                reason_code="gravitas_allowed" if allowed else "claims_paused",
+            )
+
+        def record_cometa_ack(status: dict[str, object]) -> None:
+            active_runtime = active_gravitas_runtime()
+            if active_runtime is not None:
+                active_runtime.record_cometa_policy_ack(status)
 
         config = cometa_runtime.CometaConfig.load()
         if not config.enabled:
@@ -3589,6 +3640,12 @@ async def _start_cometa() -> None:
             ),
             instance_id=_cometa_instance_id(),
             spawn_worker=True,
+            stella_home=STELLA_HOME,
+            controller_boot_id=(controller.controller_boot_id if controller else ""),
+            policy_transport_enabled=policy_transport_enabled,
+            auto_restart_enabled=auto_restart_enabled,
+            directive_provider=cometa_directive,
+            policy_ack_sink=record_cometa_ack,
         )
         await runtime.start(spawn_worker=True)
         cometa_runtime.set_current(runtime)

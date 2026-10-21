@@ -70,6 +70,8 @@ class Operation(_StringEnum):
     PROACTIVE_EMIT = "proactive.emit"
     TRANSPORT_SEND = "transport.send"
     CONTROL_PROBE = "control.probe"
+    COMETA_CLAIM = "cometa.claim"
+    COMETA_RESTART = "cometa.restart"
 
 
 class SideEffectClass(_StringEnum):

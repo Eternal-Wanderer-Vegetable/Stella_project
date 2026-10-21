@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import os
 from pathlib import Path
@@ -23,6 +24,7 @@ from gravitas.controller import (
 )
 
 _LOG = logging.getLogger("stella.gravitas")
+_ACTIVE_GRAVITAS_RUNTIME: "GravitasRuntime | None" = None
 
 
 class GravitasRuntime:
@@ -37,6 +39,33 @@ class GravitasRuntime:
         self.controller = controller
         self.bootstrap_reason = bootstrap_reason
         self._task: asyncio.Task | None = None
+        self._cometa_policy_ack: dict[str, object] | None = None
+
+    def record_cometa_policy_ack(self, status: dict[str, object]) -> None:
+        """Cache only the low-cardinality ACK for the current Cometa revision."""
+        allowed_keys = {
+            "state",
+            "reason_code",
+            "policy_revision",
+            "applied",
+            "claim_allowed",
+            "claim_limit",
+        }
+        if not isinstance(status, dict):
+            return
+        safe = {key: status[key] for key in allowed_keys if key in status}
+        if (
+            not isinstance(safe.get("state"), str)
+            or not isinstance(safe.get("reason_code"), str)
+            or isinstance(safe.get("policy_revision"), bool)
+            or not isinstance(safe.get("policy_revision"), int)
+            or not isinstance(safe.get("applied"), bool)
+            or not isinstance(safe.get("claim_allowed"), bool)
+            or isinstance(safe.get("claim_limit"), bool)
+            or not isinstance(safe.get("claim_limit"), int)
+        ):
+            return
+        self._cometa_policy_ack = safe
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -62,6 +91,7 @@ class GravitasRuntime:
             _LOG.error("Gravitas controller stopped unexpectedly")
 
     async def stop(self) -> None:
+        global _ACTIVE_GRAVITAS_RUNTIME
         task = self._task
         self._task = None
         if task is not None and not task.done():
@@ -72,9 +102,28 @@ class GravitasRuntime:
             from memory.pre_processors import set_capture_pressure_provider
 
             set_capture_pressure_provider(None)
+        if _ACTIVE_GRAVITAS_RUNTIME is self:
+            _ACTIVE_GRAVITAS_RUNTIME = None
 
     def status_snapshot(self) -> dict[str, object]:
         payload = self.controller.status_snapshot()
+        if self._cometa_policy_ack is not None:
+            ack = copy.deepcopy(self._cometa_policy_ack)
+            payload["cometa_policy_ack"] = ack
+            assessment = payload.get("assessment")
+            if isinstance(assessment, dict):
+                current = assessment.get("applied_ack")
+                items = list(current.get("items", [])) if isinstance(current, dict) else []
+                items.append({"adapter": "cometa.worker", **ack})
+                assessment["applied_ack"] = {
+                    "state": (
+                        "partial"
+                        if ack["state"] in ("applied", "rejected")
+                        else "not_received"
+                    ),
+                    "reason_code": ack["reason_code"],
+                    "items": items,
+                }
         if self.bootstrap_reason != "ready":
             payload["reason_code"] = self.bootstrap_reason
             payload["bootstrap_state"] = "degraded"
@@ -132,6 +181,8 @@ def setup_gravitas(driver, *, stella_home: str | Path, status_api) -> GravitasRu
     else:
         set_capture_pressure_provider(None)
     runtime = GravitasRuntime(controller, bootstrap_reason=bootstrap_reason)
+    global _ACTIVE_GRAVITAS_RUNTIME
+    _ACTIVE_GRAVITAS_RUNTIME = runtime
     status_api.set_gravitas_status_provider(runtime.status_snapshot)
     driver.on_startup(runtime.start)
     driver.on_shutdown(runtime.stop)
@@ -140,3 +191,8 @@ def setup_gravitas(driver, *, stella_home: str | Path, status_api) -> GravitasRu
     elif controller.enforcement_refused:
         _LOG.warning("GRAVITAS_MODE=enforce was refused; controller remains shadow-only")
     return runtime
+
+
+def active_gravitas_runtime() -> GravitasRuntime | None:
+    """Return the explicitly assembled host runtime, if setup completed."""
+    return _ACTIVE_GRAVITAS_RUNTIME

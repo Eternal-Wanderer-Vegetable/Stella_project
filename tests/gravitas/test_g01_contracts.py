@@ -89,7 +89,7 @@ def test_contract_dtos_round_trip(value):
 def test_operation_request_keeps_unknown_operation_representable_but_not_supported():
     request = OperationRequest(
         "op-unknown",
-        "cometa.claim",
+        "cometa.admin",
         (),
         WorkClass.BACKGROUND,
         None,
@@ -97,12 +97,12 @@ def test_operation_request_keeps_unknown_operation_representable_but_not_support
         "task-1",
         SideEffectClass.PERSISTENT,
     )
-    assert request.operation == "cometa.claim"
+    assert request.operation == "cometa.admin"
     assert not is_operation_supported(request.operation)
     assert is_operation_supported("model.attempt")
 
     with pytest.raises(ContractError, match="unsupported enforce operations"):
-        PolicySnapshot(1, "boot-a", 1, "digest", 10.0, 5.0, ("cometa.claim",))
+        PolicySnapshot(1, "boot-a", 1, "digest", 10.0, 5.0, ("cometa.admin",))
 
 
 def test_contract_wire_shape_rejects_unknown_fields_and_bad_numbers():

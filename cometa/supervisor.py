@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 import uuid
+from pathlib import Path
 
 from .config import CometaConfig
 from .models import parse_iso_utc, utc_now
@@ -42,11 +43,21 @@ class WorkerSupervisor:
         instance_id: str,
         python_executable: str | None = None,
         worker_id: str | None = None,
+        stella_home: str | Path | None = None,
+        controller_boot_id: str = "",
+        policy_transport_enabled: bool = False,
     ):
         self.config = config
         self.instance_id = instance_id
         self.worker_id = worker_id or f"cometa-worker-{uuid.uuid4().hex[:8]}"
         self.process_identity = f"{os.getpid()}:{uuid.uuid4().hex[:12]}"
+        self.stella_home = (
+            Path(stella_home).expanduser().resolve()
+            if stella_home
+            else Path(config.config_path).expanduser().resolve().parent.parent
+        )
+        self.controller_boot_id = controller_boot_id
+        self.policy_transport_enabled = bool(policy_transport_enabled)
         self._python = python_executable or sys.executable
         self._process: subprocess.Popen | None = None
         self._log_handle = None
@@ -60,6 +71,16 @@ class WorkerSupervisor:
         时那里没人看（2026-09-30 人工清单实测：worker 静默死亡无痕迹）。"""
         if self._process is not None and self._process.poll() is None:
             return True
+        if self._process is not None:
+            if self._log_handle is not None:
+                with contextlib.suppress(OSError):
+                    self._log_handle.close()
+                self._log_handle = None
+            # A restarted process gets a fresh IPC identity. The publisher reads
+            # these values for its next policy revision; the old worker's ack
+            # cannot be mistaken for the new process.
+            self.worker_id = f"cometa-worker-{uuid.uuid4().hex[:8]}"
+            self.process_identity = f"{os.getpid()}:{uuid.uuid4().hex[:12]}"
         args = [
             self._python,
             "-m",
@@ -68,7 +89,17 @@ class WorkerSupervisor:
             self.instance_id,
             "--worker-id",
             self.worker_id,
+            "--process-identity",
+            self.process_identity,
+            "--controller-boot-id",
+            self.controller_boot_id,
+            "--stella-home",
+            str(self.stella_home),
+            "--lease-seconds",
+            str(self.config.lease_seconds),
         ]
+        if self.policy_transport_enabled:
+            args.append("--policy-transport")
         kwargs: dict = {}
         if sys.platform == "win32":
             kwargs["creationflags"] = CREATE_NO_WINDOW
@@ -116,6 +147,8 @@ class WorkerSupervisor:
         info: dict = {
             "process_alive": self.is_running(),
             "worker_id": self.worker_id,
+            "database_reachable": False,
+            "lease_present": False,
         }
         try:
             conn = store._connect()
@@ -131,8 +164,10 @@ class WorkerSupervisor:
             info["db_ok"] = False
             info["reason"] = str(e)[:120]
             return info
+        info["database_reachable"] = True
         info["db_ok"] = row is not None
         if row is not None:
+            info["lease_present"] = True
             info["identity_matches"] = (
                 str(row["worker_id"]) == self.worker_id
                 and str(row["process_identity"]) == self.process_identity

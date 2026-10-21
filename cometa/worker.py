@@ -21,18 +21,26 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import math
 import os
 import signal
 import sys
 import time
 import uuid
 from datetime import timedelta
+from pathlib import Path
 
 from .artifacts import ArtifactCollector
 from .backends.registry import default_registry
 from .config import CometaConfig
 from .executor import AttemptExecutor
 from .models import utc_now
+from .policy_transport import (
+    ClaimDecision,
+    WorkerPolicyReader,
+    config_fingerprint,
+    policy_paths,
+)
 from .store import CometaStore
 from .workspace import WorkspaceManager
 
@@ -54,12 +62,31 @@ class CometaWorker:
         process_identity: str = "",
         store: CometaStore | None = None,
         registry=None,
+        controller_boot_id: str = "",
+        policy_transport_enabled: bool = False,
+        stella_home: str | os.PathLike[str] | None = None,
+        policy_reader: WorkerPolicyReader | None = None,
     ):
         self.instance_id = instance_id
         self.config = config
         self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
         self.process_identity = process_identity or f"{os.getpid()}:{uuid.uuid4().hex[:8]}"
         self.store = store or CometaStore(config.db_path)
+        self.policy_reader = policy_reader
+        if policy_transport_enabled and self.policy_reader is None:
+            home = (
+                stella_home
+                if stella_home is not None
+                else Path(config.config_path).expanduser().resolve().parent.parent
+            )
+            self.policy_reader = WorkerPolicyReader(
+                paths=policy_paths(home, instance_id),
+                instance_id=instance_id,
+                controller_boot_id=controller_boot_id,
+                worker_id=self.worker_id,
+                process_identity=self.process_identity,
+                config_hash=config_fingerprint(config),
+            )
         self.registry = registry if registry is not None else default_registry()
         self.executor = AttemptExecutor(
             store=self.store,
@@ -159,6 +186,9 @@ class CometaWorker:
         self._recover_orphans()
         # 4) 认领新任务（受 max_concurrent 限制）
         while len(self._active) < self.config.max_concurrent:
+            decision = self._claim_decision()
+            if not decision.allowed or len(self._active) >= decision.claim_limit:
+                break
             claimed = self.store.claim_next_task(
                 instance_id=self.instance_id,
                 worker_id=self.worker_id,
@@ -201,6 +231,24 @@ class CometaWorker:
                 epoch=attempt.lease_epoch,
                 attempt_id=attempt_id,
             )
+
+    def _claim_decision(self) -> ClaimDecision:
+        """Read the opt-in policy immediately before every database claim."""
+        reader = self.policy_reader
+        if reader is None:
+            return ClaimDecision(
+                True,
+                claim_limit=self.config.max_concurrent,
+                reason_code="policy_transport_disabled",
+            )
+        try:
+            decision = reader.evaluate()
+        except Exception:
+            _LOGGER.warning("Cometa claim policy read failed closed", exc_info=True)
+            return ClaimDecision(False, reason_code="policy_read_failed")
+        if not isinstance(decision, ClaimDecision):
+            return ClaimDecision(False, reason_code="policy_decision_invalid")
+        return decision
 
     def _recover_orphans(self) -> None:
         for task in self.store.tasks_needing_recovery(self.instance_id, now=utc_now()):
@@ -278,6 +326,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--instance-id", default=None)
     parser.add_argument("--worker-id", default=None)
     parser.add_argument("--db-path", default=None)
+    parser.add_argument("--process-identity", default="")
+    parser.add_argument("--controller-boot-id", default="")
+    parser.add_argument("--stella-home", default=None)
+    parser.add_argument("--lease-seconds", type=float, default=None)
+    parser.add_argument("--policy-transport", action="store_true")
     parser.add_argument("--stop-grace", type=float, default=DEFAULT_STOP_GRACE_SECONDS)
     args = parser.parse_args(argv)
 
@@ -285,14 +338,25 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
-    config = CometaConfig.load()
+    config_env = dict(os.environ)
+    if args.stella_home:
+        config_env["STELLA_HOME"] = args.stella_home
+    config = CometaConfig.load(env=config_env)
     if args.db_path:
         config.db_path = __import__("pathlib").Path(args.db_path)
+    if args.lease_seconds is not None:
+        if not math.isfinite(args.lease_seconds) or args.lease_seconds <= 0:
+            parser.error("--lease-seconds must be finite and positive")
+        config.lease_seconds = args.lease_seconds
     instance_id = args.instance_id or _resolve_instance_id()
     worker = CometaWorker(
         instance_id=instance_id,
         config=config,
         worker_id=args.worker_id,
+        process_identity=args.process_identity,
+        controller_boot_id=args.controller_boot_id,
+        policy_transport_enabled=args.policy_transport,
+        stella_home=args.stella_home,
     )
 
     loop = asyncio.new_event_loop()
