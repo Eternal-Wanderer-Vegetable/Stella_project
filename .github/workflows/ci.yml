@@ -162,6 +162,30 @@ jobs:
             --timeout=120 \
             --timeout-method=thread
 
+      - name: Run Gravitas V1 fake acceptance and package import smoke (Python 3.11)
+        if: matrix.python-version == '3.11'
+        env:
+          STELLA_HOME: ${{ runner.temp }}/stella-gravitas-g07
+        run: |
+          python scripts/run_gravitas_evaluation.py \
+            --suite tests/gravitas/fixtures/v1 \
+            --workdir "$RUNNER_TEMP/gravitas-v1" \
+            --seed 20261021 \
+            --trace-seeds 10 \
+            --steps 256 \
+            --repeat 2
+
+      - name: Upload Gravitas V1 acceptance report
+        if: always() && matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gravitas-v1-acceptance-report
+          path: |
+            ${{ runner.temp }}/gravitas-v1/report.json
+            ${{ runner.temp }}/gravitas-v1/runs/**/*.log
+            ${{ runner.temp }}/gravitas-v1/packages/*.log
+          if-no-files-found: ignore
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v7
