@@ -157,7 +157,13 @@ async def acquire(
 
     # 排队等待名额
     wait_start = time.monotonic()
-    await state.sem.acquire()
+    try:
+        await state.sem.acquire()
+    except BaseException:
+        # 被取消的 waiter 还没有名额，必须从快照计数中移除。Semaphore 在
+        # release 与取消竞争时负责归还已唤醒但尚未交付的名额；这里回收排队票数。
+        state.waiting -= 1
+        raise
     wait_seconds = time.monotonic() - wait_start
     state.total_wait_seconds += wait_seconds
     state.total_acquired += 1

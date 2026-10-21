@@ -161,6 +161,70 @@ def test_the_gate_is_released_even_when_the_body_raises():
     assert stats["acquired"] == 2
 
 
+@pytest.mark.parametrize(
+    "release_before_cancel",
+    [False, True],
+    ids=["cancel-while-queued", "cancel-after-release-wakes-waiter"],
+)
+def test_cancelled_waiter_does_not_leak_wait_count_or_permit(release_before_cancel):
+    """取消排队者或与释放同刻发生时，计数和 semaphore 名额都必须守恒。"""
+    _with_limits({"LOCAL": 1})
+
+    async def main():
+        holder = scheduler.acquire("LOCAL", tag="holder")
+        await holder.__aenter__()
+        holder_active = True
+        queued = asyncio.Event()
+
+        async def waiter():
+            queued.set()
+            async with scheduler.acquire("LOCAL", tag="cancelled"):
+                raise AssertionError("cancelled waiter unexpectedly acquired the gate")
+
+        waiter_task = asyncio.create_task(waiter())
+        try:
+            await queued.wait()
+            for _ in range(100):
+                if scheduler.snapshot()["LOCAL"]["waiting"] == 1:
+                    break
+                await asyncio.sleep(0)
+            assert scheduler.snapshot()["LOCAL"]["waiting"] == 1
+
+            if release_before_cancel:
+                await holder.__aexit__(None, None, None)
+                holder_active = False
+
+            waiter_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await waiter_task
+
+            snapshot = scheduler.snapshot()["LOCAL"]
+            assert snapshot["waiting"] == 0
+            assert snapshot["holding"] == (0 if release_before_cancel else 1)
+
+            if holder_active:
+                await holder.__aexit__(None, None, None)
+                holder_active = False
+
+            async def acquire_after_cancellation():
+                async with scheduler.acquire("LOCAL", tag="after-cancel"):
+                    pass
+
+            await asyncio.wait_for(acquire_after_cancellation(), timeout=0.5)
+            final = scheduler.snapshot()["LOCAL"]
+            assert final["holding"] == 0
+            assert final["waiting"] == 0
+            assert final["acquired"] == 2
+        finally:
+            if not waiter_task.done():
+                waiter_task.cancel()
+                await asyncio.gather(waiter_task, return_exceptions=True)
+            if holder_active:
+                await holder.__aexit__(None, None, None)
+
+    asyncio.run(main())
+
+
 # ---------------------------------------------------------------- 解析器语义
 
 
