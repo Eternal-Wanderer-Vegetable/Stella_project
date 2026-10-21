@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP01 已完成，下一步 WP02；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)与[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)，平台 live、发布与VM验收单独记录。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP02 已完成，下一步 WP03；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)与[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -32,6 +32,14 @@
 - 验收：身份/注册表及 QQ/WebChat 相关测试 **160 passed**，message-flow 合同测试 **14 passed**；改动 Python Ruff 通过；文档门禁 119 文件 / 1204 链接 / 577 锚点 / 0 errors；message-flow 清单已重生成，拓扑未变，`--check` 通过。暂存后 GitNexus `scope=all` 为 13 个文件 / 83 symbols / low；compare main 为 156 文件 / 111 symbols / low，无 partial/truncated。
 - 阶段提交：`ea79171`（`feat(transport): add V2 identity registry (WP01)`）。下一阶段 WP02。
 - 细节与命令见[WP01实施记录](docs/reports/2026-10-21-wp01-identity-registry.md)。
+
+## 2026-10-21 — Cross-platform implementation (WP02)
+
+- 实现提交 `8ab18ce`：ChatContext projection v7（安全读取 v6）、conversation projection v2、opaque message IDs 与旧 QQ INTEGER codec 分离；reply envelope schema 2 使用绑定 turn / identity revision / generation epoch 的 `target_ref`。
+- GitNexus 编辑前：`parse_platform_message_id` CRITICAL/22 impacted/7 flows；reply envelope 两解析锚点 HIGH；`_extract_reply_candidate` HIGH/4 impacted/3 flows；UNKNOWN 的 reset/parser hook 已文本审计。提交前 scope all 31 files/121 symbols/21 processes/critical；compare main 187 files/232 symbols/21 processes/critical，完整重跑无 partial/truncated。
+- 定向回归 310 passed；Ruff、`generate_message_flow.py --check` 与暂存 diff check 通过。全量 Python：3782 passed/29 skipped/4 failed，失败项为 Cometa stale lease、两项 WebUI Cometa 401、WebUI chat history TypeError；详见 WP02 报告，保留 NOT READY。
+- `STELLA_HOME` 未设置，pytest 临时隔离；未启动 Bot、未读写生产库。无 live 模型/平台、QQ 灰度或 clean VM 验收。
+- 下一阶段 WP03：刷新索引并先查 schema 20→21、migrations、Python/native backend 与 API 4 wheel 合同的 upstream impact；仅用临时旧库副本验证迁移。
 
 ## What's Done
 
