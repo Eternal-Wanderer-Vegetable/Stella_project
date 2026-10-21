@@ -28,6 +28,12 @@
 Layers: `probe` collects data (with side effects) -> `checks` makes decisions (pure functions, the testing focus) -> `report` renders the result.
 The criteria used by check functions stay consistent with the actual behavior of ai_gateway (for example, a missing persona file is only a warning in the code, so doctor also reports a warning), avoiding "it runs fine but reports an error" situations.
 
+When `STELLA_ADAPTER_MODULES` does not enable `nonebot.adapters.onebot.v11`, Doctor
+marks the OneBot mode, endpoint, reverse-port, forward-connection, and token checks
+as not applicable and skips them. `deploy start` can therefore start a non-QQ Bot
+without NapCat configuration. If the setting is absent, checks retain the default
+OneBot V11 behavior. All other environment checks still run.
+
 **Whenever you change `checks.py` or `report.py`, re-export the mock as well** (the frontend/installer uses the real structure for previews, preventing drift between the structure and the backend):
 
 ```bash

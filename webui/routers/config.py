@@ -122,6 +122,22 @@ async def platform_onebot_put(
     return ok(result)
 
 
+@router.get("/api/v1/platform/adapters")
+async def platform_adapters() -> Any:
+    return ok(platformcfg_service.adapters())
+
+
+@router.put("/api/v1/platform/adapters")
+async def platform_adapters_put(
+    request: Request,
+    payload: dict,
+    auth: Annotated[AuthContext, Depends(require_auth)],
+) -> Any:
+    result = platformcfg_service.update_adapters(payload)
+    _audited(request, auth, "platform.adapters", modules=result["modules"])
+    return ok(result)
+
+
 # ---------- 空间（人格） ----------
 
 @router.get("/api/v1/spaces")

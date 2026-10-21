@@ -156,6 +156,8 @@ def check_allowed_groups(snap: Snapshot) -> CheckResult | None:
 
 def check_onebot_mode(snap: Snapshot) -> CheckResult | None:
     """连接方式 unknown → error。"""
+    if not snap.onebot_adapter_enabled:
+        return None
     if snap.onebot_mode == "unknown":
         return CheckResult(
             id="onebot_mode",
@@ -170,6 +172,8 @@ def check_onebot_mode(snap: Snapshot) -> CheckResult | None:
 
 def check_onebot_endpoint(snap: Snapshot) -> CheckResult | None:
     """已选择连接模式但 WS 地址/监听配置无效时阻止启动。"""
+    if not snap.onebot_adapter_enabled:
+        return None
     if snap.onebot_mode not in {"reverse", "forward"}:
         return None
     if snap.onebot_endpoint_configured is not False:
@@ -192,7 +196,7 @@ def check_onebot_reverse_port(snap: Snapshot) -> CheckResult | None:
     状态接口可达或端口探针确认监听 PID 属于 Stella，即可确认占用者是
     Stella 自己；两者都不可得时仍按外部冲突处理。
     """
-    if snap.onebot_mode != "reverse":
+    if not snap.onebot_adapter_enabled or snap.onebot_mode != "reverse":
         return None
     # 端口被自己占用：正常状态，不报告
     if snap.status_api_reachable or snap.onebot_port_owned_by_stella is True:
@@ -220,6 +224,8 @@ def check_onebot_reverse_port(snap: Snapshot) -> CheckResult | None:
 
 def check_onebot_forward(snap: Snapshot) -> CheckResult | None:
     """仅正向 WS：地址不可达 → error；探测失败 → warn。"""
+    if not snap.onebot_adapter_enabled:
+        return None
     if snap.onebot_mode != "forward":
         return None
     if snap.onebot_forward_reachable is False:
@@ -243,6 +249,8 @@ def check_onebot_forward(snap: Snapshot) -> CheckResult | None:
 
 def check_onebot_token(snap: Snapshot) -> CheckResult | None:
     """正向 WS 的显式 token 与 Bot token 不一致时给出可操作警告。"""
+    if not snap.onebot_adapter_enabled:
+        return None
     if snap.onebot_token_consistent is not False:
         return None
     return CheckResult(

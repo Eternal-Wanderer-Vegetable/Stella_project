@@ -193,7 +193,11 @@
 
       const linkArea = root.querySelector("#link-area");
       if (lk) {
-        if (lk.connected) {
+        if (lk.applicable === false) {
+          linkArea.innerHTML = `<div class="link-row"><div class="item"><span class="k">链路</span><span class="v">OneBot 未启用</span></div><div class="item"><span class="k">检查</span><span class="v">当前适配器配置不含 OneBot V11，已跳过 NapCat 检查</span></div></div>`;
+        } else if (lk.enabled === false) {
+          linkArea.innerHTML = `<div class="link-row"><div class="item"><span class="k">链路</span><span class="v">OneBot 链路监控未启用</span></div></div>`;
+        } else if (lk.connected) {
           linkArea.innerHTML = `
         <div class="link-row">
           <div class="item"><span class="k">链路</span><span class="v ${lk.healthy ? "good" : "bad"}">${lk.healthy ? "健康" : "异常"}</span></div>
@@ -297,7 +301,9 @@
     async function copyDiag(st) {
       const bad = logs.filter(l => l.level === "ERROR" || l.level === "WARNING").slice(-15);
        const lines = ["### Stella 诊断信息", "", `- 版本：v${appVersion || "unknown"}`, `- 进程：${st.alive ? `运行中（PID ${st.pid ?? "—"}）` : "已停止"}`];
-      if (st.link) lines.push(st.link.connected ? `- 链路：${st.link.healthy ? "健康" : "异常"}（已连接 ${fmtDur(st.link.connected_seconds)}，最近事件 ${fmtDur(st.link.last_event_seconds_ago)}前）` : "- 链路：协议端未连接（检查 NapCat 是否运行并已登录）");
+      if (st.link?.applicable === false) lines.push("- 链路：OneBot 未启用，已跳过 NapCat 检查");
+      else if (st.link?.enabled === false) lines.push("- 链路：OneBot 链路监控未启用");
+      else if (st.link) lines.push(st.link.connected ? `- 链路：${st.link.healthy ? "健康" : "异常"}（已连接 ${fmtDur(st.link.connected_seconds)}，最近事件 ${fmtDur(st.link.last_event_seconds_ago)}前）` : "- 链路：协议端未连接（检查 NapCat 是否运行并已登录）");
       // 「插件装了但从来不被调用」是最常见的一类 issue，把这三个数带上能省一轮问答
       const cp = st.capabilities;
       if (cp) lines.push(`- 能力：可路由 ${cp.routable ?? 0} / 共 ${cp.total ?? 0}，未声明工具 ${cp.auto_unrouted ?? 0}${(cp.missing_tools || []).length ? `，声明指向不存在的工具 ${cp.missing_tools.join("、")}` : ""}`);

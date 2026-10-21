@@ -95,6 +95,43 @@ def test_probe_onebot_reports_reverse_port_and_token_presence(monkeypatch, tmp_p
     assert "secret" not in repr(result)
 
 
+def test_probe_onebot_is_not_applicable_without_enabled_adapter(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    monkeypatch.delenv("STELLA_ADAPTER_MODULES", raising=False)
+    (tmp_path / ".env").write_text(
+        "STELLA_ADAPTER_MODULES=none\n"
+        'ONEBOT_WS_URLS=["ws://127.0.0.1:3001"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        probe, "_tcp_reachable", lambda _url: pytest.fail("must not probe NapCat")
+    )
+    monkeypatch.setattr(
+        probe, "_port_in_use", lambda *_args: pytest.fail("must not probe NapCat")
+    )
+
+    result = probe._probe_onebot()
+
+    assert result["applicable"] is False
+    assert result["mode"] == "not_applicable"
+    assert result["endpoint_configured"] is None
+
+
+def test_process_adapter_override_disables_napcat_probe_without_env_file(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
+    monkeypatch.setenv("STELLA_ADAPTER_MODULES", "off")
+    monkeypatch.setattr(
+        probe, "_port_in_use", lambda *_args: pytest.fail("must not probe NapCat")
+    )
+
+    result = probe._probe_onebot()
+
+    assert result["applicable"] is False
+    assert result["mode"] == "not_applicable"
+
+
 def test_probe_env_file_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(probe, "STELLA_HOME", tmp_path)
     exists, keys, superseded = probe._probe_env_file()

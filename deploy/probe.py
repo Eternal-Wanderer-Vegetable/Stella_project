@@ -312,6 +312,7 @@ def _probe_onebot() -> dict:
         }
 
     result = {
+        "applicable": True,
         "mode": "unknown",
         "host": "",
         "port": 0,
@@ -325,10 +326,29 @@ def _probe_onebot() -> dict:
     }
     try:
         env_path = STELLA_HOME / ".env"
-        if not env_path.exists():
-            return result
-        values = dotenv_values(env_path)
+        values = dotenv_values(env_path) if env_path.exists() else {}
     except Exception:
+        return result
+
+    # Only probe NapCat/OneBot endpoints when that adapter module is selected.
+    # Respect process environment overrides just as config.settings does.
+    adapter_modules = os.environ.get(
+        "STELLA_ADAPTER_MODULES",
+        values.get("STELLA_ADAPTER_MODULES", "nonebot.adapters.onebot.v11"),
+    )
+    enabled_modules = [part.strip() for part in str(adapter_modules).split(",") if part.strip()]
+    onebot_enabled = (
+        str(adapter_modules).strip().casefold() not in {"none", "off", "disabled"}
+        and "nonebot.adapters.onebot.v11" in enabled_modules
+    )
+    if not onebot_enabled:
+        return {
+            **result,
+            "applicable": False,
+            "mode": "not_applicable",
+            "endpoint_configured": None,
+        }
+    if not env_path.exists():
         return result
 
     ws_url = _extract_ws_url(values)
@@ -880,6 +900,7 @@ def collect() -> Snapshot:
         allowed_groups=list(ALLOWED_GROUPS),
         db_cleanup_on_start=DB_CLEANUP_ON_START,
         onebot_mode=onebot.get("mode", "unknown"),
+        onebot_adapter_enabled=onebot.get("applicable", True),
         onebot_host=onebot.get("host", "127.0.0.1"),
         onebot_port=onebot.get("port", 8080),
         onebot_port_in_use=onebot.get("port_in_use"),

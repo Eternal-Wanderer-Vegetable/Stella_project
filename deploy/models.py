@@ -49,6 +49,7 @@ class Snapshot:
     db_cleanup_on_start: bool = False
 
     # ── OneBot 连接 ──
+    onebot_adapter_enabled: bool = True
     onebot_mode: str = "reverse"  # "forward" / "reverse" / "unknown"
     onebot_host: str = "0.0.0.0"
     onebot_port: int = 8080
