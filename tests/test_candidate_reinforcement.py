@@ -64,7 +64,7 @@ def db(tmp_path, monkeypatch):
                 """INSERT INTO group_messages (
                     id, group_id, user_id, content, source_kind, msg_id,
                     conversation_key, bot_id
-                ) VALUES (?, ?, ?, ?, ?, ?, 'test-conversation', 'test-bot')""",
+                ) VALUES (?, ?, ?, ?, ?, ?, 'qq:test-bot:group:1', 'test-bot')""",
                 (source_id, str(origin_group_id or 1), user_id, content, kind,
                  f"platform-{source_id}"),
             )
