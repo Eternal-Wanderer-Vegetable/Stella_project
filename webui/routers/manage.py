@@ -177,6 +177,11 @@ async def kb_revoke(kb_id: str, payload: dict) -> Any:
 
 # ---------- 定时任务 ----------
 
+@sched_router.get("/api/v1/scheduling/bots")
+async def sched_bots() -> Any:
+    return ok(sched_service.list_bots())
+
+
 @sched_router.get("/api/v1/scheduling/tasks")
 async def sched_list(
     group_id: str | None = None,

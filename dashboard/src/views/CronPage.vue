@@ -8,15 +8,18 @@ import { toastApiError, useToast } from '@/stores/toast';
 // 新建表单不暴露裸 Cron：星期 + 时间图形化选择，cron 表达式由前端生成
 //（2026-09-25 用户要求：群号来自 .env 白名单、避免非法输入）。
 interface Task {
-  task_id: string; group_id: number; mode: string; objective: string;
+  task_id: string; group_id: number; bot_id: string; mode: string; objective: string;
   cron_expr: string; timezone: string; revision: number; status: string;
 }
 interface GroupItem { group_id: number; space: string }
+interface BotItem { bot_id: string; adapter: string }
 
 const tasks = ref<Task[]>([]);
 const groups = ref<GroupItem[]>([]);
+const bots = ref<BotItem[]>([]);
 const createDialog = ref(false);
 const groupId = ref<number | null>(null);
+const botId = ref<string | null>(null);
 const mode = ref('reminder');
 const objective = ref('');
 const selectedDays = ref<string[]>(['MON', 'TUE', 'WED', 'THU', 'FRI']);
@@ -52,6 +55,9 @@ const groupItems = computed(() =>
     title: `群 ${g.group_id}${g.space ? ` · ${g.space}` : ''}`,
   })),
 );
+const botItems = computed(() =>
+  bots.value.map((bot) => ({ value: bot.bot_id, title: `${bot.adapter} · ${bot.bot_id}` })),
+);
 
 // 由星期 + 时间生成五段式 cron。Cron 的顺序是「分 时」，而 timeOfDay 是
 // 「HH:MM」——别被变量名顺序骗了（曾经生成过 22:30 → `22 30` 的颠倒表达式）。
@@ -70,6 +76,7 @@ const canCreate = computed(
   () =>
     groupId.value !== null &&
     groupId.value !== 0 &&
+    botId.value !== null &&
     objective.value.trim().length > 0 &&
     selectedDays.value.length > 0 &&
     /^\d{1,2}:\d{2}$/.test(timeOfDay.value),
@@ -83,6 +90,20 @@ function applyPreset(preset: { days: string[]; time: string }): void {
 async function loadGroups(): Promise<void> {
   try {
     groups.value = (await unwrap<{ groups: GroupItem[] }>(api.get('/groups'))).groups;
+    if (groupId.value === null && groups.value.length) {
+      groupId.value = groups.value[0].group_id;
+    }
+  } catch (err) {
+    toastApiError(toast, err);
+  }
+}
+
+async function loadBots(): Promise<void> {
+  try {
+    bots.value = (await unwrap<{ bots: BotItem[] }>(api.get('/scheduling/bots'))).bots;
+    if (botId.value === null && bots.value.length === 1) {
+      botId.value = bots.value[0].bot_id;
+    }
   } catch (err) {
     toastApiError(toast, err);
   }
@@ -98,15 +119,14 @@ async function load(): Promise<void> {
 
 function openCreate(): void {
   if (groups.value.length === 0) void loadGroups();
-  if (groupId.value === null && groups.value.length) {
-    groupId.value = groups.value[0].group_id;
-  }
+  if (bots.value.length === 0) void loadBots();
   createDialog.value = true;
 }
 
 async function create(): Promise<void> {
   try {
     await unwrap(api.post('/scheduling/tasks', {
+      bot_id: botId.value,
       group_id: groupId.value,
       mode: mode.value,
       objective: objective.value.trim(),
@@ -163,6 +183,7 @@ const statusColor = (s: string): string =>
 onMounted(() => {
   void load();
   void loadGroups();
+  void loadBots();
 });
 </script>
 
@@ -181,10 +202,11 @@ onMounted(() => {
     <v-card class="pa-2">
       <v-table v-if="tasks.length">
         <thead>
-          <tr><th>群</th><th>类型</th><th>内容</th><th>Cron</th><th>时区</th><th>状态</th><th>修订</th><th>操作</th></tr>
+          <tr><th>机器人</th><th>群</th><th>类型</th><th>内容</th><th>Cron</th><th>时区</th><th>状态</th><th>修订</th><th>操作</th></tr>
         </thead>
         <tbody>
           <tr v-for="t in tasks" :key="t.task_id">
+            <td>{{ t.bot_id || '—' }}</td>
             <td>{{ t.group_id }}</td>
             <td><v-chip size="x-small" variant="tonal" :color="t.mode === 'agent' ? 'secondary' : 'primary'">{{ t.mode }}</v-chip></td>
             <td class="text-body-2">{{ t.objective.slice(0, 40) }}</td>
@@ -255,6 +277,15 @@ onMounted(() => {
               v-model="groupId"
               :items="groupItems"
               label="QQ 群"
+              density="compact"
+              style="flex: 1"
+            />
+            <v-select
+              v-model="botId"
+              :items="botItems"
+              label="机器人账号"
+              placeholder="选择已连接的 OneBot V11 账号"
+              no-data-text="当前没有已连接的 OneBot V11 账号"
               density="compact"
               style="flex: 1"
             />

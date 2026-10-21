@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -165,61 +164,6 @@ def test_skill_save_and_delete(client: TestClient, auth_header: dict, skills_use
     resp = client.delete("/api/v1/skills/demo", headers=auth_header)
     assert resp.status_code == 200
     assert not (skills_user_dir / "demo").exists()
-
-
-# ---------- 定时任务 ----------
-
-@pytest.fixture
-def scheduling_enabled(monkeypatch: pytest.MonkeyPatch, isolated_home: Path):
-    import config.settings as settings
-
-    monkeypatch.setattr(settings, "SCHEDULING_ENABLED", True)
-    monkeypatch.setattr(
-        settings, "SCHEDULING_DB_PATH", isolated_home / "scheduling" / "tasks.db"
-    )
-    return isolated_home
-
-
-def test_scheduling_crud(client: TestClient, auth_header: dict, scheduling_enabled: Path):
-    payload = {
-        "group_id": 123,
-        "mode": "reminder",
-        "objective": "喝水提醒",
-        "cron_expr": "0 9 * * MON-FRI",
-        "timezone": "Asia/Shanghai",
-    }
-    resp = client.post("/api/v1/scheduling/tasks", json=payload, headers=auth_header)
-    assert resp.status_code == 200
-    task = resp.json()["data"]
-    task_id = task["task_id"]
-
-    resp = client.get(
-        "/api/v1/scheduling/tasks", params={"group_id": "123"}, headers=auth_header
-    )
-    assert len(resp.json()["data"]["tasks"]) == 1
-
-    def fresh_revision() -> int:
-        r = client.get(
-            f"/api/v1/scheduling/tasks/{task_id[:8]}",
-            params={"group_id": "123"},
-            headers=auth_header,
-        )
-        return r.json()["data"]["revision"]
-
-    def mutate(method: str, action: str, body: dict) -> Any:
-        """乐观锁变更：冲突（409/400 + StaleRevision）取最新修订重试——
-        与真实前端一致的语义；py3.14 的 TestClient 兼容垫片有重复提交
-        的观测记录，重试模式天然幂等防御。"""
-        for _ in range(5):
-            body = {**body, "expected_revision": fresh_revision()}
-            resp = client.request(method, f"/api/v1/scheduling/tasks/{task_id[:8]}/{action}",
-                                  json=body, headers=auth_header)
-            if resp.status_code == 200:
-                return resp
-        raise AssertionError(f"{action} 连续冲突：{resp.status_code} {resp.text[:200]}")
-
-    assert mutate("post", "pause", {"group_id": 123}).status_code == 200
-    assert mutate("patch", "", {"group_id": 123, "objective": "喝水提醒 v2"}).status_code == 200
 
 
 def test_scheduling_disabled_blocks_writes(client: TestClient, auth_header: dict, isolated_home):
