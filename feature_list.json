@@ -591,6 +591,11 @@
           "command": "G08: isolated dependency/storage recovery suite and full pytest tests -q -x; .venv/bin/ruff check .; py_compile changed Python; check_docs.py; generate_message_flow.py --check; git diff --check; GitNexus detect-changes all/compare",
           "result": "Code commit b78c72e. Focused recovery/model/capture/link regression 60 passed; final full suite 3989 passed / 29 skipped / 1 existing warning in 220.82s. Earlier two full attempts had intermittent WebUI submit and Cometa shutdown failures; isolated reruns passed, and a later full rerun passed. Ruff, compile, flow, diff, and docs (119 files / 1246 links / 577 anchors / 0 errors) passed; flow archive message-flow.643390a24eac.json. GitNexus all 13 files / 47 symbols / 31 processes / CRITICAL; compare/main 503 / 1076 / 113 / CRITICAL cumulative, listing capped after a larger-limit rerun; counts/risk cover all changes. S13/S14 evidence is isolated and offline only; no live model/platform, cross-process worker, clean VM, or release validation.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G09: isolated G09→WebUI Cometa sequence; full pytest tests -q -x; Ruff, py_compile, check_docs.py, generate_message_flow.py --check, git diff --check; GitNexus detect-changes all/compare",
+          "result": "Code commit ddb1c53. Same-process focused sequence passed 56 tests in 12.61s, including actual subprocess policy ACK and hard-kill/lease-expiry/new-worker restart. Final full suite: 3942 passed / 22 skipped / 1 failed / 1 existing warning in 226.97s; existing WebUI Cometa empty-key case expected 400, received 401. Other full attempts failed at different WebUI auth nodes; ordered focused sequence passes; root cause unresolved, so full suite is not green. Ruff, py_compile, docs (119 files / 1248 links / 577 anchors / 0 errors), flow, and diff checks passed. GitNexus 1.6.12 reindexed with PDG: all 13 files / 180 symbols / 0 affected processes / LOW; compare/main 515 / 1348 / 118 / CRITICAL cumulative, capped symbol listing; graph limitations and pre-edit impact are in report. External model/platform, clean VM and release verification remain NOT READY.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
         }
       ]
     }

@@ -181,10 +181,27 @@ G07 的离线 V1 组合验收完成，但不会据此启用 enforce 或宣告 re
 - G08 状态文档提交前，GitNexus all 为 4 files / 7 symbols / 0 processes / LOW；compare/main 为 506 files / 1,076 symbols / 113 processes / CRITICAL（累计）。`check_docs.py` 为 119 files / 1,248 links / 577 anchors / 0 errors，`feature_list.json` JSON parse 与 `git diff --check` 通过；compare 的展示清单仍 capped，统计覆盖全量。
 - 全部 pytest 使用隔离 `/tmp/stella-gravitas-*` 的 `STELLA_HOME`。没有连接模型、Bot、QQ/WebChat、真实平台或跨进程 worker；没有对用户数据库运行探针。G08 的 S13/S14 仅为本地软件回归，不能据此关闭真实依赖/存储恢复验收。
 
-G08 软件包完成；下一步 G09 为 Cometa 策略信封与 worker claim 检查。整体仍 **NOT READY**：V2 跨进程实际故障恢复、真实模型/平台、clean VM、安装器与发布资产仍缺证据。
+## G09 Cometa 策略传递与受控 worker 恢复
+
+代码提交 `ddb1c53` 增加默认关闭的跨进程策略文件与 worker ACK：
+
+- `cometa/policy_transport.py` 定义严格 schema=1 信封，身份绑定 instance/controller boot/worker/process digest/config hash；文件路径以 `STELLA_HOME` 和 instance 哈希派生，读写有尺寸上限、原子替换、POSIX 权限与 symlink 防护。内容不含任务正文、目标 ID 或凭据。worker 校验时间偏差、TTL、revision/replay 和 monotonic 期限；失效时只阻止新 claim，租约续期、deadline、恢复扫描与控制消费继续运行。重复读同 revision 不延长 TTL。
+- Bot 侧每 2 秒发布，worker 以独立 ACK 回报实际应用结果；Gravitas 状态只有看到当前 revision 的匹配 ACK 才显示 applied。策略检查紧贴每次 DB claim。`PolicySnapshot` 实现未改；`Operation` 仅新增 `cometa.claim` / `cometa.restart` 两个子门禁用于授权新操作。
+- 可选自动重启默认关闭，需要新鲜策略允许、DB 可达、旧 owner lease 已过期且无活动 attempt；退避和每窗口预算有限，新 worker 以新身份启动并执行现有恢复扫描。日志明确重启成功不证明任务或投递成功。
+- 双语 Cometa 指南记录开关、信任边界及 ACK 语义。冻结的 `docs/plans/2026-10-21-gravitas-inventory.json` 未改。
+
+### G09 GitNexus 与验证
+
+- 编辑前 upstream impact 已刷新并向用户报告：`CometaWorker._tick` 与 `claim_next_task` 为 LOW（各 3 impacted / 1 direct）；`WorkerSupervisor.start` 为 LOW lower-bound（4 个未解析 caller），构造器、`CometaRuntime.start`、`ai_gateway._start_cometa` 为 UNKNOWN/lower-bound 并按源码、装配注册与测试引用补证；`CometaRuntime._watch_worker`、`build_runtime`、status/bootstrap 接线为 LOW。`PolicySnapshot` 与 `Operation` 类为 HIGH（约 155 impacted），编辑前已提示；前者实现未改，后者只增加两个 planned enum member。所有 UNKNOWN/零 caller 均未按“无影响”处理。
+- 提交前 GitNexus 1.6.12 原索引存储版本 v43 与当前运行时 v42 不兼容，按门禁以 `analyze --force --index-only --pdg` 重建（HEAD `66fb21f`，105,429 nodes / 263,193 edges / 1,119 clusters / 814 inferred flows）。图谱仍有边界：33 个 >512KB 文件跳过；2,880 / 3,080 个 process candidates 未入排名、21 条 trace depth-capped、804 个 callee 因分支上限跳过、41 条 walk 预算截断；另有 317 个跨语言属性引用未连边。提交前 `detect-changes --scope all`：13 files / 180 symbols / 0 affected processes / LOW；`compare --base-ref main`：515 files / 1,348 symbols / 118 processes / CRITICAL cumulative，符号清单 capped，完整统计与风险仍覆盖全部变更。all 的零受影响流程不覆盖上述 upstream 结果，也不证明零 caller；两条最终命令均退出 0，未返回 partial/truncated 标记。
+- 实施报告与状态文档提交前 `detect-changes --scope all`：4 files / 9 symbols / 0 processes / LOW；`compare --base-ref main`：515 files / 1,348 symbols / 118 processes / CRITICAL cumulative，符号清单 capped。compare 首次并行调用被中断并标为 PARTIAL，单独顺序重跑后恢复完整计数；最终两条命令退出 0，未返回 partial/truncated 标记。文档门禁 119 files / 1,248 links / 577 anchors / 0 errors，feature JSON parse 与 staged `git diff --check` 通过。
+- 定向顺序回归：`STELLA_HOME=/tmp/stella-gravitas-g09-auth-sequence-20261021 .venv/bin/pytest tests/cometa/test_g09_policy_runtime.py tests/gravitas/test_g09_policy_transport.py tests/webui/test_webui_cometa.py -q -x`：**56 passed / 12.61s**。含真实 worker 子进程暂停/恢复 claim、硬杀后租约到期再由新身份 worker 接任并获 ACK；unknown recovery task 不重发由既有 recovery 守卫覆盖。此顺序下未复现 WebUI 鉴权问题。
+- 最终树全量回归：`STELLA_HOME=/tmp/stella-gravitas-g09-final-recheck-20261021 .venv/bin/pytest tests -q -x`：**3,942 passed / 22 skipped / 1 failed / 1 existing PytestRemovedIn10Warning，226.97s**。失败位于既有 `tests/webui/test_webui_cometa.py::TestAuthStatusAndCustomEndpoint::test_custom_endpoint_first_time_empty_key_rejected`，预期 400、实际 401（鉴权 fixture/JWT）；之前全量尝试亦在不同 WebUI 鉴权节点出现 401，而该文件单独及上述 G09→WebUI 同进程顺序均通过。根因未确认，不能将此轮全量记作通过。此前增加真实 hard-kill 测试前的一次全量曾通过 4,015 passed / 29 skipped；该历史结果不替代最终树结果。
+- `.venv/bin/ruff check .`、全部改动 Python 文件 `py_compile`、`.venv/bin/python scripts/check_docs.py`（119 files / 1,248 links / 577 anchors / 0 errors）、`.venv/bin/python scripts/generate_message_flow.py --check`（`message-flow.f49877957442.json` 与源码一致）和 `git diff --check` 均通过。
+- 所有验证使用隔离 `/tmp/stella-gravitas-*` 路径；未启动真实模型、Bot 或平台，未访问用户数据库、聊天、凭据或本机配置。真实模型/QQ/WebChat 灰度、生产跨进程故障恢复、Windows/Linux clean VM、安装器和发布资产仍未验收，整体 **NOT READY**。
 
 ## 未完成与验收边界
 
-- G00–G08 已按工作包完成；G09 仍须实现、验证和提交。
+- G00–G09 源码工作已按工作包完成；分阶段提交包括 G09 代码提交 `ddb1c53` 与本报告/状态证据提交。`GRAVITAS-IMPL` 是否关闭仍以最后的 PR CI 与状态记录为准。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。
