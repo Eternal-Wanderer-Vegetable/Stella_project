@@ -124,6 +124,8 @@
 - Dashboard direct Vitest 100 passed、`vue-tsc --noEmit` 通过、Vite build 成功（既有导入/大 chunk 警告）；全仓 Ruff 和 message-flow 检查通过。三个修复阶段提交为 `1f5c900`、`54c4d4c`、`7f35347`。本地 Python 回归不替代真实平台、QQ 灰度和发布验收。
 - GitNexus 1.6.11 刷新绑定 `22ce1d0`；提交前 all 为 5 tracked files / 15 symbols / LOW。compare main 首轮 partial 后串行重跑完整：336 files / 1,140 symbols / 106 processes / CRITICAL，无 partial/truncated（符号列表 capped）。
 - 真实平台/QQ灰度、L2完整链、L3完整能力、多账号 live 恢复、Python 3.10/3.11 独立运行与 Linux/Windows clean VM 未执行；32 项平台仍均未认证。
+- PR #111 CI 修复分两阶段提交：`e622c7a` 让三版本测试 job 安装包含基础与可选 Alconna/Uninfo 平台桥接依赖的 `requirements-platform.lock`，并同步缓存键和中英文 CI 指南；`97a2ea9` 修正 Cometa ack 测试把瞬态 `SENDING` 误当完成态的轮询竞态。
+- 本地验证：平台锁 dry-run 检查 95 个包、无需更改；平台失败相关测试 22 passed / 1 warning；Cometa runtime assembly 3 passed；文档检查 119 files / 1,234 links / 577 anchors / 0 errors。最终 PR CI run `39557774555` 全绿：Python 3.10/3.11/3.12 各 3,879 passed / 29 skipped，其他 CI、Dashboard 和 Docker build/push jobs 全部通过。
 
 ## What's Done
 

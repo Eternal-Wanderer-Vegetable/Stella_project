@@ -173,6 +173,11 @@
           "command": "WP11 pre-commit GitNexus: detect-changes --scope all; detect-changes --scope compare --base-ref main",
           "result": "Current state-doc scope all: 5 files / 15 symbols / 0 processes / LOW. Compare main: 349 files / 1186 symbols / 126 processes / CRITICAL, complete counts with capped symbol listing. Several retries were interrupted; final accepted run had no PARTIAL result. Compare covers cumulative branch changes.",
           "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "PR #111 CI diagnosis/fix: GitHub Actions logs + uv pip dry-run + isolated targeted pytest + python3 scripts/check_docs.py",
+          "result": "Root cause 1: test matrix omitted optional platform bridge dependencies despite direct test imports; commit e622c7a installs requirements-platform.lock and updates bilingual CI docs/cache key. Root cause 2: Cometa ack test exited on transient SENDING; commit 97a2ea9 waits for SERVER_EMITTED. Final hosted CI run 39557774555 succeeded: each Python 3.10/3.11/3.12 job 3,879 passed / 29 skipped, and all other PR checks passed. Local lock dry-run: 95 packages/no changes; affected tests 22 passed + 1 warning, Cometa runtime assembly 3 passed; docs: 119 files/1,234 links/577 anchors/0 errors.",
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/111"
         }
       ]
     },

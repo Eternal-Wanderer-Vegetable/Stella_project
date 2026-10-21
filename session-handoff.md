@@ -30,6 +30,13 @@ WP11 定向平台/Normalizer/Outbound 测试 18 passed；后续记忆 replay/can
 
 GitNexus 流程抽取仍有入口/分支预算截断、回调和跨语言缺边；UNKNOWN 与零调用者均用源码引用补查，不作为低风险。全量 pytest 使用隔离 `STELLA_HOME=/tmp/stella-wp11-final-allgreen-20261021`；未迁移生产库、未启动 Bot、未连接平台或模型。没有 Windows/Linux 干净 VM、QQ 灰度、跨进程 live 恢复和 Python 3.10/3.11 独立验收。
 
+## PR #111 CI 修复（2026-10-21）
+
+- 首轮失败根因：test job 只安装 `requirements.txt` 与开发工具，而跨平台测试直接导入可选的 `nonebot_plugin_alconna`；它只在平台 extra 与 `requirements-platform.lock` 中定义。提交 `e622c7a` 将测试安装切换到该 lock、加入 pip 缓存键，并同步双语 CI 复现说明。
+- 首次重跑暴露独立的 Cometa 测试竞态：`test_pump_delivers_submitted_ack` 在 `PENDING → SENDING` 时提前结束轮询。提交 `97a2ea9` 让测试等到 `SERVER_EMITTED` 终态。
+- 最终 hosted CI run `39557774555` 全绿：Python 3.10 / 3.11 / 3.12 各 3,879 passed / 29 skipped；CLI、文档、security、flow、Windows native、benchmark、Dashboard、Docker build/push 均通过。PR [#111](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/111)。
+- 本地检查：`uv pip install --dry-run --python .venv/bin/python -r requirements-platform.lock`（95 packages，无改动）；平台失败相关测试 22 passed / 1 warning；Cometa runtime assembly 3 passed；`python3 scripts/check_docs.py`（119 files / 1,234 links / 577 anchors / 0 errors）。
+
 ## Next Steps
 
 1. 外部具备平台账户与干净环境后，按 32 行矩阵逐平台补包版本/Python/driver、fixture、live 和维护证据；单独完成多账号恢复、QQ 灰度、Python 3.10/3.11 独立运行及 Linux/Windows clean VM。
