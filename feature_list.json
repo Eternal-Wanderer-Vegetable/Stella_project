@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-21",
-  "active_feature": "GRAVITAS-IMPL",
+  "active_feature": null,
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -506,7 +506,7 @@
       "id": "GRAVITAS-IMPL",
       "name": "Gravitas 稳态系统实施",
       "description": "按方案执行 G00–G09；V1 G00–G07 与 V2 G08/G09 的源码工作分阶段推进，发布验收按证据记录，不提前标 READY。",
-      "status": "in_progress",
+      "status": "done",
       "dependencies": [
         "GRAVITAS-PLAN"
       ],
@@ -595,6 +595,11 @@
         {
           "command": "G09: isolated G09→WebUI Cometa sequence; full pytest tests -q -x; Ruff, py_compile, check_docs.py, generate_message_flow.py --check, git diff --check; GitNexus detect-changes all/compare",
           "result": "Code commit ddb1c53. Same-process focused sequence passed 56 tests in 12.61s, including actual subprocess policy ACK and hard-kill/lease-expiry/new-worker restart. Final full suite: 3942 passed / 22 skipped / 1 failed / 1 existing warning in 226.97s; existing WebUI Cometa empty-key case expected 400, received 401. Other full attempts failed at different WebUI auth nodes; ordered focused sequence passes; root cause unresolved, so full suite is not green. Ruff, py_compile, docs (119 files / 1248 links / 577 anchors / 0 errors), flow, and diff checks passed. GitNexus 1.6.12 reindexed with PDG: all 13 files / 180 symbols / 0 affected processes / LOW; compare/main 515 / 1348 / 118 / CRITICAL cumulative, capped symbol listing; graph limitations and pre-edit impact are in report. External model/platform, clean VM and release verification remain NOT READY.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "PR #112 hosted CI at 06be191: Python 3.10/3.11/3.12 full suites; G07 V1/package smoke; Dashboard CI; Docker build; documentation, lint, security, flow, CLI, Windows native and memory benchmark jobs",
+          "result": "All checks passed. Each Python version: 4016 passed / 29 skipped; Python 3.11 G07 S01-S12 fake acceptance and release_package_layout_and_import passed (digest bbe336e65336e45c153bb0419bbb1b60e998931b). Dashboard run 39626508633 and Docker run 39626508671 succeeded. CI test fixes are commits 67f33a1, 4d0831c, 06be191. Real model/platform, cross-process production, clean VM and release acceptance remain NOT READY. Documentation-stage GitNexus: all 4 files / 7 symbols / 0 processes / LOW. Compare/main first returned PARTIAL (516/334/805/UNKNOWN, exit 1); the required sequential retry returned 516 files / 543 symbols / 805 processes / CRITICAL cumulative (exit 0, no partial/truncated marker). Repeated summaries varied; see report.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
         }
       ]

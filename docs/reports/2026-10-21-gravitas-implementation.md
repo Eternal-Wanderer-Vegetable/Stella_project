@@ -200,8 +200,20 @@ G07 的离线 V1 组合验收完成，但不会据此启用 enforce 或宣告 re
 - `.venv/bin/ruff check .`、全部改动 Python 文件 `py_compile`、`.venv/bin/python scripts/check_docs.py`（119 files / 1,248 links / 577 anchors / 0 errors）、`.venv/bin/python scripts/generate_message_flow.py --check`（`message-flow.f49877957442.json` 与源码一致）和 `git diff --check` 均通过。
 - 所有验证使用隔离 `/tmp/stella-gravitas-*` 路径；未启动真实模型、Bot 或平台，未访问用户数据库、聊天、凭据或本机配置。真实模型/QQ/WebChat 灰度、生产跨进程故障恢复、Windows/Linux clean VM、安装器和发布资产仍未验收，整体 **NOT READY**。
 
+## PR CI 后续修复与最终验收
+
+PR [#112](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/112) 创建后的 hosted CI 暴露了两项独立问题，分别修复并分阶段提交：
+
+- 首轮 Python CI run `39622431894` 的 3.11 全量 pytest 为 **4,016 passed / 29 skipped**，随后 G07 package smoke 因 test job 没有生成 `webui/dist` 而失败。`67f33a1` 在 Python 3.11 smoke 前执行与 Dashboard CI 相同的 Node/pnpm install、build、`sync:webui`，使 package smoke 能看到发布资源。
+- 同一轮的 Python 3.10 job 有 **4,015 passed / 29 skipped / 1 failed**：`test_expired_ticket_is_removed_before_holder_releases` 捕获内置 `TimeoutError`，而 Python 3.10 的 `asyncio.wait_for` 抛 `asyncio.TimeoutError`。`4d0831c` 将断言改为 `asyncio.TimeoutError`；本机 Python 3.12.14 定向用例 **1 passed**。
+- run `39625223760` 验证了前两项：Python 3.10 与 3.12 通过；3.11 全量在 `tests/observability/test_message_flow_runtime.py::TestFacadeTurnFacts::test_cancelled_turn_facts` 失败。根因是测试以 200ms 总期限加固定 50ms sleep 模拟取消，在并行全量下 turn deadline 可能先于取消到达。`06be191` 让测试等待 provider 明确启动后再取消，并把总 deadline 调到 30 秒，同时对启动与收尾使用 2 秒 watchdog；不修改运行时实现。本机定向用例 **1 passed**，整个 `test_message_flow_runtime.py` **16 passed**，Ruff 和 `py_compile` 通过。
+- 最终 [PR CI run 39626508632](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/39626508632) 验证提交 `06be19187cf3ffc15c72cc40e95f3419cec905a0`：Python 3.10 **4,016 passed / 29 skipped / 4 warnings / 179.70s**；3.11 **4,016 passed / 29 skipped / 4 warnings / 160.21s**；3.12 **4,016 passed / 29 skipped / 5 warnings / 199.51s**。3.11 G07 S01–S12 fake acceptance 与 `release_package_layout_and_import` 均 PASS，评测摘要 digest `bbe336e65336e45c153bb0419bbb1b60e998931b`。
+- 同一 PR head 的 [Dashboard CI 39626508633](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/39626508633) 与 [Docker build 39626508671](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/39626508671) 均成功；CI 的 documentation、lint、security、flow closure/manifest、CLI、Windows native reliability 和 memory benchmark jobs 全部成功。PR 保持开放，未合并。
+- 状态文档提交前 GitNexus 1.6.12 `detect-changes --scope all`：4 files / 7 symbols / 0 processes / LOW；`--scope compare --base-ref main --limit 50000` 一次返回 PARTIAL/exit 1（516 files / 334 symbols / 805 processes / UNKNOWN），按门禁单独重跑后为 516 files / 543 symbols / 805 processes / CRITICAL cumulative，exit 0 且无 partial/truncated marker。其他成功 compare 重跑的累计 symbol/process 数也有变化；不把这个 compare 的分支累计风险解释为状态文档局部风险。
+- 之前的本地完整回归仍记录为 **3,942 passed / 22 skipped / 1 failed / 1 warning**，失败是既有 WebUI Cometa empty-key 测试预期 400、实际 401，根因未确认；此次 CI test-only follow-up 之后没有再跑一遍本地全量。不能把本地那次失败改写为通过，但最新 hosted 三版本全量通过已独立验收。
+
 ## 未完成与验收边界
 
-- G00–G09 源码工作已按工作包完成；分阶段提交包括 G09 代码提交 `ddb1c53` 与本报告/状态证据提交。`GRAVITAS-IMPL` 是否关闭仍以最后的 PR CI 与状态记录为准。
+- G00–G09 源码工作、测试、指南、CI 修正和 PR 已完成，均按阶段提交；CI 结果见上节。PR #112 仍开放，等待 review/merge。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。
