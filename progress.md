@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP05 已完成，下一步 WP06；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `28b296c`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)与[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)，平台 live、发布与VM验收单独记录。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP06 已完成，下一步 WP07；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `d2270d1`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)与[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -68,6 +68,15 @@
 - GitNexus 提交前：scope all 14 files/26 symbols/16 processes/CRITICAL；compare main 重跑后 254 files/484 symbols/76 processes/CRITICAL（包含 WP00–WP05）。首次 compare 的 process query 被中断并标 PARTIAL，重跑得到非 PARTIAL 完整摘要；CLI 名称列表仍按固定摘要折叠。
 - 状态/报告提交门禁：GitNexus all 5 files/14 symbols/0 processes/LOW；compare 首轮 PARTIAL 后重跑为 255 files/486 symbols/76 processes/CRITICAL。文档检查 119 files / 1213 links / 577 anchors / 0 errors，feature JSON 与 message-flow 检查通过。
 - `STELLA_HOME` 未设置；入口测试 DB、群空间和 WebChat home 使用 pytest 临时隔离数据。未读取/迁移用户库，未启动 Bot、真实模型或平台；未运行全量 Python suite，WP02/WP03 历史全量缺陷仍未关闭。线程/频道 adapter、QQ 灰度、clean VM 和发布认证仍待后续阶段，整体 NOT READY；下一阶段 WP06。
+
+## 2026-10-21 — Cross-platform implementation (WP06)
+
+- 实现提交 `d2270d1`：新增 transport-neutral outbound/media/capability contracts、显式 Bot/target 解析、OneBot v11 UniMessage codec、能力降级、长文本拆分及逐物理发送段结果；群/私聊、Cometa ack、主动发送和能力清单统一走 outbound service。
+- DeliveryResult 保留 opaque ID 列表和 accepted/partial/failed/unknown 等状态；unknown 不自动重投。social schema 4→5 增加 `platform_message_ids_json`，迁移只包裹旧 primary ID；effects、查询和引用归因消费 ID 列表。
+- 编辑前 GitNexus：`deliver_lines` HIGH (10/6/3)、`record_delivery` CRITICAL (12/3/4)、`seal_delivery_plan` CRITICAL (14/3/5)；封存签名/摘要未改。`find_delivery_by_platform_id` UNKNOWN/0，经 `rg` 确认有测试调用。边界见 WP06 报告。
+- 定向回归 138 passed / 1 warning；改动 Python Ruff、message-flow check 与 diff check 通过。归档 `message-flow.72cc70e6e149.json` 为 141 nodes / 139 source-resolved / 8,952 closure sites / 11,689 reachable symbols。
+- GitNexus 提交前 scope all 21 files/54 symbols/7 processes/HIGH；compare main 264 files/589 symbols/76 processes/CRITICAL，包含 WP00–WP05。状态文档 scope all 7 files/14 symbols/0 processes/LOW；compare main 265 files/591 symbols/76 processes/CRITICAL。
+- `STELLA_HOME` 未设置；只用临时测试数据。未运行全量 Python、真实 QQ/其他平台、clean VM 或发布验收；历史全量缺口仍未关闭，整体 NOT READY。下一阶段 WP07。
 
 ## What's Done
 

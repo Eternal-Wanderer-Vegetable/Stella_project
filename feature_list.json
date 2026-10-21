@@ -106,6 +106,11 @@
           "command": "WP05: GitNexus 1.6.11 upstream impact + source/decorator audit; targeted normalizer, vision, capture, QQ group/private, WebChat, plugin, capability, registry, context, observability pytest; changed-file Ruff; generate_message_flow.py + --check; GitNexus detect-changes all/compare main",
           "result": "Implemented in 28b296c: OneBot v11 and conservative generic NoneBot normalizers, shared admission, trusted WebChat identity, QQ group registry wiring, normalized vision access, and non-OneBot AstrBot event guard. Targeted regression matrix: 214 passed. Changed-file Ruff, message-flow check, and staged diff check passed; new immutable manifest message-flow.3631d3d0ca29.json generated. GitNexus source all: 14 files/26 symbols/16 processes/CRITICAL; compare main: 254 files/484 symbols/76 processes/CRITICAL. State docs all: 5 files/14 symbols/0 processes/LOW; compare main: 255 files/486 symbols/76 processes/CRITICAL after retrying the first PARTIAL query. Full Python suite and platform/live/release acceptance remain NOT READY. STELLA_HOME unset; tests use temporary isolated data.",
           "report": "docs/reports/2026-10-21-wp05-ingress-admission.md"
+        },
+        {
+          "command": "WP06: GitNexus upstream impacts + source audit; targeted outbound/social/schema/QQ group/private/Cometa/capability/flow pytest; changed-file Ruff; generate_message_flow.py + --check; GitNexus detect-changes all/compare main",
+          "result": "Implemented in d2270d1: versioned outbound/media/capability contracts, explicit exact-Bot selection, OneBot v11 UniMessage codec, fallback and length splitting, opaque per-part results, and unified group/private/Cometa/proactive/capability sends. Social schema 4→5 persists all platform IDs per physical part and backfills old primary IDs. Targeted matrix 138 passed/1 adapter-not-installed warning; changed-file Ruff and flow/diff checks passed; message-flow.72cc70e6e149.json has 141 nodes/139 source-resolved/8952 closure sites/11689 reachable symbols. GitNexus all 21 files/54 symbols/7 processes/HIGH; compare main 264 files/589 symbols/76 processes/CRITICAL. Full Python and live/platform/release acceptance remain NOT READY. STELLA_HOME unset; tests use temporary data.",
+          "report": "docs/reports/2026-10-21-wp06-outbound-delivery.md"
         }
       ]
     },

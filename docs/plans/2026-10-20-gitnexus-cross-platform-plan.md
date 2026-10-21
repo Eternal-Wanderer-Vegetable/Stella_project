@@ -3,7 +3,7 @@
 - 日期：2026-10-20，Asia/Shanghai。
 - 源码基线：`main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`；工作区 `/home/vegetable/repos/Stella`。
 - 规划阶段交付：本地 GitNexus 代码图谱、原始查询证据、改造清单及执行方案；当时未实施业务改造。
-- 实施状态：2026-10-21；WP00–WP05 完成，下一阶段 WP06。计划完成不代表平台支持、数据迁移或发布验收完成。
+- 实施状态：2026-10-21；WP00–WP06 完成，下一阶段 WP07。计划完成不代表平台支持、数据迁移或发布验收完成。
 - 证据目录：[cross-platform-20261020](../reports/evidence/cross-platform-20261020/README.md)。逐文件清单、50 个入口、32 个适配器矩阵见[执行附录](2026-10-20-cross-platform-inventory.md)。
 
 ## 1. 目标与可验收边界
@@ -183,6 +183,7 @@ PERSON 私聊事实保持 PRIVATE_ONLY；共享空间不隐含跨平台个人事
 | WP03 存储迁移与双后端 | done | [WP03 实施记录](../reports/2026-10-21-wp03-storage-backend.md)：schema 20→21、opaque 平台消息 ID 与主体持久化、Python/native API 4；定向回归 77 passed / 1 skipped，Rust 25 passed；wheel fullchain 与 embedding parity 通过。全量 pytest 因 Cometa worker 用例 30 秒无进展而中止，集成门禁仍 NOT READY。 |
 | WP04 记忆/权限/社交作用域 | done | [WP04 实施记录](../reports/2026-10-21-wp04-memory-authorization-scope.md)：person owner、分享授权、地址偏好、社交记忆和 KB ACL 均按连接与命名空间主体隔离；memory/native schema 22、social schema 4、KB schema 2。定向 Python/Rust 回归、迁移、Ruff、文档、flow 与 GitNexus 证据见报告。全量 Python、平台 live 与发布验收未完成，整体仍 NOT READY。 |
 | WP05 通用入口与命令 | done | [WP05 实施记录](../reports/2026-10-21-wp05-ingress-admission.md)：OneBot/通用 NoneBot normalizer、共享 admission、WebChat 可信身份、群入口注册、vision 与 AstrBot adapter guard；定向回归 214 passed。线程/频道新 adapter、平台 live 与发布验收仍未完成。 |
+| WP06 消息、媒体及统一发送 | done | [WP06 实施记录](../reports/2026-10-21-wp06-outbound-delivery.md)：新增版本化出站消息/目标、媒体与能力合同、OneBot v11 UniMessage codec、按能力降级/限长拆分/逐物理段结果；群/私聊、Cometa ack、主动发言和能力清单接入统一服务。social schema 4→5 保存不透明 ID 列表；相关回归 138 passed。平台 live、全量 Python 与发布验收仍未完成。 |
 
 其他工作包仍为 planned；本表只在阶段实现、回归与提交后更新状态。
 

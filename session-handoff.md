@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP05 已完成，下一阶段 WP06；当前分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`，最新实现提交 `28b296c`。
+XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP06 已完成，下一阶段 WP07；当前分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`，最新实现提交 `d2270d1`。
 
 ## Deliverables
 
@@ -15,20 +15,22 @@ XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cr
 - [WP03实施记录](docs/reports/2026-10-21-wp03-storage-backend.md)：schema 21 迁移、Python/native API 4、隔离 wheel、双后端 fullchain/parity 与未关闭验收项。
 - [WP04实施记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)：schema 22、主体/连接隔离、分享撤回、KB ACL、社交作用域和定向验证证据。
 - [WP05实施记录](docs/reports/2026-10-21-wp05-ingress-admission.md)：OneBot/NoneBot normalizer、共享 admission、群注册接线、WebChat 主体与定向回归/GitNexus 证据。
+- [WP06实施记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)：统一出站、媒体/能力合同、OneBot codec、social v5 多 ID 回执、定向回归/GitNexus 证据。
+- [WP06实施记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)：统一出站、媒体/能力合同、OneBot codec、social v5 多 ID 回执、定向回归/GitNexus 证据。
 - `.gitnexus/lbug`：本地代码图谱；`.gitnexus/gn`：固定1.6.11启动器。工具/索引不入业务提交。
 
 ## Verification / Boundaries
 
-基线 main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d；WP00 基线回归 142 passed；WP01 定向回归 160 passed、message-flow 合同 14 passed；WP02 定向回归 310 passed；WP03 定向回归 77 passed / 1 skipped、Rust 25 passed、隔离 native wheel fullchain 和 embedding parity 通过；WP04 定向组分别为 135、203、45 passed（组间有重叠），Rust 25 passed，Python native selector 29 passed / 1 skipped，隔离 wheel API 4/schema 22；WP05 入口/注册表/插件/消息流程定向回归 214 passed。WP03 全量 pytest 在 876 passed / 7 skipped 后因 Cometa worker 测试 451.87 秒无进展而中止，单测 30 秒复现；WP02 报告中的其他全量失败仍未关闭，集成门禁 NOT READY。WP05 实现提交 `28b296c`；源码 GitNexus all 14 files/26 symbols/16 processes/CRITICAL，compare main 254 files/484 symbols/76 processes/CRITICAL（含 WP00–WP05），入口 HIGH/CRITICAL 影响详见 WP05 报告。状态文档 all 为 5 files/14 symbols/0 processes/LOW；compare 重跑后 255 files/486 symbols/76 processes/CRITICAL，首轮 PARTIAL 已重试。
+基线 main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d；WP00 基线回归 142 passed；WP01 定向回归 160 passed、message-flow 合同 14 passed；WP02 定向回归 310 passed；WP03 定向回归 77 passed / 1 skipped、Rust 25 passed、隔离 native wheel fullchain 和 embedding parity 通过；WP04 定向组分别为 135、203、45 passed（组间有重叠），Rust 25 passed，Python native selector 29 passed / 1 skipped，隔离 wheel API 4/schema 22；WP05 入口/注册表/插件/消息流程定向回归 214 passed；WP06 outbound/social/messaging integration 138 passed。WP03 全量 pytest 在 876 passed / 7 skipped 后因 Cometa worker 测试 451.87 秒无进展而中止，单测 30 秒复现；WP02 报告中的其他全量失败仍未关闭，集成门禁 NOT READY。WP06 实现提交 `d2270d1`；源码 GitNexus all 21 files/54 symbols/7 processes/HIGH，compare main 264 files/589 symbols/76 processes/CRITICAL（含 WP00–WP05），发送与存储影响详见 WP06 报告。状态文档 GitNexus all 7 files/14 symbols/0 processes/LOW，compare main 265 files/591 symbols/76 processes/CRITICAL。平台 live、发布及 VM 验收仍未执行。
 
 GitNexus 流程抽取仍有入口/分支预算截断、回调和跨语言缺边；UNKNOWN 与零调用者均用源码引用补查，不作为低风险。WP01 中 V2 注册 API 无生产调用点，待后续入口包接线。WP03 已将 opaque 平台回执和规范主体分别持久化，历史 subject 仍为空未知而不猜测。平台注册快照 SHA-256 不变；平台收发 fixture/live 尚未执行。未迁移生产库、未启动 Bot；`STELLA_HOME` 未设置，测试使用临时隔离数据。
 
 ## Next Steps
 
-1. WP05 实现提交 `28b296c` 与阶段报告/状态更新已完成；整体 feature 仍 in_progress。
-2. 下一阶段 WP06：先刷新 GitNexus，再核查 outbound/media/capabilities、delivery、conversation references 和发送回执的 upstream impact；实现统一发送与逐段结果，不在未知回执时自动重投。
-3. WP00–WP05 覆盖身份、上下文、存储权限、基础入口与 admission；opaque 线程/频道仍需专用 adapter codec、注册及投递合同，暂不宣称平台已支持。
-4. 平台 live、QQ 灰度、Windows native wheel 与 clean VM 仍分别验收；全量 Python 既有缺口未关闭。GitNexus 流程预算限制、partial/truncated 重跑和源码补证要求持续适用。
+1. WP06 实现提交 `d2270d1`、报告与阶段状态补录；XPLAT-IMPL 仍 in_progress。
+2. 下一阶段 WP07：刷新 GitNexus 后审查 proactive/scheduling/Cometa/session context 与 ai_gateway 后台 jobs 的目标恢复影响；保留 CAS、租约、expiry 和 unknown，不从模型文本恢复目标。
+3. WP00–WP06 覆盖身份、上下文、存储权限、入站与统一发送；线程/频道仍需适配器 codec、注册、后台恢复和平台认证，暂不宣称支持。
+4. 真实平台 live、QQ 灰度、Windows native wheel 与 clean VM 分别验收；全量 Python 既有缺口未关闭。GitNexus 流程预算限制、partial/truncated 重跑和源码补证要求持续适用。
 
 ---
 
