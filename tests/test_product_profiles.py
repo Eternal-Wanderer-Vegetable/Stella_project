@@ -167,6 +167,7 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     )
     with zipfile.ZipFile(archive) as bundle:
         names = set(bundle.namelist())
+        manifest = json.loads(bundle.read(".stella-manifest.json"))
     assert "bot.py" in names
     assert "astrbot_compat/__init__.py" in names
     assert "capability/__init__.py" in names
@@ -181,6 +182,8 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         "core/runtime 包必须随归档发布（extensions → core.pipeline → "
         "core.runtime.turn_service 导入链）"
     )
+    assert manifest["version"] == 1
+    assert ".env.example" in manifest["files"]
 
 
 def test_stager_prunes_output_inside_desktop_dir(tmp_path):
@@ -248,6 +251,7 @@ def test_stager_prunes_output_inside_desktop_dir(tmp_path):
 
     # webui 被完整暂存
     assert (result / "webui" / "dist" / "index.html").is_file()
+    assert (result / ".stella-manifest.json").is_file()
     # 输出目录自身被剪掉：暂存的 desktop/ 内不得出现嵌套的自己
     # （无剪枝时这里会无限自拷贝直至 RecursionError——CI 实测）
     assert not (result / "desktop" / "src-tauri" / "resources" / "stella" / "desktop").exists()
