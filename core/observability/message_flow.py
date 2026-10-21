@@ -62,6 +62,7 @@ from typing import Any
 
 from typing_extensions import Self
 
+from gravitas.dependency_recovery import StorageDomain, connect_sqlite
 from memory.timeutil import log_sqlite_error, utc_now
 
 # 事件种类（计划 §6.2 event_kind）
@@ -387,9 +388,9 @@ def _backup_flow_db(path: Path) -> str:
         backup_path = path.parent / f"{path.name}.pre-flow-{stamp}.bak"
         if backup_path.exists():
             return str(backup_path)
-        src_conn = sqlite3.connect(str(path))
+        src_conn = connect_sqlite(StorageDomain.OBSERVABILITY, str(path))
         try:
-            dst = sqlite3.connect(str(backup_path))
+            dst = connect_sqlite(StorageDomain.OBSERVABILITY, str(backup_path))
             try:
                 src_conn.backup(dst)
             finally:
@@ -412,7 +413,7 @@ def _connect() -> sqlite3.Connection | None:
     try:
         path = db_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(path), timeout=10.0)
+        conn = connect_sqlite(StorageDomain.OBSERVABILITY, str(path), timeout=10.0)
         key = str(path)
         if not _flow_initialized.get(key):
             made_backup = False

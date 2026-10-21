@@ -582,6 +582,12 @@ async def execute_role_model_call(
     detailed: bool = False,
 ) -> str | tuple[str, str]:
     """Run the role's actual primary/fallback endpoint with separate tickets."""
+    from gravitas.dependency_recovery import (
+        classify_dependency_failure,
+        dependency_recovery,
+        endpoint_scope,
+    )
+
     primary_slot = str(getattr(role_backend.primary, "slot", "") or "").strip()
     if context is None:
         from gravitas.contracts import WorkClass
@@ -607,6 +613,7 @@ async def execute_role_model_call(
 
             current_endpoint = endpoint
             current_attempt = single_attempt
+            outcome_fence = None
 
             async def invoke_endpoint(
                 endpoint=current_endpoint, attempt=current_attempt
@@ -621,11 +628,24 @@ async def execute_role_model_call(
             before = budget.started
             try:
                 async with model_attempt(endpoint_context):
-                    return await invoke_endpoint()
+                    outcome_fence = dependency_recovery.begin_attempt(
+                        endpoint_scope(current_endpoint)
+                    )
+                    result = await invoke_endpoint()
+                dependency_recovery.record_attempt_result(
+                    outcome_fence,
+                    success=True,
+                )
+                return result
             except AdaptiveAttemptRequiredError as exc:
                 primary_attempts += 1
                 if not fallback_used and callable(single_attempt) and budget.remaining and primary_attempts < 3:
                     continue
+                dependency_recovery.record_attempt_result(
+                    outcome_fence,
+                    success=False,
+                    failure_kind=classify_dependency_failure(exc.original),
+                )
                 if not fallback_used and role_backend.record_attempt_result(endpoint, exc.original):
                     if not budget.remaining:
                         raise exc.original from exc
@@ -638,6 +658,11 @@ async def execute_role_model_call(
             except Exception as exc:
                 if budget.started == before:
                     raise
+                dependency_recovery.record_attempt_result(
+                    outcome_fence,
+                    success=False,
+                    failure_kind=classify_dependency_failure(exc),
+                )
                 if fallback_used:
                     raise
                 primary_attempts += 1

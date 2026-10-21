@@ -33,6 +33,7 @@ from config import (
 )
 from config.spaces import resolve_space
 from core.context import ChatContext
+from gravitas.dependency_recovery import StorageDomain, connect_sqlite
 from memory.cache_keys import POLICY_VERSION
 from memory.capture_gate import (
     CAPTURE_RESULT_DENIED,
@@ -222,7 +223,7 @@ async def record_message(
         )
         return ctx
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = connect_sqlite(StorageDomain.MEMORY, DB_PATH)
         cursor = conn.cursor()
         cursor.execute(_GROUP_MESSAGES_V16_DDL)
         # 老库的 group_messages 已存在且 ensure_v2_schema 可能晚于首条消息执行，
@@ -359,7 +360,7 @@ def resolve_reply_target(
     if target is None:
         return ""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = connect_sqlite(StorageDomain.MEMORY, DB_PATH)
         cursor = conn.cursor()
         params: list = [str(group_key), target]
         sql = (
@@ -403,7 +404,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
     if not DB_PATH.exists():
         return ctx
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = connect_sqlite(StorageDomain.MEMORY, DB_PATH)
         cursor = conn.cursor()
 
         # ── 1) 短期摘要：只取「话题层」信息（active_summary / pending_topic） ──
@@ -909,7 +910,7 @@ async def build_user_context(ctx: ChatContext) -> ChatContext:
     _load_preferred_address(ctx, space)
 
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = connect_sqlite(StorageDomain.MEMORY, DB_PATH)
         cursor = conn.cursor()
 
         parts = []
@@ -1139,7 +1140,7 @@ def _recent_trusted_messages(ctx: ChatContext, limit: int = _RECENT_EVIDENCE_MES
     if not key:
         return []
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = connect_sqlite(StorageDomain.MEMORY, DB_PATH)
         rows = conn.execute(
             "SELECT id, user_id, content, sender_display_name, timestamp"
             " FROM group_messages WHERE conversation_key = ?"
@@ -1295,7 +1296,7 @@ def _read_stable_profile(group_shared_space: str, user_id: int) -> str:
     from memory.policy import stable_profile_facts
 
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = connect_sqlite(StorageDomain.MEMORY, DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
             "SELECT personality_traits, agent_attitude FROM user_profiles WHERE group_shared_space = ? AND user_id = ?",

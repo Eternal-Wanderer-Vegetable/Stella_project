@@ -251,7 +251,9 @@ def test_alerts_are_throttled_per_bot(link_monitor):
 
     assert first_alert is not None
     assert record.last_alert_time == first_alert
-    assert bot.get_status.await_count == 2
+    # A failed active probe is backoff fenced; the next scheduler tick does not
+    # amplify a single dependency failure into another request.
+    assert bot.get_status.await_count == 1
 
 
 def test_disabled_monitor_does_not_probe_or_alert(link_monitor, monkeypatch):

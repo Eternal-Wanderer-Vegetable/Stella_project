@@ -30,6 +30,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from gravitas.dependency_recovery import StorageDomain, connect_sqlite
 from memory.timeutil import log_sqlite_error, utc_now
 
 TRACE_SCHEMA_VERSION = 1
@@ -86,7 +87,7 @@ def _connect() -> sqlite3.Connection:
         configure()
     assert _db_path is not None
     _db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(_db_path), timeout=10.0)
+    conn = connect_sqlite(StorageDomain.OBSERVABILITY, str(_db_path), timeout=10.0)
     if not _initialized:
         _init_schema(conn)
         _initialized = True

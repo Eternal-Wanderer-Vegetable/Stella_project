@@ -43,6 +43,15 @@ from datetime import datetime, timezone
 
 from nonebot import logger
 
+from gravitas.contracts import ScopeKind
+from gravitas.dependency_recovery import (
+    DependencyRecovery,
+    DependencyScope,
+    FailureKind,
+    classify_dependency_failure,
+    dependency_recovery,
+)
+
 # ── 采集结果码（record_message 的 capture 契约，计划 §6.2） ──
 CAPTURE_RESULT_OK = "captured"
 CAPTURE_RESULT_DENIED = "not_captured_unavailable"
@@ -101,12 +110,23 @@ class CaptureGate:
         wall=time.time,
         probe_interval: float = 30.0,
         probe_timeout: float = 5.0,
+        recovery: DependencyRecovery | None = None,
     ) -> None:
         self._probe_fn = probe or self._default_probe
         self._clock = clock
         self._wall = wall
         self._probe_interval = max(1.0, float(probe_interval))
         self._probe_timeout = max(0.5, float(probe_timeout))
+        self._recovery = recovery or (
+            DependencyRecovery(
+                clock=clock,
+                seed=0,
+                base_backoff_seconds=0.5,
+                max_backoff_seconds=_BACKOFF_MAX_SECONDS,
+            )
+            if probe is not None
+            else dependency_recovery
+        )
         self._state = STATE_STARTING
         self._epoch = 0
         self._started = False
@@ -120,6 +140,10 @@ class CaptureGate:
         self._role_slot = ""
         self._last_probe_at = 0.0
         self._last_success_at = 0.0
+        self._recovery_scope = DependencyScope(
+            ScopeKind.PROVIDER,
+            f"capture-gate:{id(self):x}",
+        )
 
     # ── 查询侧（热路径，必须同步无副作用） ──
 
@@ -195,6 +219,15 @@ class CaptureGate:
         self._started = True  # 直呼 probe_once（无 worker）同样视为已启用
         if self._probing:
             return self.capture_allowed()
+        probe_lease = self._recovery.claim_probe(
+            self._recovery_scope,
+            now=self._clock(),
+            min_interval_seconds=0.0,
+            lease_seconds=max(1.0, self._probe_timeout + 1.0),
+        )
+        if probe_lease is None:
+            self._next_retry_at = self._clock() + self._probe_interval
+            return self.capture_allowed()
         self._probing = True
         start_epoch = self._epoch
         previous_state = self._state
@@ -212,13 +245,31 @@ class CaptureGate:
             # the failure count or epoch.
             self._state = previous_state
             self._next_retry_at = self._clock() + self._probe_interval
+            self._recovery.abandon_probe(
+                probe_lease,
+                now=self._clock(),
+                retry_after=self._probe_interval,
+            )
             return self.capture_allowed()
         except Exception:
             # 假探针/默认探针的意外异常同样按「探测失败」处理，绝不外溢
             ok, category = False, "request_failed"
         finally:
             self._probing = False
+        accepted = self._recovery.finish_probe(
+            probe_lease,
+            success=ok,
+            failure_kind=_probe_failure_kind(category) if not ok else None,
+            now=self._clock(),
+        )
+        if not accepted:
+            self._next_retry_at = self._clock() + self._probe_interval
+            return self.capture_allowed()
         self._apply(ok, category, start_epoch)
+        if not ok:
+            fact = self._recovery.fact(self._recovery_scope, now=self._clock())
+            if fact.next_probe_at is not None:
+                self._next_retry_at = max(self._next_retry_at, fact.next_probe_at)
         return ok
 
     def note_generation_failure(self) -> None:
@@ -234,6 +285,13 @@ class CaptureGate:
         self._consecutive_failures += 1
         self._error_category = "generation_failed"
         self._next_retry_at = self._clock() + self._backoff_delay()
+        fence = self._recovery.begin_attempt(self._recovery_scope, now=self._clock())
+        self._recovery.record_attempt_result(
+            fence,
+            success=False,
+            failure_kind=FailureKind.TRANSIENT,
+            now=self._clock(),
+        )
         logger.warning(
             "🔒 [CaptureGate] 整合角色真实调用失败，记忆采集立即关门"
             "（恢复后从下一条新消息开始采集，期间消息不排队不回放）"
@@ -320,10 +378,24 @@ class CaptureGate:
         except Exception as exc:
             # 错误细节只进 debug 日志（可能含端点信息），对外只给类别
             logger.debug(f"[CaptureGate] 探针请求失败: {type(exc).__name__}")
+            failure = classify_dependency_failure(exc)
+            if failure is FailureKind.AUTHORIZATION:
+                return False, "authentication_failed"
+            if failure is FailureKind.CONFIGURATION:
+                return False, "invalid_configuration"
             return False, "request_failed"
         if not str(text or "").strip():
             return False, "empty_output"
         return True, ""
+
+
+def _probe_failure_kind(category: str) -> FailureKind:
+    normalized = str(category or "").casefold()
+    if normalized in {"unauthorized", "authentication_failed", "permission_denied"}:
+        return FailureKind.AUTHORIZATION
+    if normalized in {"no_backend", "invalid_configuration", "invalid_model"}:
+        return FailureKind.CONFIGURATION
+    return FailureKind.TRANSIENT
 
 
 def _iso_or_empty(ts: float) -> str:
