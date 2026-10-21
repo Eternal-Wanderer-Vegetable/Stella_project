@@ -526,7 +526,18 @@
         "目标 Python/Native/Dashboard/打包与文档门禁按实际改动运行，GitNexus all/compare 无 partial/truncated",
         "离线、真实模型/QQ/WebChat、子进程、干净 VM 与发布验收分层记录；未完成层保持 NOT READY"
       ],
-      "evidence": []
+      "evidence": [
+        {
+          "command": "G03c targeted regression with isolated STELLA_HOME; Ruff changed files; py_compile; generate_message_flow.py and --check",
+          "result": "446 passed. Ruff and compile passed. Flow manifest regenerated as message-flow.cddec54b82c7.json (141 nodes, 139 source-resolved, 8,927 closure sites, 13,773 reachable symbols); --check passed. No live model, Bot, or platform was started.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "GitNexus 1.6.12 detect-changes --scope all --repo Stella_project --limit 2000; detect-changes --scope compare --base-ref main --repo Stella_project --limit 2000",
+          "result": "All: 21 files / 74 symbols / 31 affected processes / CRITICAL. Compare main: 441 files / 652 symbols / 59 affected processes / CRITICAL cumulative. CLI emitted no partial/truncated marker; see implementation report for impact deviation, call-site audit, and interpretation.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        }
+      ]
     }
   ]
 }

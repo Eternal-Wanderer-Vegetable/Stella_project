@@ -306,6 +306,35 @@ async def _generate_one(
     readme: str,
     plugin_desc: str,
 ) -> Draft:
+    from gravitas.contracts import WorkClass
+    from gravitas.model_calls import (
+        ModelCallContext,
+        model_call_scope,
+        resource_group_for,
+    )
+
+    slot = str(getattr(backend, "slot", "") or "").strip()
+    context = ModelCallContext(
+        resource_group_for(slot) if slot else "plugin-scaffold",
+        WorkClass.BACKGROUND,
+        tag="plugin-scaffold",
+    )
+    async with model_call_scope():
+        return await _generate_one_with_context(
+            backend, facts, tool, readme=readme, plugin_desc=plugin_desc,
+            context=context,
+        )
+
+
+async def _generate_one_with_context(
+    backend: Any,
+    facts: PluginFacts,
+    tool: plugin_check.ToolFact,
+    *,
+    readme: str,
+    plugin_desc: str,
+    context,
+) -> Draft:
     """一个工具一次调用（解析失败时再收紧重试一次）。
 
     失败不抛：**部分成功要能落盘**。5 个工具里 1 个解析不出来时，把那 4 条写出来、
@@ -313,12 +342,23 @@ async def _generate_one(
     """
     prompt = _build_prompt(facts, tool, readme=readme, plugin_desc=plugin_desc)
     last = ""
+    from gravitas.model_calls import (
+        ModelAttemptBudgetExceededError,
+        ModelCallDeferred,
+        execute_model_call,
+    )
+
     for attempt in (1, 2):
         try:
-            text = await backend.generate(
+            text = await execute_model_call(
+                backend,
                 prompt if attempt == 1 else prompt + _RETRY_SUFFIX,
                 SYSTEM_PROMPT,
+                context=context,
             )
+        except (ModelCallDeferred, ModelAttemptBudgetExceededError) as exc:
+            last = f"模型调用延期或预算耗尽：{exc}"
+            break
         except Exception as exc:  # 网络 / 端点 / 超时——都只影响这一条
             last = f"模型调用失败：{type(exc).__name__}: {exc}"
             continue

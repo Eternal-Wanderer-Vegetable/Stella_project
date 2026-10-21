@@ -61,8 +61,10 @@ from core.llm.base import LLMBackend
 from core.llm.usage_store import budget_blocked
 from gravitas.contracts import WorkClass
 from gravitas.model_calls import (
+    ModelAttemptBudgetExceededError,
     ModelCallDeferred,
     execute_model_call,
+    model_call_scope,
     role_call_context,
 )
 from memory import capture_gate
@@ -210,6 +212,13 @@ class MemoryConsolidator:
     async def _generate(
         self, group_id: int, last_id: int, force: bool = False
     ) -> tuple[str, int, str, list, list, str, list]:
+        """Share a three-request budget across batch-size truncation retries."""
+        async with model_call_scope():
+            return await self._generate_with_budget(group_id, last_id, force)
+
+    async def _generate_with_budget(
+        self, group_id: int, last_id: int, force: bool = False
+    ) -> tuple[str, int, str, list, list, str, list]:
         """调用本地 LM Studio 后端生成整合输出。
 
         force=True 时走小批次（用于 @触发/主动发言前的轻量总结）。
@@ -251,7 +260,7 @@ class MemoryConsolidator:
                     ),
                     detailed=True,
                 )
-            except ModelCallDeferred:
+            except (ModelCallDeferred, ModelAttemptBudgetExceededError):
                 # Backpressure is not an endpoint failure; retain source rows and
                 # let the existing consolidator trigger retry this batch later.
                 raise

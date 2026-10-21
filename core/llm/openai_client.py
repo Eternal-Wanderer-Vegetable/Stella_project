@@ -11,8 +11,9 @@
 - 本模块服务 AstrBot 插件兼容层，需要透传完整的 messages 数组、tools（function
   calling）、图片内容块与流式输出——这些 ``generate()`` 表达不了。
 
-两者共用同一个本地模型，因此调用路径必须持有共享模型票据；生产调用经
-``gravitas.model_calls.model_attempt()`` 排队。本模块只负责发请求，不涉及调度。
+两者共用同一个本地模型，因此每个生产 HTTP 请求都必须持有共享模型票据。
+AstrBot 非流式调用经 ``gravitas.model_calls.execute_model_operation()`` 编排，流式调用
+在整个消费期间持有票据。raw 调用者保留本模块原有默认值。
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from typing import Any
 import httpx
 from nonebot import logger
 
+from core.llm.base import AdaptiveAttemptRequiredError
 from core.llm.compat import compat_for, learn_from_error, shape_payload
 from core.llm.prefix_cache_estimator import estimate_local_prefix
 from core.llm.usage_sink import record as record_usage
@@ -129,8 +131,9 @@ async def chat_completion(
     kind: str = "",
     slot: str = "",
     role: str = "",
+    max_attempts: int | None = None,
 ) -> dict:
-    """发一次 chat-completions 请求，返回原始响应 dict。
+    """发 chat-completions 请求，返回原始响应 dict。
 
     参数:
         messages: 完整的 OpenAI 消息数组，原样透传（本函数不做裁剪，
@@ -140,11 +143,17 @@ async def chat_completion(
         kind: ``local`` / ``online``，决定发不发本地专用参数；留空按有无 key 推断；
         slot: 端点槽名，用于参数兼容状态归集与用量记账；
         role: 角色名，同上。
+        max_attempts: raw-client 重试上限；托管调用传 1，由共享 executor 对每个请求
+            单独取票并负责重试。
     返回:
         服务端返回的完整 JSON。
     异常:
         OpenAIClientError: 重试耗尽后仍失败。
     """
+    if max_attempts is None:
+        max_attempts = _MAX_ATTEMPTS
+    if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts < 1:
+        raise ValueError("max_attempts must be a positive integer")
     base_payload = _build_payload(
         messages,
         model=model,
@@ -165,7 +174,7 @@ async def chat_completion(
     adaptive_retries = 0
     attempt = 0
 
-    while attempt < _MAX_ATTEMPTS:
+    while attempt < max_attempts:
         attempt += 1
         # 每次都按「该端点已学到的形状」重塑请求体，上一轮学到的改法自动生效
         payload = shape_payload(base_payload, compat)
@@ -200,6 +209,8 @@ async def chat_completion(
             status = e.response.status_code
             fix = learn_from_error(compat, status, e.response.text[:800])
             if fix and adaptive_retries < 1:
+                if max_attempts == 1:
+                    raise AdaptiveAttemptRequiredError(str(fix), e) from e
                 adaptive_retries += 1
                 attempt -= 1  # 自适应重试不占用正常重试预算
                 logger.warning(
@@ -207,13 +218,13 @@ async def chat_completion(
                     f"已调整为「{compat.describe()}」并重试"
                 )
                 continue
-            if 400 <= status < 500 or attempt >= _MAX_ATTEMPTS:
+            if 400 <= status < 500 or attempt >= max_attempts:
                 break
             await asyncio.sleep(1.0 * attempt)
         except Exception as e:
             last_error = e
             logger.warning(f"[astrbot_llm] 第 {attempt} 次尝试异常: {e}")
-            if attempt < _MAX_ATTEMPTS:
+            if attempt < max_attempts:
                 await asyncio.sleep(1.0 * attempt)
 
     record_usage(role=role, slot=slot, model=model, kind=kind, ok=False)

@@ -9,18 +9,23 @@ generate()，避免发真实网络请求；覆盖成功、空回复重试、5xx 
 """
 
 import asyncio
+import json
 
 import httpx
 import pytest
 
+import core.llm.compat as compat
+import core.llm.scheduler as scheduler
 from core.llm.lm_studio import LMStudioBackend, OpenAICompatibleBackend
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import ModelCallContext, execute_model_call
 
 
 class _FakeResponse:
     def __init__(self, status_code: int, payload):
         self.status_code = status_code
         self._payload = payload
-        self.text = ""
+        self.text = json.dumps(payload) if isinstance(payload, dict) else str(payload)
 
     def json(self):
         return self._payload
@@ -172,3 +177,33 @@ def test_generate_keeps_str_signature(monkeypatch):
         [({"choices": [{"message": {"content": "好的"}, "finish_reason": "stop"}]}, 200)],
     )
     assert asyncio.run(backend.generate("hi")) == "好的"
+
+
+def test_executor_retries_adaptive_compatibility_as_a_new_ticket(monkeypatch):
+    compat.reset_state()
+    scheduler.reset_state()
+    backend = LMStudioBackend(
+        "http://127.0.0.1:1234", model="m", api_key="k", kind="online",
+        slot="G03_SINGLE_ATTEMPT",
+    )
+    _fake_async_client(
+        monkeypatch,
+        [
+            ({"error": {"message": "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead."}}, 400),
+            ({"choices": [{"message": {"content": "好的"}, "finish_reason": "stop"}]}, 200),
+        ],
+    )
+    result = asyncio.run(
+        execute_model_call(
+            backend,
+            "hi",
+            context=ModelCallContext(
+                "G03_SINGLE_ATTEMPT", WorkClass.INTERACTIVE, tag="managed-test"
+            ),
+            detailed=True,
+        )
+    )
+    assert result == ("好的", "stop")
+    assert scheduler.snapshot()["G03_SINGLE_ATTEMPT"]["acquired"] == 2
+    compat.reset_state()
+    scheduler.reset_state()

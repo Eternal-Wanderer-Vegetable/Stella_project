@@ -5,18 +5,20 @@
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
 **Active Feature:** GRAVITAS-IMPL，执行 G00–G09 并按工作包分阶段提交。工作分支 `codex/gravitas-implementation`，起点 `origin/main@c662746`；平台 live、干净 VM 和发布验收独立记录，未完成前保持 NOT READY。
 **Inherited Feature:** XPLAT-IMPL 的代码已合入 PR #111；其平台 live、干净 VM 与发布缺口仍按原证据保留，不属于本轮 Gravitas scope。
-**Scope:** 按[Gravitas 工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)执行 G00–G09。G00、G01 已完成并分阶段提交；当前进入 G02，提交需绑定 HEAD、impact、回归和回滚边界。
+**Scope:** 按[Gravitas 工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)执行 G00–G09。G00–G03 完成并分阶段提交；下一包 G04 总期限与结果语义。
 
 ## 2026-10-21 — Gravitas implementation
 
 - Branch/base：`codex/gravitas-implementation` from `origin/main@c662746`，该基线包含已合并的 PR #111。
-- Scope：G00–G09；G00 三项正式回归与 G01 合同/严格配置/ControlClock 已完成。当前进入 G02 bounded facts 与 shadow 控制器。
-- Commits：G00 `709a4b4`（默认 provider gate）、`82f377d`（flow manifest）、`88de58c`（waiter cancellation）、`f03eb0f`（清理水位）；G01 `dbcbe41`（typed contracts/config/clock/admission/package）。
+- Scope：G00–G09；G00–G03 按包完成。当前开始 G04（总期限、取消与结果语义）。
+- Commits：G00 `709a4b4`（默认 provider gate）、`82f377d`（flow manifest）、`88de58c`（waiter cancellation）、`f03eb0f`（清理水位）；G01 `dbcbe41`；G02 `8e87c6c`；G03a `dd8bb72`、G03b `6c625f9`、G03c 见当前提交。
 - G00 evidence：隔离组合回归 78 passed；Ruff 和 message-flow check 通过。缺失、NULL、零、负数、非法文本与越界 checkpoint 的清理负例均已落入正式测试。
 - G01 evidence：定向合同、发布布局与 flow 回归 65 passed；Ruff、flow check、文档门禁通过（119 files / 1237 links / 577 anchors / 0 errors）。Python 3.10/3.11/3.12 导入通过；Standalone Python zip 与 OneClick Python staging 均含可导入 gravitas 包及配置样例。
-- GitNexus：G01 提交前 `scope=all` 为 12 files / 4 symbols / LOW / 0 affected processes；compare main 为 396 files / 108 symbols / 16 flows / CRITICAL，包含累计计划/证据与 G00 高风险调用路径，结果未 partial/truncated。索引已重建至 `dbcbe41`（100,745 nodes / 249,302 edges / 1,066 clusters / 821 flows）。
+- G03 evidence：G03a 有界公平票据队列；G03b 将生产模型调用迁入共享 executor；G03c 完成实际端点资源交接、adaptive request 新票据、每业务调用最多 3 次真实请求和脚本路径审计。当前综合回归 446 passed；变更文件 Ruff、Python 编译、flow 清单生成/检查通过。命令和影响证据见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
+- GitNexus：索引最后重建在 G03b `6c625f9`；G03c 具体影响包含 `execute_model_call` CRITICAL（8 直接调用者、6 流程、11 模块），RoleBackend MEDIUM，探针函数 LOW；两个评估脚本文件 UNKNOWN/0 边并已按源码补证。提交前 all/compare 结果见实施报告。
+- Deviation：`execute_model_call` 的 exact impact（CRITICAL），以及两个评估脚本函数的 exact impact（LOW）均在首次编辑后才补跑。已扩大源码审计、补充透明录制包装和回归并向用户说明；不能把后续覆盖或低 File 风险当作事前豁免。
 - Blockers：没有已知代码阻塞；真实模型、平台灰度、跨进程 live、干净 VM 和发布仍单独验收，不能用本地测试代替。
-- Next：对 G02 控制器、状态快照、调度器和采集事实入口运行 exact upstream impact 后实施。没有真实模型、QQ/WebChat、干净 VM 或发布验收时，不标记整体 READY。
+- Next：G04 先对可信 ingress、Facade/TurnService 和副作用边界执行 exact impact；按入口总期限、域内传播、逐段副作用围栏拆分。完整 Python、真实模型、QQ/WebChat live、clean VM 与发布验收留到计划指定工作包，整体保持 NOT READY。
 
 ## 2026-10-21 — Gravitas engineering planning
 

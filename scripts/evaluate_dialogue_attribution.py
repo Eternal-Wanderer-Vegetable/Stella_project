@@ -1184,6 +1184,7 @@ async def run_compact_evaluation(args) -> int:
     """Call actual compact_once on frozen sources in a separate temporary DB."""
     from core.llm.registry import ROLE_COMPACT, backend_for
     from core.llm.registry import describe as describe_backends
+    from gravitas.model_calls import observe_model_backend
     from memory import session_compact as compact
     from memory import session_context as session_context_module
 
@@ -1202,14 +1203,14 @@ async def run_compact_evaluation(args) -> int:
 
     captured: dict[str, object] = {}
 
-    class RecordingBackend:
-        async def generate(self, prompt: str, system_prompt: str = "") -> str:
-            captured["prompt"] = prompt
-            started = time.monotonic()
-            result = await backend.generate(prompt, system_prompt=system_prompt)
-            captured["elapsed_seconds"] = round(time.monotonic() - started, 3)
-            captured["raw_response"] = str(result)
-            return result
+    started = time.monotonic()
+
+    def record_response(prompt: str, result: str, _finish: str) -> None:
+        captured["prompt"] = prompt
+        captured["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        captured["raw_response"] = str(result)
+
+    recording_backend = observe_model_backend(backend, record_response)
 
     old_threshold = session_context_module.SESSION_COMPACT_THRESHOLD_TOKENS
     old_compact_db_path = compact.DB_PATH
@@ -1254,7 +1255,7 @@ async def run_compact_evaluation(args) -> int:
             session_context_module.SESSION_CONTEXT_ENABLED = True
             session_context_module.SESSION_COMPACT_THRESHOLD_TOKENS = 0
             session_context_module.ensure_initialized(compact_group_id, source_low_id)
-            compact._get_backend = lambda: RecordingBackend()
+            compact._get_backend = lambda: recording_backend
             source_batch = compact.fetch_pending_records(
                 compact_group_id, source_low_id, source_high_id,
                 session_context_module.compact_message_limit(),

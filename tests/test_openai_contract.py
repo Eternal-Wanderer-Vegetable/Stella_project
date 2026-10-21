@@ -29,6 +29,7 @@ import httpx
 import pytest
 
 import core.llm.compat as compat
+import core.llm.scheduler as scheduler
 import core.llm.usage_sink as usage_sink
 from core.llm.lm_studio import LMStudioBackend
 from core.llm.openai_client import (
@@ -36,6 +37,8 @@ from core.llm.openai_client import (
     chat_completion,
     chat_completion_stream,
 )
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import ModelCallContext, execute_model_operation
 
 # 最小合规请求体允许出现的顶层字段。**改这个集合前先想清楚「换一家还认吗」。**
 _MINIMAL_FIELDS = frozenset(
@@ -313,6 +316,33 @@ def test_extra_body_is_opt_in_only(monkeypatch):
         )
     )
     assert set(ep2.last) <= _MINIMAL_FIELDS
+
+
+def test_managed_plugin_compatibility_retry_uses_a_new_model_ticket(monkeypatch):
+    scheduler.reset_state()
+    endpoint = _install(monkeypatch, _MockEndpoint(_length_field_only))
+
+    async def request():
+        return await chat_completion(
+            [{"role": "user", "content": "hi"}],
+            base_url="http://vendor.example",
+            model="m",
+            api_key="k",
+            kind="online",
+            slot="ONLINE_CHAT",
+            max_attempts=1,
+        )
+
+    result = asyncio.run(
+        execute_model_operation(
+            request,
+            context=ModelCallContext("managed_plugin", WorkClass.INTERACTIVE),
+        )
+    )
+    assert result["choices"][0]["message"]["content"] == "好的"
+    assert endpoint.calls == 2
+    assert scheduler.snapshot()["managed_plugin"]["acquired"] == 2
+    scheduler.reset_state()
 
 
 def test_no_json_mode_is_ever_requested(monkeypatch):

@@ -43,7 +43,6 @@ from core.llm import ROLE_VISION, backend_for, gate_of
 from core.llm.registry import binding, endpoint_of
 from core.llm.usage_store import budget_blocked
 from gravitas.contracts import WorkClass
-from gravitas.model_calls import ModelCallContext, model_attempt, resource_group_for
 
 # 转述提示词：写死一句，不进配置。要求客观、简短——输出会被并到用户输入里，
 # 任何发挥都会污染记忆与回复。
@@ -219,10 +218,10 @@ async def _normalize_source(src: str, *, is_local_endpoint: bool) -> str:
     return await _read_local_image(src)
 
 
-def _vision_call_args() -> dict | None:
+def _vision_call_args(endpoint=None) -> dict | None:
     """VISION 角色的端点 + 参数；未绑定时返回 ``None``（正常分支）。"""
-    ep = endpoint_of(ROLE_VISION)
     b = binding(ROLE_VISION)
+    ep = endpoint or (b.endpoint if b is not None else None)
     if ep is None or b is None:
         return None
     return {
@@ -241,6 +240,7 @@ def _vision_call_args() -> dict | None:
 async def _describe_one(src: str, call_args: dict, *, is_local_endpoint: bool) -> str:
     """单张图 → 描述文本；任何失败返回空串（调用方按占位处理）。"""
     from core.llm.openai_client import chat_completion
+    from gravitas.model_calls import execute_model_operation, role_call_context
 
     url = await _normalize_source(src, is_local_endpoint=is_local_endpoint)
     if not url:
@@ -251,17 +251,44 @@ async def _describe_one(src: str, call_args: dict, *, is_local_endpoint: bool) -
     ]
     messages = [{"role": "user", "content": user_content}]
     slot = str(call_args.get("slot") or gate_of(ROLE_VISION))
-    async with model_attempt(
-        ModelCallContext(
-            resource_group_id=resource_group_for(slot),
+    context = role_call_context(
+        ROLE_VISION,
+        work_class=WorkClass.INTERACTIVE,
+        tag="vision-describe",
+        endpoint_slot=slot,
+    )
+    role_binding = binding(ROLE_VISION)
+    fallback_args = (
+        _vision_call_args(role_binding.fallback)
+        if role_binding is not None and role_binding.fallback is not None
+        else None
+    )
+    fallback_context = (
+        role_call_context(
+            ROLE_VISION,
             work_class=WorkClass.INTERACTIVE,
             tag="vision-describe",
+            endpoint_slot=fallback_args["slot"],
         )
-    ):
-        data = await asyncio.wait_for(
-            chat_completion(messages, **call_args),
-            timeout=VISION_DESCRIBE_TIMEOUT,
-        )
+        if fallback_args
+        else None
+    )
+
+    async def primary_request():
+        return await chat_completion(messages, max_attempts=1, **call_args)
+
+    async def fallback_request():
+        return await chat_completion(messages, max_attempts=1, **fallback_args)
+
+    data = await asyncio.wait_for(
+        execute_model_operation(
+            primary_request,
+            context=context,
+            fallback_operation=fallback_request if fallback_args else None,
+            fallback_context=fallback_context,
+        ),
+        timeout=VISION_DESCRIBE_TIMEOUT,
+    )
     try:
         text = str(data["choices"][0]["message"]["content"] or "").strip()
     except (KeyError, IndexError, TypeError):
