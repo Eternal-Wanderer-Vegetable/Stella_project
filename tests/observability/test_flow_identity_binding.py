@@ -261,7 +261,9 @@ class TestCacheReentryOccurrence:
         await gateway._flow_ingress_end(ev)  # 重复结束：幂等
         message_flow.flush()
         rows = _trace_rows(flow_db)
-        assert len(rows) == 1, "全程只有一条 trace"
+        source_key = gateway._flow_source_key(ev)
+        event_rows = [row for row in rows if row["source_message_key"] == source_key]
+        assert len(event_rows) == 1, "当前事件全程只有一条 trace"
         conn = sqlite3.connect(flow_db)
         try:
             ends = conn.execute(

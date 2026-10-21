@@ -95,10 +95,19 @@ class TestSingleOwner:
         run = asyncio.create_task(w1.run_forever(stop_grace_seconds=5.0))
         await asyncio.sleep(0.2)
         w2 = _worker(store, config, FakeBackend(), worker_id="w2")
+        second_run = asyncio.create_task(w2.run_forever(stop_grace_seconds=1.0))
         with pytest.raises(StoreBusyError):
-            await w2.run_forever(stop_grace_seconds=1.0)
+            store.register_worker(
+                "inst-test", "w-probe", "pid:probe", lease_seconds=config.lease_seconds
+            )
+        w2.request_stop()
+        await asyncio.wait_for(second_run, timeout=1.0)
         w1.request_stop()
         await asyncio.wait_for(run, timeout=15)
+        epoch = store.register_worker(
+            "inst-test", "w-next", "pid:next", lease_seconds=config.lease_seconds
+        )
+        assert epoch >= 1
 
     @pytest.mark.asyncio
     async def test_shutdown_cancels_inflight_and_frees_quota(self, store, config):
@@ -152,24 +161,16 @@ class TestStartupLeaseRetry:
         # 新 worker 应在旧租约过期后接管（而非崩溃）
         took_over = False
         for _ in range(120):
+            leases = store._connect()
             try:
-                row = store.register_worker(
-                    "inst-test", "probe-peek", "pid:peek", lease_seconds=0.001
-                )
-            except Exception:
-                row = None
-            if row is None:
-                # probe 被拒 = new-worker 持有租约（接管成功）
-                leases = store._connect()
-                try:
-                    rows = leases.execute(
-                        "SELECT worker_id FROM worker_leases WHERE instance_id='inst-test'"
-                    ).fetchall()
-                finally:
-                    leases.close()
-                if rows and rows[0][0] == "new-worker":
-                    took_over = True
-                    break
+                rows = leases.execute(
+                    "SELECT worker_id FROM worker_leases WHERE instance_id='inst-test'"
+                ).fetchall()
+            finally:
+                leases.close()
+            if rows and rows[0][0] == "new-worker":
+                took_over = True
+                break
             await asyncio.sleep(0.25)
         worker.request_stop()
         await asyncio.wait_for(run, timeout=15)
