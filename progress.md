@@ -5,13 +5,13 @@
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
 **Active Feature:** GRAVITAS-IMPL，执行 G00–G09 并按工作包分阶段提交。工作分支 `codex/gravitas-implementation`，起点 `origin/main@c662746`；平台 live、干净 VM 和发布验收独立记录，未完成前保持 NOT READY。
 **Inherited Feature:** XPLAT-IMPL 的代码已合入 PR #111；其平台 live、干净 VM 与发布缺口仍按原证据保留，不属于本轮 Gravitas scope。
-**Scope:** 按[Gravitas 工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)执行 G00–G09。G00–G05 已按工作包分阶段提交；下一步 G06 控制面与流程可见性。
+**Scope:** 按[Gravitas 工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)执行 G00–G09。G00–G06 已按工作包分阶段提交；下一步 G07 故障矩阵、确定性评测与发布证据。
 
 ## 2026-10-21 — Gravitas implementation
 
 - Branch/base：`codex/gravitas-implementation` from `origin/main@c662746`，该基线包含已合并的 PR #111。
-- Scope：G00–G09；G00–G05 已按阶段提交。当前进入 G06（控制面与流程可见性）。
-- Commits：G00 `709a4b4`（默认 provider gate）、`82f377d`（flow manifest）、`88de58c`（waiter cancellation）、`f03eb0f`（清理水位）；G01 `dbcbe41`；G02 `8e87c6c`；G03a `dd8bb72`、G03b `6c625f9`、G03c `351878d`；G04a `c3d4c4d`；G04b `6458764`（域内期限传播）；G04c `8160289`（最终发送围栏）、`5b87efa`（非合作发送隔离）；G05 `e7ee716`。
+- Scope：G00–G09；G00–G06 已按阶段提交。下一步进入 G07（故障矩阵、确定性评测与发布证据）。
+- Commits：G00 `709a4b4`（默认 provider gate）、`82f377d`（flow manifest）、`88de58c`（waiter cancellation）、`f03eb0f`（清理水位）；G01 `dbcbe41`；G02 `8e87c6c`；G03a `dd8bb72`、G03b `6c625f9`、G03c `351878d`；G04a `c3d4c4d`；G04b `6458764`（域内期限传播）；G04c `8160289`（最终发送围栏）、`5b87efa`（非合作发送隔离）；G05 `e7ee716`；G06 code `21fb77f`。
 - G00 evidence：隔离组合回归 78 passed；Ruff 和 message-flow check 通过。缺失、NULL、零、负数、非法文本与越界 checkpoint 的清理负例均已落入正式测试。
 - G01 evidence：定向合同、发布布局与 flow 回归 65 passed；Ruff、flow check、文档门禁通过（119 files / 1237 links / 577 anchors / 0 errors）。Python 3.10/3.11/3.12 导入通过；Standalone Python zip 与 OneClick Python staging 均含可导入 gravitas 包及配置样例。
 - G03 evidence：G03a 有界公平票据队列；G03b 将生产模型调用迁入共享 executor；G03c 完成实际端点资源交接、adaptive request 新票据、每业务调用最多 3 次真实请求和脚本路径审计。当前综合回归 446 passed；变更文件 Ruff、Python 编译、flow 清单生成/检查通过。命令和影响证据见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
@@ -19,10 +19,11 @@
 - G04b evidence：独立 `DeadlineExceeded` 控制信号贯穿 WebChat/Facade 锁、prepare（Planner/Router/工具 fanout）、模型队列/生成和所有 finalize 路径；旧生成 cap 仍保留超时兜底，total deadline 到期不会转成 provider fallback。QQ 群聊/私聊/proactive 静默结束。定向回归 470 passed / 1 warning；全仓 Ruff、py_compile、文档门禁和 flow manifest 检查通过。最终 manifest 为 `message-flow.c36cccb0c356.json`。GitNexus 1.6.11 all 11/33/34/CRITICAL，compare main 454/785/70/CRITICAL（累计）；一次 partial all 已重跑，图覆盖限制与完整结果见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
 - G04c evidence：`deliver_lines` 在各段间隔和 callback/物理分片前受同一总 Deadline 约束。未开始就过期的段不发送；已开始后超时或取消则记 `unknown`、停止后续段；不合作 callback 留作隔离任务，同会话后续发送被围栏，活动 callback 总数上限 16。QQ 普通群/私聊、Cometa ACK、主动 @/群聊六个发送入口传递 ctx deadline。WebChat HTTP 路由与 `run_turn` 共用 120 秒 deadline，覆盖输出采集和 SSE complete 帧前检查。综合回归 517 passed / 1 existing NoneBot fixture warning；全仓 Ruff、py_compile、文档门禁（119 files / 1,241 links / 577 anchors / 0 errors）和 flow 检查通过。最终归档 `message-flow.c00e93615f8b.json`（141 nodes / 139 source-resolved / 9,489 closure sites / 14,108 reachable symbols）。GitNexus 当前索引更新至 `8160289`；发送代码提交前 all 10 files / 40 symbols / 15 processes / HIGH，compare main 464 / 840 / 72 / CRITICAL cumulative（当时 scope=all 也含未提交的 G04c 状态更新）。代码提交 `8160289`、`5b87efa`；真实模型、QQ/WebChat live、跨进程恢复、clean VM 与发布验收未完成，整体保持 NOT READY。详见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
 - G05 evidence：提交 `e7ee716` 完成压力滞回、单个恢复 token、防惊群、按 backlog 行数/年龄拒采、无正文缺口账本，以及 consolidation/Compact/proactive 准入检查；配置阈值为离线夹具起点，enforce 仍因覆盖门禁保持 shadow。定向组合回归 216 passed / 1 现有 NoneBot warning；全量 Python 回归在新隔离 `STELLA_HOME` 下 3968 passed / 29 skipped / 1 现有 pytest warning（355s）。全仓 Ruff、改动 Python 编译、文档门禁（119 files / 1,241 links / 577 anchors / 0 errors）、flow `--check` 与 diff 检查通过；归档 `message-flow.b72338474a6c.json`（141 nodes / 139 source-resolved / 9,536 closure sites / 14,275 reachable symbols）。GitNexus all 13 files / 44 symbols / 3 processes / MEDIUM；compare main 469 / 867 / 75 / CRITICAL cumulative，无 partial/truncated。首次全量测试发现的 flow drift、合成包树缺 `gravitas/`、共享临时根造成 WebUI 401 均已修复/隔离后重跑通过。详见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
+- G06 evidence：代码提交 `21fb77f` 提供缓存只读状态 API、脱敏 fact/age/criteria/version/ack、deploy/CLI/Dashboard 展示和 flow catalog/inventory 节点；不会触发 tick、probe 或改变 shadow/enforce 决策。隔离 Python 回归 97 passed / 1 现有 pytest warning；Dashboard typecheck 通过、7 files / 101 tests passed、build 成功；localhost fake API 浏览器验收通过。全仓 Ruff、改动 Python 编译与 flow check 通过，归档 `message-flow.d2b36de1444a.json`（144 nodes / 142 source-resolved / 9,637 closure sites / 14,346 reachable symbols）。代码门禁 GitNexus all 16/40/2/MEDIUM；compare main 484/938/69/CRITICAL cumulative；状态记录门禁 all 4/7/0/LOW、compare main 489/982/78/CRITICAL cumulative，均无 partial/truncated。`check_docs.py` 119 files / 1,244 links / 577 anchors / 0 errors。pnpm wrapper 依赖预检因 ERR_PNPM_IGNORED_BUILDS 阻断，直接运行已安装 typecheck/test/build 入口成功；没有改 build approvals。未连接真实模型/Bot/平台；无生产数据库、clean VM 或发布验收。详见[实施报告](docs/reports/2026-10-21-gravitas-implementation.md)。
 - GitNexus：索引最后重建在 G03c `351878d`；G03c 具体影响包含 `execute_model_call` CRITICAL（8 直接调用者、6 流程、11 模块），RoleBackend MEDIUM，探针函数 LOW；两个评估脚本文件 UNKNOWN/0 边并已按源码补证。G04a 基于该索引完成编辑前 impact 与源码补证；提交前 all/compare 结果见实施报告。
 - Deviation：`execute_model_call` 的 exact impact（CRITICAL），以及两个评估脚本函数的 exact impact（LOW）均在首次编辑后才补跑。已扩大源码审计、补充透明录制包装和回归并向用户说明；不能把后续覆盖或低 File 风险当作事前豁免。
-- Blockers：G05 无未解决代码阻塞；enforce 仍被覆盖门禁拒绝。真实模型、QQ/WebChat 灰度、Cometa 跨进程 live、干净 VM 和发布验收尚未完成，不能由本地回归替代。
-- Next：按计划执行 G06 控制面与流程可见性，再逐包执行 G07–G09。整体保持 NOT READY。
+- Blockers：G06 无未解决代码阻塞；enforce 仍被覆盖门禁拒绝。真实模型、QQ/WebChat 灰度、Cometa 跨进程 live、干净 VM 和发布验收尚未完成，不能由本地回归替代。
+- Next：按计划执行 G07 故障矩阵、确定性评测、CI 与发布证据，再逐包执行 G08–G09。整体保持 NOT READY。
 
 ## 2026-10-21 — Gravitas engineering planning
 

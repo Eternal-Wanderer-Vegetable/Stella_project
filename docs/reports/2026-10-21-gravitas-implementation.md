@@ -123,8 +123,28 @@ G04b 将把总期限扩展到锁、prepare、路由/工具等待和 finalize；G
 
 本阶段只有隔离 SQLite、fake 与离线测试；没有启动 Bot、真实模型、QQ/WebChat、Cometa 子进程或 clean VM，也未使用用户生产数据库。coverage 未闭合时 enforce 保持拒绝；G05 完成不代表发布就绪，整体仍 **NOT READY**。
 
+## G06 只读控制面诊断
+
+代码提交 `21fb77f` 增加 Gravitas 只读状态视图：状态 API 只读取缓存快照，不触发 controller tick、探针或新的采集；按配置资源白名单展示事实、年龄与 fresh 标记、压力阈值、策略/配置版本和 digest、boot ID、未评估维度与显式 `applied_ack=not_received`。未知来源/原因不透出任意字符串，未知 scope 只计数；状态 payload 不包含消息正文、凭据或原始配置。
+
+- deploy process、CLI 与 authenticated Dashboard 透传并呈现同一快照；Dashboard 提供中英文文案。没有状态事实时显示未评估，不将缺失事实转成 healthy，也不改变 shadow/enforce 决策。
+- Flow catalog/inventory 登记 Gravitas setup、controller run、status API 三个观测节点和 runtime entries；明确这些是组件/控制面节点，不宣称它们是消息入口流程根。拓扑版本为 `2026.10.21`，生成并保留不可变归档 `message-flow.d2b36de1444a.json`（144 nodes / 142 source-resolved / 9,637 closure sites / 14,346 reachable symbols）。
+- 编辑前 GitNexus 对 status collection、controller snapshot、CLI health 与 flow coverage/validator 的 upstream impact 均为 LOW。`set_gravitas_status_provider` 为 UNKNOWN/0；源码审计确认唯一装配点是 `gravitas_bootstrap.py` 的启动注入。状态文档刷新前的 File impact：`progress.md` LOW（26 impacted / 3 direct）、`session-handoff.md` LOW（19 / 2）、`feature_list.json` LOW（19 / 2）；报告文件不在图中，显示 UNKNOWN。引用扫描确认这些状态文件仅由根级工作流/交接规则、`check_docs.py` 的状态一致性校验、发布打包排除项和文档合同测试使用；报告路径由 `progress.md`、handoff 与 feature evidence 链接，没有发现运行时调用者。UNKNOWN 与文档文件风险尺度限制已通过源码/文本补证，不用风险等级豁免。
+- 编辑前索引重建于提交 `21fb77f`，GitNexus 1.6.11：26,572 nodes / 60,855 edges / 1,098 clusters / 828 flows。构建跳过 31 个超过 512 KB 的生成归档；流程推断有预算截断（2,867 candidate entry points 未排序、24 条 trace 达深度上限、814 callees 被跳过、45 walks 达预算），因此不把缺失流程解释成不存在调用。此限制与 G06 源码 impact 结论分开记录。
+
+### G06 验证
+
+- 隔离 Python 回归：`STELLA_HOME=/tmp/stella-gravitas-g06-final-20261021 .venv/bin/pytest tests/gravitas/test_g02_control_loop.py tests/gravitas/test_g06_status.py tests/test_deploy_process.py tests/test_deploy_cli.py tests/test_status_api.py tests/webui/test_webui_redaction.py tests/observability/test_internal_flow_inventory.py -q -x`：**97 passed / 1 existing PytestRemovedIn10Warning**。警告为现有 class-scoped fixture method deprecation。
+- Dashboard 直接调用已安装的 Node 工具入口：`vue-tsc.js --noEmit` 通过；`vitest.mjs run` 为 7 files / **101 passed**；`vite.js build` 成功。构建仅有既存分包提示和大 chunk (>500 KB) 警告。项目 pnpm 包装器在依赖预检时报 `ERR_PNPM_IGNORED_BUILDS`（esbuild/vue-demi）；没有变更 build approval，使用本机已安装工具入口完成以上检查。
+- 本地浏览器 fake API 验收：临时 Vite preview 与 mock 服务仅绑定 localhost，使用测试 token 和合成状态；authenticated `/gravitas` 页面显示 shadow/configured mode、fact age/pressure、unassessed、`not_received` acknowledgement、阈值与版本/digest。Welcome 页面可选 readiness 请求 `/providers/endpoints` 返回 404，但 Gravitas 页面加载和展示正常。临时服务、配置和 token 已清理；没有连接模型、Bot 或平台。
+- `.venv/bin/ruff check .`、改动 Python 文件 `py_compile`、`python scripts/generate_message_flow.py --check` 与 `git diff --check` 通过。Flow check 对应归档 `message-flow.d2b36de1444a.json`。
+- 提交前 GitNexus 1.6.11 `detect-changes --scope all`：16 files / 40 symbols / 2 processes / MEDIUM；`--scope compare --base-ref main`：484 files / 938 symbols / 69 processes / CRITICAL（累计分支风险）。两个命令退出 0，未报告 partial/truncated；compare 值不是 G06 局部风险。
+- G06 状态/evidence 文档提交前 GitNexus：scope all 为 4 files / 7 symbols / 0 processes / LOW；compare main 为 489 files / 982 symbols / 78 processes / CRITICAL（累计）。均退出 0 且无 partial/truncated 标记。`scripts/check_docs.py` 为 119 files / 1,244 local links / 577 migration anchors / 0 errors；`feature_list.json` 可解析，`git diff --check` 通过。
+
+G06 仅证明离线状态/API、合成 Dashboard 与本地 flow 目录。生产账号/数据、真实模型、QQ/WebChat、Cometa 跨进程、干净 VM 和发布验收均未执行；整体继续 **NOT READY**。下一步为 G07 故障矩阵、确定性评测与发布证据。
+
 ## 未完成与验收边界
 
-- G00–G05 已完成；G06–G09 仍须逐包实现、验证和提交。
+- G00–G06 已完成；G07–G09 仍须逐包实现、验证和提交。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。

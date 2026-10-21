@@ -571,6 +571,16 @@
           "command": "G05: isolated targeted pytest, full tests suite, Ruff, py_compile, check_docs.py, generate_message_flow.py --check, git diff --check; GitNexus impact and detect-changes all/compare",
           "result": "Code commit e7ee716. Focused G05/memory/proactive regression: 216 passed / 1 existing warning. Fresh isolated full suite: 3968 passed, 29 skipped, 1 warning / 355s. Ruff, compile, docs (119 files / 1,241 links / 577 anchors / 0 errors), flow check (message-flow.b72338474a6c.json), diff check passed. GitNexus all 13 files / 44 symbols / 3 processes / MEDIUM; compare/main 469 / 867 / 75 / CRITICAL cumulative; no partial/truncated marker. Enforce remains refused; no live model/platform/clean VM evidence.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G06: isolated pytest, Dashboard typecheck/Vitest/build and localhost mock browser acceptance; Ruff, py_compile, check_docs.py, generate_message_flow.py --check, git diff --check",
+          "result": "Code commit 21fb77f. Python regression: 97 passed / 1 existing warning. Dashboard typecheck passed, 7 files / 101 tests passed, build succeeded; localhost fake API acceptance passed. Ruff, changed Python compile and flow check passed; archive message-flow.d2b36de1444a.json (144 nodes / 142 source-resolved / 9,637 closure sites / 14,346 reachable symbols). No live model, Bot, platform, production DB, clean VM, or release acceptance.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G06 status documentation commit: check_docs.py, feature_list.json JSON parse, git diff --check; GitNexus detect-changes --scope all and --scope compare --base-ref main",
+          "result": "Docs: 119 files / 1,244 local links / 577 anchors / 0 errors; JSON parse and diff check passed. GitNexus all 4 files / 7 symbols / 0 processes / LOW; compare main 489 / 982 / 78 / CRITICAL cumulative. Neither result reported partial/truncated.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
         }
       ]
     }
