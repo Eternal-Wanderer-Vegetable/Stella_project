@@ -96,8 +96,35 @@ G04b 将把总期限扩展到锁、prepare、路由/工具等待和 finalize；G
 
 此阶段只验证离线测试和 fake callback，没有真实 QQ/WebChat、模型、adapter、跨进程或 clean VM 验收。G04 软件包完成不代表 V1 验收完成；整体仍 **NOT READY**。
 
+## G05 压力闭环与记忆边界
+
+代码提交 `e7ee716` 将共享资源压力和 backlog 限制接入可延迟的后台路径：
+
+- 压力状态保持 NORMAL → CONSTRAINED → RECOVERING → NORMAL。CONSTRAINED 仅允许到龄任务在显式完整性健康时占用最小份额；RECOVERING 每 10 秒最多开放一个新后台 token，空闲时间不会累计成恢复突发。主动发言机会在压力下静默过期，不排队补发。
+- Memory capture 在 `BEGIN IMMEDIATE` 写事务中只读取待整合行数与最早时间，不把消息正文传给控制器。会话/实例高水位为 500/5000 行，低水位为 250/2500 行，年龄阈值 600 秒；这些是离线夹具起点，不是生产 SLO。达到阈值时新行写入前拒绝，结果码 `not_captured_pressure`，不排队、不补录，旧来源与 checkpoint 保持不变。缺口状态仅含计数、起止时间和低基数原因码。
+- Consolidation 与 Compact 在开始后台模型工作前检查资源准入，拒绝后来源行与成功水位保留；proactive 检查在业务流程入口；capture 压力状态独立于 CaptureGate readiness。旧 schema v1 profile 可省略新增 backlog 配置字段并加载夹具默认值。
+- 配置为 `enforce` 时 controller 仍因 coverage 不完整而拒绝启用，保持 shadow/off 业务语义；主动路径的异常只在实际 enforce 时 fail closed。现阶段没有 producer 发布可信完整性事实，因此受压时的 aged bypass 会保持拒绝，不能宣称后台会在真实故障中自动恢复。
+- 更新了发布测试合成源码树以包含既有 G01 根包 `gravitas/`。同步修正 proactive fake task/outbound 对 G04c deadline wrapper 的测试签名。
+
+### GitNexus 与接线范围
+
+编辑前基于 G04c HEAD `6f95a20` 的精确 upstream impact：`evaluate_pressure` LOW；`MemoryConsolidator.backlog` 与 `consolidate_group` LOW；`compact_once` HIGH（9 impacted / 3 processes）；`CaptureGate.capture_allowed` 方法 HIGH（状态、记忆与测试调用方）；`MemoryConsolidator._consolidate_group_core` HIGH（7 impacted）；`record_message` CRITICAL（18 impacted / 10 inferred processes，另有 3 个接收者未解析）；`_proactive_speak_impl`、`setup_gravitas`、`GravitasController.tick`、`default_config` LOW。HIGH/CRITICAL 在编辑前已向用户提示。
+
+`capture_allowed` 模块函数、嵌套 scheduler 函数 `consolidation_drain_job`、`ChatContext.capture_result` 的图结果为 UNKNOWN/0；源码与注册入口审计确认 capture API 的内部/测试引用、定时 job 装饰器注册、capture result 写入与测试读取，未把零图边当作无人调用。索引重建保留流程候选预算下界（2,854 候选入口被裁剪、24 条 trace 达深度上限、813 callee 被跳过、45 walks 达预算）。
+
+### 验证
+
+- 隔离 G05 组合回归：
+  `STELLA_HOME=/tmp/stella-gravitas-g05-20261021 .venv/bin/pytest tests/gravitas tests/test_consolidator_core.py tests/test_session_compact.py tests/test_db_cleaner.py tests/test_memory_capture_gate.py tests/test_capture_ingress_gating.py tests/test_message_relations.py tests/test_proactive_rules.py tests/test_proactive_at_flow.py tests/test_ai_gateway_deterministic_reply.py -q -x`
+  **216 passed / 1 现有 NoneBot fixture warning**。新增覆盖 schema v1 兼容、恢复 token 防累积、到龄共享的 integrity 硬门、capture 高低水位滞回、shadow 行为等价及拒采不写正文。
+- 全量 Python suite：`STELLA_HOME=/tmp/stella-gravitas-g05-full-20261021b .venv/bin/pytest tests -q`：**3968 passed, 29 skipped, 1 warning / 355.00s**。第一次全量尝试得到 3954 passed、29 skipped、14 failed：flow manifest 尚未按新源码生成；多个 release staging 测试的合成树漏建 `gravitas/`；共用一个临时 `STELLA_HOME` 的 WebUI 用例出现 401。生成新 flow archive、补全合成树并改用全新隔离根后再次全量通过。warning 为既有 class-scoped fixture 的 pytest deprecation。
+- `.venv/bin/ruff check .` 与 G05 改动 Python 文件 `py_compile` 通过；`scripts/check_docs.py`：119 files / 1,241 links / 577 anchors / 0 errors；`generate_message_flow.py --check` 通过。新归档 `message-flow.b72338474a6c.json`：141 nodes / 139 source-resolved / 9,536 closure sites / 14,275 reachable symbols。`git diff --check` 与 `feature_list.json` JSON parse 通过。
+- 提交前 GitNexus 1.6.11 `detect-changes --scope all`：13 files / 44 symbols / 3 affected processes / MEDIUM；`--scope compare --base-ref main`：469 files / 867 symbols / 75 processes / CRITICAL（累计分支风险）。CLI 无 partial/truncated 标记；展示列表是摘要样例。代码提交 `e7ee716`。
+
+本阶段只有隔离 SQLite、fake 与离线测试；没有启动 Bot、真实模型、QQ/WebChat、Cometa 子进程或 clean VM，也未使用用户生产数据库。coverage 未闭合时 enforce 保持拒绝；G05 完成不代表发布就绪，整体仍 **NOT READY**。
+
 ## 未完成与验收边界
 
-- G00–G03、G04a–G04c 已完成；G05–G09 仍须逐包实现、验证和提交。
+- G00–G05 已完成；G06–G09 仍须逐包实现、验证和提交。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。

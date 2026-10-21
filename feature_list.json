@@ -566,6 +566,11 @@
           "command": "G04c pre-commit GitNexus 1.6.11 detect-changes --scope all and --scope compare --base-ref main; upstream impacts for deliver_lines, OutboundService.send, run_with_deadline, WebChat handlers and state files",
           "result": "Current impact index refreshed to 5b87efa; 1,812 indexed files. deliver_lines HIGH/10 impacted/6 direct/3 processes/2 modules; run_with_deadline CRITICAL/14/6/4; OutboundService.send MEDIUM/11/6 with 4 receiver-typing callers unresolved; MessageExporter.send UNKNOWN/0 source-audited as Protocol plus OneBot exporter. WebChat run_turn LOW/2 flows; router chat UNKNOWN/0 confirmed by route decorator and invocation. Before code follow-up commit: scope all 10 files / 40 symbols / 15 processes / HIGH (included pending state docs); compare main 464 / 840 / 72 / CRITICAL cumulative; no partial/truncated. Commits 8160289 and 5b87efa.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G05: isolated targeted pytest, full tests suite, Ruff, py_compile, check_docs.py, generate_message_flow.py --check, git diff --check; GitNexus impact and detect-changes all/compare",
+          "result": "Code commit e7ee716. Focused G05/memory/proactive regression: 216 passed / 1 existing warning. Fresh isolated full suite: 3968 passed, 29 skipped, 1 warning / 355s. Ruff, compile, docs (119 files / 1,241 links / 577 anchors / 0 errors), flow check (message-flow.b72338474a6c.json), diff check passed. GitNexus all 13 files / 44 symbols / 3 processes / MEDIUM; compare/main 469 / 867 / 75 / CRITICAL cumulative; no partial/truncated marker. Enforce remains refused; no live model/platform/clean VM evidence.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
         }
       ]
     }
