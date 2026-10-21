@@ -586,6 +586,11 @@
           "command": "G07 code: isolated tests/gravitas/test_g07_v1_scenarios.py and full pytest tests -q -x; 10-seed offline evaluation; Ruff, py_compile, docs/flow/YAML/diff checks; GitNexus detect-changes all/compare",
           "result": "Code commit bfb1fa2 adds S01-S12 scenario runner, 10 fixed contiguous seeds × 256 events in off/shadow, same-seed semantic digest, isolated STELLA_HOME per scenario, Standalone/OneClick staged imports, and Python 3.11 CI step. Targeted guard 4 passed; full suite 3976 passed / 29 skipped / 1 existing warning in 359.95s. Evaluation digest 6d35e75631c1861239cb4ac2cd8555a8e6a5058e; all scenarios, traces, package imports and repeat digest passed. Live model/platform and clean VM/release are SKIPPED. GitNexus all: 4 staged files with no indexed symbol overlap (UNKNOWN/manual source audit); compare main: 493 files / 984 symbols / 78 processes / CRITICAL cumulative; no partial/truncated marker.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        },
+        {
+          "command": "G08: isolated dependency/storage recovery suite and full pytest tests -q -x; .venv/bin/ruff check .; py_compile changed Python; check_docs.py; generate_message_flow.py --check; git diff --check; GitNexus detect-changes all/compare",
+          "result": "Code commit b78c72e. Focused recovery/model/capture/link regression 60 passed; final full suite 3989 passed / 29 skipped / 1 existing warning in 220.82s. Earlier two full attempts had intermittent WebUI submit and Cometa shutdown failures; isolated reruns passed, and a later full rerun passed. Ruff, compile, flow, diff, and docs (119 files / 1246 links / 577 anchors / 0 errors) passed; flow archive message-flow.643390a24eac.json. GitNexus all 13 files / 47 symbols / 31 processes / CRITICAL; compare/main 503 / 1076 / 113 / CRITICAL cumulative, listing capped after a larger-limit rerun; counts/risk cover all changes. S13/S14 evidence is isolated and offline only; no live model/platform, cross-process worker, clean VM, or release validation.",
+          "report": "docs/reports/2026-10-21-gravitas-implementation.md"
         }
       ]
     }

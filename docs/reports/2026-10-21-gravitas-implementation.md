@@ -161,8 +161,30 @@ G06 仅证明离线状态/API、合成 Dashboard 与本地 flow 目录。生产�
 
 G07 的离线 V1 组合验收完成，但不会据此启用 enforce 或宣告 release READY。真实模型质量、QQ/WebChat 灰度、Cometa 跨进程恢复、Windows/Linux clean VM、实际 installer 和发布资产仍缺验收。下一步是 G08 依赖与存储分域恢复。
 
+## G08 依赖与存储分域恢复
+
+代码提交 `b78c72e` 增加 `gravitas.dependency_recovery`，将依赖与存储故障作为有界、分作用域的运行事实接入现有 owner：
+
+- Endpoint、Provider、Connection 与 Storage scope 使用线程安全的进程内有界注册表。被动请求结果有序列围栏；迟到结果不能覆盖新一代状态。主动 probe 通过有期限的 single-flight lease、代际校验和每 scope/全局滑动预算，预算耗尽不会再发请求。恢复退避含注入随机源的 jitter，测试可用固定 seed。
+- HTTP 401/403、配置/权限错误进入终止分类，避免重复探测；正常 transient 失败进入退避。事实快照只导出低基数类别、范围、年龄和有界 ID，不带异常文本、凭据或消息内容。
+- Role model call 在真实端点实际取得 model slot 后记录结果；primary 失败不会被 fallback 成功清零。CapabilityProvider 的迟到成功不能清除更新的 cooldown。CaptureGate 保留自身 epoch 语义并共享 active-probe 限额；默认 LinkMonitor 只探测 OneBot V11，任意平台事件可报告连接存活，非 OneBot 平台没有等价心跳时保持 UNKNOWN。
+- `connect_sqlite` 将 memory、social、Cometa、scheduling、knowledge、observability 数据库连接的错误按域分类。locked/busy 是 contention/degraded，不误报 corruption；readonly、disk-full 与 corrupt 分类区分。存储恢复只能来自显式维护成功，不启动自动 integrity probe，也不把读取成功当作库健康证明。
+- 新增 S13/S14 的隔离单测，覆盖作用域互不污染、迟到成功围栏、single-flight/预算、错误分类和各存储域故障正反例。冻结的 `docs/plans/2026-10-21-gravitas-inventory.json` 未修改。
+
+### G08 GitNexus 与验证
+
+- 编辑前风险已向用户提示：`gravitas/model_calls.execute_role_model_call` CRITICAL（26 impacted nodes、2 inferred processes、10 modules）；`memory.timeutil.log_sqlite_error` CRITICAL（146 impacted、16 processes、8 modules），该符号未修改；CapabilityProvider HIGH（40/24）；CometaStore `_tx` HIGH（48/24）、`_read` HIGH（39/16）；`message_flow.py` HIGH（55/27）；scheduling migration MEDIUM、trace MEDIUM、knowledge schema LOW。UNKNOWN/零调用者结果按注册点和源码引用补证。GitNexus 过程图仍受 31 个大文件跳过、调用值流与流程推断预算影响：2,876 个候选入口、23 条深度截断 trace、810 个分支上限跳过的 callee、44 条预算截断 walk，不能把推断流程视作完整全集。
+- 定向隔离回归：`STELLA_HOME=/tmp/stella-gravitas-g08-auth-focused-20261021 .venv/bin/pytest tests/gravitas/test_g08_dependency_recovery.py tests/gravitas/test_g03_model_calls.py tests/test_memory_capture_gate.py tests/test_link_monitor.py -q -x`：**60 passed / 4.03s**。最终全量回归：`STELLA_HOME=/tmp/stella-gravitas-g08-final-verify-20261021 .venv/bin/pytest tests -q -x`：**3,989 passed / 29 skipped / 1 existing PytestRemovedIn10Warning，220.82s**。warning 是 `tests/observability/test_internal_flow_inventory.py` 中 class-scoped fixture method 的既有弃用提示。
+- 最终全量回归前曾有两次整套运行分别在 WebUI submit replay 与 Cometa shutdown 用例中失败；两个单例重跑均通过（29 passed、1 passed），随后第四次全量运行完整通过。未确认这两次失败的根因，作为间歇性测试稳定性风险保留。
+- `.venv/bin/ruff check .`、所有改动 Python 文件的 `.venv/bin/python -m py_compile`、`scripts/check_docs.py`（119 files / 1,246 links / 577 migration anchors / 0 errors）、`scripts/generate_message_flow.py --check` 与 `git diff --check` 均通过。最终 flow 归档 `message-flow.643390a24eac.json`：144 nodes / 142 source-resolved / 9,637 closure sites / 14,624 reachable symbols。
+- 提交前 GitNexus 1.6.11 `detect-changes --scope all --repo Stella_project --limit 50000`：13 files / 47 symbols / 31 affected processes / CRITICAL；`--scope compare --base-ref main --limit 50000`：503 files / 1,076 symbols / 113 processes / CRITICAL（累计分支风险）。两条命令均退出 0。提高展示上限后统计不变；compare 明示符号展示清单 capped，但计数和风险覆盖全量变更；all 的符号/流程输出是样例。未返回 partial/truncated 标记。
+- G08 状态文档提交前，GitNexus all 为 4 files / 7 symbols / 0 processes / LOW；compare/main 为 506 files / 1,076 symbols / 113 processes / CRITICAL（累计）。`check_docs.py` 为 119 files / 1,248 links / 577 anchors / 0 errors，`feature_list.json` JSON parse 与 `git diff --check` 通过；compare 的展示清单仍 capped，统计覆盖全量。
+- 全部 pytest 使用隔离 `/tmp/stella-gravitas-*` 的 `STELLA_HOME`。没有连接模型、Bot、QQ/WebChat、真实平台或跨进程 worker；没有对用户数据库运行探针。G08 的 S13/S14 仅为本地软件回归，不能据此关闭真实依赖/存储恢复验收。
+
+G08 软件包完成；下一步 G09 为 Cometa 策略信封与 worker claim 检查。整体仍 **NOT READY**：V2 跨进程实际故障恢复、真实模型/平台、clean VM、安装器与发布资产仍缺证据。
+
 ## 未完成与验收边界
 
-- G00–G07 已完成；G08–G09 仍须逐包实现、验证和提交。
+- G00–G08 已按工作包完成；G09 仍须实现、验证和提交。
 - 真实模型质量/适配、QQ 与 WebChat 灰度、跨进程 live 恢复、clean VM、发布资产均未验收。方案规定整体保持 **NOT READY**，不得用 fake 测试或本地回归替代。
 - 所有新跑 pytest 使用临时 `STELLA_HOME` 与隔离数据库；未访问用户生产库、聊天、凭据或本机配置。
