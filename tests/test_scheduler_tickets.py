@@ -190,7 +190,7 @@ def test_expired_ticket_is_removed_before_holder_releases():
             _deadline_waiter(time.monotonic() + 0.01)
         )
         await asyncio.sleep(0)
-        with pytest.raises(TimeoutError):
+        with pytest.raises(asyncio.TimeoutError):
             await waiter
         stats = scheduler.snapshot()["LOCAL"]
         assert stats["waiting"] == 0
