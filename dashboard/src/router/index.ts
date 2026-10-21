@@ -64,6 +64,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/SettingsPage.vue'),
       },
       {
+        path: 'gravitas',
+        name: 'gravitas-status',
+        component: () => import('@/views/GravitasStatusPage.vue'),
+      },
+      {
         path: 'chat',
         name: 'chat',
         component: () => import('@/views/ChatPage.vue'),

@@ -44,6 +44,11 @@ from gravitas.policy import (
 SchedulerSource = Callable[[], object]
 CaptureSource = Callable[[], object]
 
+_STATUS_FACT_REASONS = frozenset(
+    {"within_limit", "queue_saturated", "capture_ready", "capture_closed"}
+)
+_STATUS_FACT_SOURCES = frozenset({"core.llm.scheduler", "core.capture_gate"})
+
 
 @dataclass(frozen=True, slots=True)
 class FactCacheStats:
@@ -501,6 +506,52 @@ class GravitasController:
                 and now < snapshot.expires_at
                 and snapshot.controller_boot_id == self.controller_boot_id
             )
+        assessment = payload.get("assessment")
+        if isinstance(assessment, dict):
+            observed: dict[tuple[str, str], set[str]] = {}
+            facts = assessment.get("facts")
+            if not isinstance(facts, list):
+                facts = []
+                assessment["facts"] = facts
+            for item in facts:
+                if not isinstance(item, dict):
+                    continue
+                observed_at = item.pop("_observed_control_time", None)
+                ttl = item.get("valid_for_seconds")
+                if not isinstance(observed_at, (int, float)) or not isinstance(
+                    ttl, (int, float)
+                ):
+                    item["age_seconds"] = None
+                    item["fresh"] = False
+                    continue
+                age = now - observed_at
+                item["age_seconds"] = round(max(0.0, age), 3)
+                item["fresh"] = now >= observed_at and now < observed_at + ttl
+                scope = item.get("scope")
+                dimension = item.get("dimension")
+                if item["fresh"] and isinstance(scope, dict) and isinstance(
+                    dimension, str
+                ):
+                    observed.setdefault((scope["kind"], scope["id"]), set()).add(
+                        dimension
+                    )
+            required = {item.value for item in HealthDimension}
+            unassessed = []
+            expected_scopes = [
+                ({"kind": "resource", "id": resource_id})
+                for resource_id in sorted(self._resource_limits)
+            ] + [{"kind": "storage", "id": "memory_capture"}]
+            for scope in expected_scopes:
+                missing = sorted(required - observed.get((scope["kind"], scope["id"]), set()))
+                if missing:
+                    unassessed.append({"scope": scope, "dimensions": missing})
+            unassessed.append({
+                "scope": {"kind": "instance", "id": "policy"},
+                "dimensions": ["applied_ack"],
+            })
+            assessment["unassessed"] = unassessed
+            assessment["unassessed_count"] = len(unassessed)
+            assessment["state"] = "complete" if not unassessed else "partial"
         return payload
 
     async def run(self, stop_event: asyncio.Event | None = None) -> None:
@@ -746,6 +797,78 @@ class GravitasController:
             and now < snapshot.expires_at
             and snapshot.controller_boot_id == self.controller_boot_id
         )
+        assessment_facts = []
+        redacted_fact_count = 0
+        for fact in self._facts.snapshot(now=now):
+            scope = self._diagnostic_scope(fact.scope)
+            if scope is None:
+                redacted_fact_count += 1
+                continue
+            assessment_facts.append(
+                {
+                    "scope": scope,
+                    "dimension": fact.dimension.value,
+                    "value": fact.value.value,
+                    "reason_code": (
+                        fact.reason_code
+                        if fact.reason_code in _STATUS_FACT_REASONS
+                        else "unclassified"
+                    ),
+                    "source_id": (
+                        fact.source_id
+                        if fact.source_id in _STATUS_FACT_SOURCES
+                        else "redacted"
+                    ),
+                    "_observed_control_time": fact.observed_control_time,
+                    "valid_for_seconds": fact.valid_for_seconds,
+                }
+            )
+        policy = self._policy
+        assessment = {
+            "scope": {"kind": "instance", "id": "controller"},
+            "state": "partial",
+            "facts": assessment_facts,
+            "redacted_fact_count": redacted_fact_count,
+            "unassessed": [],
+            "unassessed_count": 0,
+            "criteria": {
+                "required_dimensions": [item.value for item in HealthDimension],
+                "fact_ttl_seconds": self.config.controller.fact_ttl_seconds,
+                "policy_ttl_seconds": (
+                    policy.valid_for_seconds
+                    if policy is not None
+                    else self.config.controller.fact_ttl_seconds
+                ),
+                "pressure_enter_queue_depth": self.config.pressure.enter_queue_depth,
+                "pressure_enter_oldest_wait_seconds": (
+                    self.config.pressure.enter_oldest_wait_seconds
+                ),
+                "pressure_enter_consecutive_windows": (
+                    self.config.pressure.enter_consecutive_windows
+                ),
+                "pressure_recover_queue_depth": self.config.pressure.recover_queue_depth,
+                "pressure_recover_oldest_wait_seconds": (
+                    self.config.pressure.recover_oldest_wait_seconds
+                ),
+                "pressure_recover_stable_seconds": (
+                    self.config.pressure.recover_stable_seconds
+                ),
+            },
+            "version": {
+                "diagnostics_schema_version": 1,
+                "config_schema_version": self.config.schema_version,
+                "controller_boot_id": self.controller_boot_id,
+                "policy_revision": self._policy_revision,
+                "config_digest": (
+                    policy.config_digest if policy is not None else _config_digest(self.config)
+                ),
+            },
+            "applied_ack": {
+                "state": "not_received",
+                "reason_code": "adapter_ack_not_wired",
+                "items": [],
+            },
+        }
         return {
             "schema_version": 1,
             "mode": self.effective_mode.value,
@@ -767,7 +890,16 @@ class GravitasController:
             },
             "resources": resources,
             "events": self._events.snapshot(),
+            "assessment": assessment,
         }
+
+    def _diagnostic_scope(self, scope: ScopeRef) -> dict[str, str] | None:
+        """Allow only configured resource ids and the fixed capture scope."""
+        if scope.kind is ScopeKind.RESOURCE and scope.key in self._resource_limits:
+            return {"kind": "resource", "id": scope.key}
+        if scope.kind is ScopeKind.STORAGE and scope.key == "memory_capture":
+            return {"kind": "storage", "id": "memory_capture"}
+        return None
 
 
 def _config_digest(config: GravitasConfig) -> str:

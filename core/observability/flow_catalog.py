@@ -22,8 +22,8 @@ from dataclasses import dataclass
 
 # 语义拓扑版本：节点/边/条件的**语义**变化时手工递增（内容 hash 由生成器
 # 另算，二者独立——见计划 §6.1 manifest 字段说明）。
-# 2026.10.04：私聊入口/固定节点补登记（修复计划 §6.5，R1）。
-TOPOLOGY_VERSION = "2026.10.04"
+# 2026.10.21：登记 Gravitas 周期快照与只读诊断读取路径（G06）。
+TOPOLOGY_VERSION = "2026.10.21"
 CATALOG_SCHEMA_VERSION = 2
 
 GENERATOR_VERSION = 3
@@ -386,6 +386,13 @@ NODES: dict[str, NodeSpec] = {n.id: n for n in [
        ("knowledge/ingest.py", "_parse")),
     _N("knowledge.version", "版本构建与嵌入", "ops", "persist",
        ("knowledge/ingest.py", "_build_version")),
+    # Gravitas 控制状态（G06；静态目录关系不代表运行观测覆盖）。
+    _N("gravitas.controller.tick", "周期采集与策略快照", "ops", "background",
+       ("gravitas/controller.py", "GravitasController.tick")),
+    _N("gravitas.status.snapshot", "只读缓存诊断快照", "ops", "state",
+       ("gravitas/controller.py", "GravitasController.status_snapshot")),
+    _N("status.collect", "状态 API 聚合", "ops", "aggregate",
+       ("stella_project/plugins/bot_main/status_api.py", "collect_status")),
 ]}
 
 # ---- 静态边（主链；条件边带 label，spawn/cause 是虚线）----
@@ -538,6 +545,11 @@ EDGES: list[EdgeSpec] = [
     # 知识导入链（M5 孤岛收口）
     EdgeSpec("knowledge.ingest.entry", "knowledge.parse"),
     EdgeSpec("knowledge.parse", "knowledge.version"),
+    # Gravitas 状态从周期生成的缓存读取；读取不会触发 tick 或探针。
+    EdgeSpec("gravitas.controller.tick", "gravitas.status.snapshot", kind="cause",
+             label="更新诊断缓存"),
+    EdgeSpec("gravitas.status.snapshot", "status.collect", kind="data",
+             label="读取缓存状态"),
     # 预约调度链（M5 孤岛收口）
     EdgeSpec("scheduled.runtime.tick", "scheduled.gate"),
     EdgeSpec("scheduled.gate", "scheduled.agent", kind="condition", label="到期运行"),

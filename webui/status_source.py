@@ -8,7 +8,8 @@
 实测）。宿主（bot.py）在挂载时把 v1 的 ``collect_status`` 注入进来；
 没有宿主注入时（``scripts/dev_webui.py`` 独立跑），回退到最小 payload。
 
-取数失败回退最小 payload 而不是 500：状态页宁可少几块，不能整个挂掉。
+取数失败回退最小 payload（其中 Gravitas 显式为 ``None``）而不是 500：状态页
+宁可少几块，不能整个挂掉；这个回退态不等价于健康。
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ def _minimal_payload() -> dict:
         "capabilities": None,
         "skills": None,
         "runtime": None,
+        "gravitas": None,
         "standalone": True,
     }
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -275,6 +276,73 @@ def test_shadow_controller_caches_facts_and_never_changes_business_effects():
     assert controller.status_snapshot()["resources"]
     clock.advance(6.0)
     assert not controller.status_snapshot()["snapshot_valid"]
+
+
+def test_g06_status_is_read_only_age_aware_and_redacts_unknown_scopes():
+    clock = ManualControlClock(100.0, clock_id="controller-boot")
+    reads = {"scheduler": 0, "capture": 0}
+
+    def scheduler_source():
+        reads["scheduler"] += 1
+        return {"CHAT": {"waiting": 0, "holding": 1, "limit": 1}}
+
+    def capture_source():
+        reads["capture"] += 1
+        return {"state": "ready", "allowed": True}
+
+    controller = GravitasController(
+        default_config(),
+        scheduler_source=scheduler_source,
+        capture_source=capture_source,
+        mode=GravitasMode.SHADOW,
+        clock=clock,
+        controller_boot_id="controller-boot",
+    )
+    private_fact = HealthFact(
+        schema_version=1,
+        scope=ScopeRef(ScopeKind.CONVERSATION, "private-conversation-42", "private-source"),
+        dimension=HealthDimension.AVAILABILITY,
+        value=HealthValue.HEALTHY,
+        reason_code="private_message_body_should_not_escape",
+        source_id="private-source-id",
+        source_boot_id="controller-boot",
+        source_sequence=1,
+        observed_control_time=100.0,
+        valid_for_seconds=5.0,
+    )
+    assert controller.facts.put(
+        private_fact,
+        now=100.0,
+        active_scopes={(ScopeKind.CONVERSATION.value, "private-conversation-42")},
+        expected_boot_id="controller-boot",
+    )
+    controller.tick()
+    reads_after_tick = reads.copy()
+    policy_revision = controller.policy.policy_revision
+    event_count = len(controller.events.snapshot())
+
+    clock.advance(2.0)
+    status = controller.status_snapshot()
+    assessment = status["assessment"]
+    assert assessment["scope"] == {"kind": "instance", "id": "controller"}
+    assert assessment["facts"]
+    assert all(fact["age_seconds"] == 2.0 for fact in assessment["facts"])
+    assert assessment["redacted_fact_count"] == 1
+    assert assessment["version"]["diagnostics_schema_version"] == 1
+    assert assessment["version"]["config_schema_version"] == 1
+    assert assessment["applied_ack"] == {
+        "state": "not_received",
+        "reason_code": "adapter_ack_not_wired",
+        "items": [],
+    }
+    assert any("applied_ack" in item["dimensions"] for item in assessment["unassessed"])
+    serialized = json.dumps(status, ensure_ascii=False)
+    assert "private-conversation-42" not in serialized
+    assert "private_message_body_should_not_escape" not in serialized
+    assert "private-source-id" not in serialized
+    assert reads == reads_after_tick
+    assert controller.policy.policy_revision == policy_revision
+    assert len(controller.events.snapshot()) == event_count
 
 
 class _FakeDriver:

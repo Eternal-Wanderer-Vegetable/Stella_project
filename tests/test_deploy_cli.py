@@ -116,6 +116,29 @@ def test_cmd_status_link_disabled(monkeypatch, capsys):
     assert "链路监测已关闭" in out
 
 
+def test_cmd_status_renders_cached_gravitas_diagnostics(monkeypatch, capsys):
+    rc, out = _run_status(
+        monkeypatch,
+        capsys,
+        _fake_status(
+            gravitas={
+                "mode": "shadow",
+                "configured_mode": "enforce",
+                "snapshot_valid": False,
+                "snapshot_age_seconds": 4.0,
+                "assessment": {
+                    "facts": [{"dimension": "pressure"}],
+                    "unassessed": [{"dimensions": ["integrity"]}],
+                    "applied_ack": {"state": "not_received"},
+                },
+            }
+        ),
+    )
+    assert rc == 0
+    assert "Gravitas：shadow（配置 enforce，策略快照 过期或缺失，年龄 4 秒）" in out
+    assert "评估：1 条事实，1 项未评估；应用回执 not_received" in out
+
+
 def test_cmd_status_json_branch(monkeypatch, capsys):
     fake = _fake_status(link=None)
     monkeypatch.setattr(deploy_main.process, "status", lambda: fake)

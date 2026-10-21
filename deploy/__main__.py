@@ -209,6 +209,36 @@ def _print_usage(usage: dict | None) -> None:
         print(f"  正在降级中的角色：{'、'.join(degraded)} —— 主端点故障，走的是降级端点。")
 
 
+def _print_gravitas_status(gravitas: dict | None) -> None:
+    """Render the read-only cached Gravitas diagnostics, when available."""
+    if not isinstance(gravitas, dict):
+        return
+    assessment = gravitas.get("assessment")
+    if not isinstance(assessment, dict):
+        assessment = {}
+    facts = assessment.get("facts")
+    if not isinstance(facts, list):
+        facts = []
+    unassessed = assessment.get("unassessed")
+    if not isinstance(unassessed, list):
+        unassessed = []
+    ack = assessment.get("applied_ack")
+    if not isinstance(ack, dict):
+        ack = {}
+    age_value = gravitas.get("snapshot_age_seconds")
+    age = _fmt_secs(age_value if isinstance(age_value, (int, float)) else None)
+    validity = "有效" if gravitas.get("snapshot_valid") else "过期或缺失"
+    print(
+        f"  Gravitas：{gravitas.get('mode', 'unknown')}"
+        f"（配置 {gravitas.get('configured_mode', 'unknown')}，"
+        f"策略快照 {validity}，年龄 {age}）"
+    )
+    print(
+        f"  评估：{len(facts)} 条事实，{len(unassessed)} 项未评估；"
+        f"应用回执 {ack.get('state', 'unknown')}"
+    )
+
+
 def _cmd_status(args: argparse.Namespace) -> int:
     data = process.status()
     if args.json:
@@ -243,6 +273,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
                     print(f"  资源 {name}：排队 {s['waiting']} 个"
                           f"（持有者 {s.get('holder') or '—'}）")
             _print_usage(data.get("usage"))
+            _print_gravitas_status(data.get("gravitas"))
         else:
             print("Stella 未在运行。")
         if data["recent_log"]:

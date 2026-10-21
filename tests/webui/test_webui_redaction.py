@@ -35,6 +35,10 @@ def _fake_collect() -> dict:
         "capabilities": None,
         "skills": None,
         "runtime": None,
+        "gravitas": {
+            "mode": "shadow",
+            "assessment": {"state": "partial", "facts": [], "unassessed": []},
+        },
     }
 
 
@@ -79,6 +83,7 @@ def test_status_response_leaks_no_credentials(isolated_home, monkeypatch):
     # 响应透传了 v1 payload 的既有形状
     assert data["pid"] == 1234
     assert data["allowed_group_count"] == 2
+    assert data["gravitas"]["assessment"]["state"] == "partial"
 
 
 def test_unauthenticated_status_is_401(client: TestClient):

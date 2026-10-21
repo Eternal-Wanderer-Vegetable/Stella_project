@@ -175,6 +175,12 @@ def set_gravitas_status_provider(provider) -> None:
 
 
 def _gravitas_status() -> dict | None:
+    """Read the injected cached DTO; never tick, probe, or evaluate policy here.
+
+    ``gravitas_bootstrap`` installs ``GravitasRuntime.status_snapshot``. Keeping
+    this call on that read-only provider makes both the local status route and
+    authenticated WebUI diagnostics safe to poll.
+    """
     provider = _GRAVITAS_STATUS_PROVIDER
     if provider is None:
         return None
