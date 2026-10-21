@@ -69,7 +69,7 @@ def private_env(tmp_path, monkeypatch):
         def __init__(self):
             self.calls = []
 
-        async def send(self, target, message, *, bot_handle=None):
+        async def send(self, target, message, *, bot_handle=None, deadline=None):
             self.calls.append((target, message, bot_handle))
             return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("777",))
 

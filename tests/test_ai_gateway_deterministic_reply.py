@@ -72,7 +72,11 @@ async def test_handle_chat_sends_deterministic_reply_once(
     ctx.llm_call_count = 1
     ctx.delivery_draft = delivery_draft_from_context(ctx)
 
-    gateway._run_turn_via_engine = AsyncMock(return_value=ctx)
+    async def return_ctx_with_ingress_deadline(_session_key, ingress_ctx):
+        ctx.turn_deadline = ingress_ctx.turn_deadline
+        return ctx
+
+    gateway._run_turn_via_engine = AsyncMock(side_effect=return_ctx_with_ingress_deadline)
     monkeypatch.setattr(
         gateway,
         "get_consolidator",
@@ -100,8 +104,9 @@ async def test_handle_chat_sends_deterministic_reply_once(
         def __init__(self):
             self.calls = []
 
-        async def send(self, target, message, *, bot_handle=None):
+        async def send(self, target, message, *, bot_handle=None, deadline=None):
             self.calls.append((target, message, bot_handle))
+            self.deadline = deadline
             return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("777",))
 
     outbound = FakeOutboundService()
@@ -127,6 +132,7 @@ async def test_handle_chat_sends_deterministic_reply_once(
     assert ingress_ctx.user_ref.raw_user_id == "111"
     assert ingress_ctx.scene_ref.kind == "group"
     assert ingress_ctx.connection_id == "legacy-qq:9"
+    assert outbound.deadline is ingress_ctx.turn_deadline
     assert len(outbound.calls) == 1
     target, message, bot_handle = outbound.calls[0]
     assert target.bot.self_id == "9"

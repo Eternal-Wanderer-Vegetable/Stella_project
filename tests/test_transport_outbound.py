@@ -171,6 +171,63 @@ async def test_send_splits_to_capability_and_stops_after_unknown_without_retry()
 
 
 @pytest.mark.asyncio
+async def test_send_deadline_expires_before_first_physical_part():
+    from gravitas.clock import system_control_clock
+    from gravitas.contracts import Deadline
+
+    exporter = _FakeExporter((AdapterSendResult(DeliveryStatus.ACCEPTED),))
+    service = _service(
+        exporter,
+        AdapterCapabilities("fake", "test", group=True, max_text_length=3),
+    )
+    clock = system_control_clock()
+    deadline = Deadline(clock.now() - 1, clock.clock_id)
+
+    result = await service.send(
+        _target(), OutboundMessage.text("abcdef"), bot_handle=_Bot(),
+        deadline=deadline,
+    )
+
+    assert result.status is DeliveryStatus.EXPIRED
+    assert result.error_code == "turn_deadline"
+    assert exporter.calls == []
+
+
+@pytest.mark.asyncio
+async def test_send_deadline_between_physical_parts_returns_partial(monkeypatch):
+    from gravitas import deadlines as deadline_helpers
+    from gravitas.contracts import Deadline
+
+    clock_value = {"now": 0.0}
+    clock = SimpleNamespace(now=lambda: clock_value["now"], clock_id="test-clock")
+    monkeypatch.setattr(deadline_helpers, "system_control_clock", lambda: clock)
+
+    class ExpiringExporter:
+        def __init__(self):
+            self.calls = []
+
+        async def send(self, target, message, *, bot_handle, capabilities, encoded_target):
+            self.calls.append(message)
+            clock_value["now"] = 11.0
+            return AdapterSendResult(DeliveryStatus.ACCEPTED, ("physical-1",))
+
+    exporter = ExpiringExporter()
+    service = _service(
+        exporter,
+        AdapterCapabilities("fake", "test", group=True, max_text_length=3),
+    )
+
+    result = await service.send(
+        _target(), OutboundMessage.text("abcdef"), bot_handle=_Bot(),
+        deadline=Deadline(10.0, "test-clock"),
+    )
+
+    assert result.status is DeliveryStatus.PARTIAL
+    assert result.error_code == "turn_deadline"
+    assert len(exporter.calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_send_uses_media_fallback_when_capability_is_absent():
     exporter = _FakeExporter((AdapterSendResult(DeliveryStatus.ACCEPTED),))
     service = _service(

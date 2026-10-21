@@ -1766,6 +1766,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 _delivery_target_for_event(normalized, event),
                 OutboundMessage(tuple(segments)),
                 bot_handle=bot,
+                deadline=getattr(ctx, "turn_deadline", None),
             )
 
         ack_receipts = []
@@ -2336,6 +2337,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 _delivery_target_for_event(normalized, event),
                 OutboundMessage.text(line),
                 bot_handle=bot,
+                deadline=getattr(ctx, "turn_deadline", None),
             )
 
         ack_receipts = []
@@ -4322,6 +4324,7 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 ))
                 return await get_outbound_service().send(
                     _delivery_target_for_context(ctx), message, bot_handle=bot,
+                    deadline=getattr(ctx, "turn_deadline", None),
                 )
 
             delivery_target = str(target.user_id)
@@ -4895,6 +4898,7 @@ async def _proactive_speak_impl(
                 _delivery_target_for_context(ctx),
                 OutboundMessage.text(seg_line),
                 bot_handle=bot,
+                deadline=getattr(ctx, "turn_deadline", None),
             )
 
         try:

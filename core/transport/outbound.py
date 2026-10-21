@@ -13,8 +13,11 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import parse_qsl, urlsplit
+
+if TYPE_CHECKING:
+    from gravitas.contracts import Deadline
 
 from core.transport.capabilities import (
     AdapterCapabilities,
@@ -455,6 +458,7 @@ class OutboundService:
         *,
         bot_handle: Any = None,
         instance_capabilities: AdapterCapabilities | None = None,
+        deadline: "Deadline | None" = None,
     ) -> DeliveryResult:
         if target.is_expired():
             return DeliveryResult(target, DeliveryStatus.EXPIRED, error_code="send_window_expired")
@@ -503,7 +507,22 @@ class OutboundService:
         physical_messages = split_outbound_message(projected, capabilities.max_text_length)
         parts: list[OutboundPartResult] = []
         message_ids: list[str] = []
+        deadline_error = ""
         for index, part in enumerate(physical_messages):
+            if deadline is not None:
+                from gravitas.deadlines import raise_if_expired
+                from gravitas.errors import DeadlineExceeded
+
+                try:
+                    raise_if_expired(deadline, phase="send.physical")
+                except DeadlineExceeded:
+                    if not parts:
+                        return DeliveryResult(
+                            target, DeliveryStatus.EXPIRED,
+                            error_code="turn_deadline",
+                        )
+                    deadline_error = "turn_deadline"
+                    break
             try:
                 result = await binding.exporter.send(
                     target, part, bot_handle=bot, capabilities=capabilities,
@@ -523,13 +542,19 @@ class OutboundService:
             if result.status is not DeliveryStatus.ACCEPTED:
                 break
         statuses = [part.status for part in parts]
-        if statuses and all(status is DeliveryStatus.ACCEPTED for status in statuses):
+        if (
+            statuses
+            and len(parts) == len(physical_messages)
+            and all(status is DeliveryStatus.ACCEPTED for status in statuses)
+        ):
             status = DeliveryStatus.ACCEPTED
         elif any(status is DeliveryStatus.ACCEPTED for status in statuses):
             status = DeliveryStatus.PARTIAL
         else:
             status = statuses[-1] if statuses else DeliveryStatus.FAILED
-        error_code = next((part.error_code for part in reversed(parts) if part.error_code), "")
+        error_code = deadline_error or next(
+            (part.error_code for part in reversed(parts) if part.error_code), ""
+        )
         return DeliveryResult(target, status, tuple(message_ids), tuple(parts), error_code)
 
 
