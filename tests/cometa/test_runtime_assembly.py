@@ -71,7 +71,7 @@ class TestAssembly:
                 ack = runtime.store.notification_of_dedupe(
                     receipt.task_id, f"ack:{receipt.task_id}"
                 )
-                if ack.state is not NotificationState.PENDING:
+                if ack.state is NotificationState.SERVER_EMITTED:
                     break
                 await asyncio.sleep(0.05)
             # WebChat server stream 已发出响应；不声称平台消息已送达。
