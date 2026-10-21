@@ -32,7 +32,7 @@ from nonebot import logger
 
 from memory.timeutil import log_sqlite_error, utc_now
 
-SOCIAL_SCHEMA_VERSION = 4
+SOCIAL_SCHEMA_VERSION = 5
 
 # schema 2（修复计划 §6.3）：social_deliveries 追加规范会话身份与群学习
 # 资格列。保留 bot_id/platform/trace_id/turn_id/part_index 原状；旧行以
@@ -54,6 +54,10 @@ _V3_DELIVERY_COLUMNS: tuple[str, ...] = (
 _V4_SCOPE_COLUMNS: tuple[tuple[str, str], ...] = tuple(
     (table, "connection_id TEXT NOT NULL DEFAULT ''")
     for table in ("social_events", "social_deliveries", "social_effects", "social_assets")
+)
+
+_V5_DELIVERY_COLUMNS: tuple[str, ...] = (
+    "platform_message_ids_json TEXT NOT NULL DEFAULT '[]'",
 )
 
 # ---- 表清单（单事务创建；字段与索引的最小集，见计划 §6.2 表格） ----
@@ -621,6 +625,25 @@ def _migrate_social_v4(conn: sqlite3.Connection) -> None:
         conn.execute(f"DROP INDEX IF EXISTS {name}")
 
 
+def _migrate_social_v5(conn: sqlite3.Connection) -> None:
+    """Preserve every platform ID returned for one physical delivery part."""
+    existing = {str(row[1]) for row in conn.execute("PRAGMA table_info(social_deliveries)")}
+    for column_def in _V5_DELIVERY_COLUMNS:
+        column = column_def.split()[0]
+        if column not in existing:
+            conn.execute(f"ALTER TABLE social_deliveries ADD COLUMN {column_def}")
+    rows = conn.execute(
+        "SELECT delivery_id, platform_message_id FROM social_deliveries "
+        "WHERE platform_message_id IS NOT NULL AND platform_message_id != '' "
+        "AND platform_message_ids_json = '[]'"
+    ).fetchall()
+    for delivery_id, platform_message_id in rows:
+        conn.execute(
+            "UPDATE social_deliveries SET platform_message_ids_json = ? WHERE delivery_id = ?",
+            (json.dumps([str(platform_message_id)], ensure_ascii=False), str(delivery_id)),
+        )
+
+
 def ensure_social_schema(
     db_path: Path | str | None = None, *, backup: bool = True
 ) -> dict[str, int]:
@@ -653,6 +676,8 @@ def ensure_social_schema(
         _migrate_social_v3(conn)
         # 组件内增量迁移（v3→v4）：connection-scoped social identity.
         _migrate_social_v4(conn)
+        # 组件内增量迁移（v4→v5）：complete platform receipt IDs per part.
+        _migrate_social_v5(conn)
         for ddl in _INDEXES:
             conn.execute(ddl)
         # 旧库导入只在这台库有旧表达系统数据时才有行可导

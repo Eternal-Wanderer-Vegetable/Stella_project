@@ -63,11 +63,21 @@ def private_env(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(gateway, "budget_blocked", lambda role: False)
     monkeypatch.setattr(gateway, "_record_bot_lines", AsyncMock())
-    send = AsyncMock(return_value={"message_id": 777})
-    monkeypatch.setattr(gateway.private_chat_handler, "send", send)
+    from core.transport.outbound import DeliveryResult, DeliveryStatus
+
+    class FakeOutboundService:
+        def __init__(self):
+            self.calls = []
+
+        async def send(self, target, message, *, bot_handle=None):
+            self.calls.append((target, message, bot_handle))
+            return DeliveryResult(target, DeliveryStatus.ACCEPTED, ("777",))
+
+    outbound = FakeOutboundService()
+    monkeypatch.setattr(gateway, "get_outbound_service", lambda: outbound)
     finish = AsyncMock()
     monkeypatch.setattr(gateway.private_chat_handler, "finish", finish)
-    return SimpleNamespace(db=db, send=send, finish=finish)
+    return SimpleNamespace(db=db, outbound=outbound, finish=finish)
 
 
 def _rows(db, sql, params=()):
@@ -222,7 +232,12 @@ async def test_private_chat_end_to_end_once_recorded(private_env, monkeypatch):
     assert ingress_ctx.scene_ref.kind == "private"
     assert ingress_ctx.connection_id == "legacy-qq:10000"
     # 回复已发送
-    assert env.send.await_count == 1
+    assert len(env.outbound.calls) == 1
+    target, message, bot_handle = env.outbound.calls[0]
+    assert target.bot.self_id == "10000"
+    assert target.scene.kind == "private"
+    assert message.segments[0].text == "在的"
+    assert bot_handle.self_id == "10000"
     # BOT_SELF 按确认送达片段落库（存储键参数）
     assert gateway._record_bot_lines.await_args.args[1] == -2
 
@@ -261,7 +276,7 @@ async def test_plugin_handled_short_circuits_before_record(private_env, monkeypa
     event = _private_event()
     gateway._plugin_handled_msgs[gateway._event_key(event)] = __import__("time").time()
     await gateway.handle_private_chat(Mock(self_id="10000"), event)
-    assert env.send.await_count == 0
+    assert env.outbound.calls == []
     # 表都还没建（record_message 未执行）——插件短路径发生在任何落库之前
     tables = _rows(env.db, "SELECT name FROM sqlite_master WHERE type='table' AND name='group_messages'")
     assert tables == []

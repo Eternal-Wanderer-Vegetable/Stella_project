@@ -32,7 +32,7 @@ from datetime import datetime, timezone
 DELIVERY_PENDING = "pending"  # 已提交平台、未拿到结果（短暂中间态，落库前会定型）
 DELIVERY_ACKNOWLEDGED = "acknowledged"  # 平台接口已接受（不保证群成员已读）
 DELIVERY_FAILED = "failed"  # 平台明确拒绝/异常，未发出
-DELIVERY_UNKNOWN = "unknown"  # 超时/发送成功但本地未确认——不承诺不重发，只记录
+DELIVERY_UNKNOWN = "unknown"  # 超时/发送成功但本地未确认——不自动重发，只记录
 
 # ---- 多段逻辑回复的聚合状态 ----
 AGGREGATE_COMPLETE = "complete"  # 全部片段 acknowledged
@@ -169,8 +169,8 @@ class MessageEvidence:
 class DeliveryReceipt:
     """一个发送片段的投递事实（social_deliveries 行的内存形态）。
 
-    ``platform_message_id`` 只在平台回执里真实拿到时才有值；它是后续
-    「引用归因」的强证据锚点（用户回复这条 ID → direct attribution）。
+    ``platform_message_ids`` 保留平台针对一个物理片段返回的全部不透明 ID；
+    ``platform_message_id`` 仍是兼容首 ID，用于旧消费者和引用归因强证据。
 
     规范会话身份（修复计划 §6.3，全部 optional 默认兼容）：群回执由
     ``scope`` 承载身份；私聊/WebChat 等无群 scope 的回执在 scope=None 时
@@ -184,6 +184,7 @@ class DeliveryReceipt:
     status: str = DELIVERY_PENDING
     epoch: int = 0
     platform_message_id: str | None = None
+    platform_message_ids: tuple[str, ...] = ()
     acknowledged_at_utc: str = ""
     text: str = ""
     text_hash: str = ""
@@ -204,6 +205,18 @@ class DeliveryReceipt:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "text_hash", self.text_hash or content_hash(self.text))
+        raw_ids = self.platform_message_ids
+        if isinstance(raw_ids, str):
+            raw_ids = (raw_ids,)
+        ids = [
+            str(value) for value in raw_ids
+            if value is not None and not isinstance(value, bool) and str(value)
+        ]
+        if self.platform_message_id and self.platform_message_id not in ids:
+            ids.insert(0, str(self.platform_message_id))
+        if ids and not self.platform_message_id:
+            object.__setattr__(self, "platform_message_id", ids[0])
+        object.__setattr__(self, "platform_message_ids", tuple(dict.fromkeys(ids)))
 
     @property
     def delivered(self) -> bool:

@@ -108,11 +108,12 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
             conn.execute(
                 "INSERT OR IGNORE INTO social_deliveries (delivery_id, turn_id, part_index, "
                 "trace_id, epoch, platform, bot_id, group_id, connection_id, status, platform_message_id, "
+                "platform_message_ids_json, "
                 "acknowledged_at_utc, text, text_hash, delivery_plan_id, "
                 "delivery_plan_digest, decision_digest, created_at_utc, updated_at_utc, "
                 "conversation_key, conversation_kind, peer_id, storage_session_id, "
                 "learning_eligible) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     uuid.uuid4().hex, receipt.turn_id, int(receipt.part_index),
                     receipt.trace_id, int(receipt.epoch),
@@ -121,6 +122,7 @@ def record_delivery(receipt: DeliveryReceipt) -> bool:
                     scope.group_id if scope else "",
                     scope.connection_id if scope else "",
                     receipt.status, receipt.platform_message_id,
+                    json.dumps(list(receipt.platform_message_ids), ensure_ascii=False),
                     receipt.acknowledged_at_utc or None,
                     receipt.text, receipt.text_hash,
                     receipt.delivery_plan_id, receipt.delivery_plan_digest,
@@ -162,7 +164,7 @@ def deliveries_for_turn(
         conn = _connect()
         try:
             sql = (
-                "SELECT part_index, status, platform_message_id, acknowledged_at_utc, "
+                "SELECT part_index, status, platform_message_id, platform_message_ids_json, acknowledged_at_utc, "
                 "text, text_hash, delivery_plan_id, delivery_plan_digest, decision_digest "
                 "FROM social_deliveries WHERE turn_id = ?"
             )
@@ -184,9 +186,10 @@ def deliveries_for_turn(
             return [
                 {
                     "part_index": r[0], "status": r[1], "platform_message_id": r[2],
-                    "acknowledged_at_utc": r[3], "text": r[4], "text_hash": r[5],
-                    "delivery_plan_id": r[6], "delivery_plan_digest": r[7],
-                    "decision_digest": r[8],
+                    "platform_message_ids": _parse_message_ids(r[3], r[2]),
+                    "acknowledged_at_utc": r[4], "text": r[5], "text_hash": r[6],
+                    "delivery_plan_id": r[7], "delivery_plan_digest": r[8],
+                    "decision_digest": r[9],
                 }
                 for r in rows
             ]
@@ -215,10 +218,15 @@ def find_delivery_by_platform_id(
         conn = _connect()
         try:
             sql = (
-                "SELECT turn_id, part_index, platform, bot_id, group_id, connection_id, status, text "
-                "FROM social_deliveries WHERE platform_message_id = ?"
+                "SELECT turn_id, part_index, platform, bot_id, group_id, connection_id, status, text, "
+                "platform_message_id, platform_message_ids_json "
+                "FROM social_deliveries WHERE (platform_message_id = ? OR "
+                "instr(platform_message_ids_json, ?) > 0)"
             )
-            params: list[Any] = [str(platform_message_id)]
+            params: list[Any] = [
+                str(platform_message_id),
+                json.dumps(str(platform_message_id), ensure_ascii=False),
+            ]
             if scope is not None:
                 sql += (
                     " AND platform = ? AND bot_id = ? AND group_id = ? "
@@ -235,6 +243,8 @@ def find_delivery_by_platform_id(
                 "turn_id": row[0], "part_index": row[1], "platform": row[2],
                 "bot_id": row[3], "group_id": row[4], "connection_id": row[5],
                 "status": row[6], "text": row[7],
+                "platform_message_id": row[8],
+                "platform_message_ids": _parse_message_ids(row[9], row[8]),
             }
         finally:
             conn.close()
@@ -333,11 +343,26 @@ def events_since(
 
 def acked_bot_message_ids(scope: ConversationScope, turn_id: str) -> list[str]:
     """某轮已确认送达片段的平台消息 ID（引用归因的强证据集合）。"""
-    return [
-        str(d["platform_message_id"])
-        for d in deliveries_for_turn(turn_id)
-        if d["status"] == DELIVERY_ACKNOWLEDGED and d["platform_message_id"]
-    ]
+    ids: list[str] = []
+    for delivery in deliveries_for_turn(turn_id):
+        if delivery["status"] != DELIVERY_ACKNOWLEDGED:
+            continue
+        for message_id in delivery.get("platform_message_ids", ()):
+            if message_id not in ids:
+                ids.append(message_id)
+    return ids
+
+
+def _parse_message_ids(value: str, fallback: str | None = None) -> list[str]:
+    try:
+        parsed = json.loads(value or "[]")
+    except (TypeError, json.JSONDecodeError):
+        parsed = []
+    values = parsed if isinstance(parsed, list) else []
+    ids = [str(item) for item in values if item is not None and not isinstance(item, bool) and str(item)]
+    if fallback and fallback not in ids:
+        ids.insert(0, str(fallback))
+    return list(dict.fromkeys(ids))
 
 def find_event_id(
     scope: "ConversationScope",

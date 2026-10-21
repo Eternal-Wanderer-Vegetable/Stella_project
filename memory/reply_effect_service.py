@@ -325,11 +325,12 @@ def resolve_effect(effect_id: str, *, evaluation_version: str = RULE_VERSION) ->
                 follow_ups = follow_ups[:MAX_FOLLOW_UP_EVENTS]
                 capped = True
         acked_ids = {
-            str(d["platform_message_id"])
+            str(message_id)
             for d in social_store.deliveries_for_turn(
                 row["turn_id"], platform=str(row["platform"] or ""),
                 group_id=str(row["group_id"] or ""), learning_eligible=True)
-            if d["status"] == "acknowledged" and d["platform_message_id"]
+            if d["status"] == "acknowledged"
+            for message_id in d.get("platform_message_ids", ())
         }
         attributed = attribute_events(
             follow_ups, acked_platform_ids=acked_ids, target_user_id=row["target_user_id"]

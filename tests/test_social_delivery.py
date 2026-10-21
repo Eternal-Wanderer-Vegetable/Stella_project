@@ -31,6 +31,13 @@ from core.social.delivery import (
     delivery_draft_from_context,
     seal_delivery_plan,
 )
+from core.transport import (
+    BotRef,
+    DeliveryResult,
+    DeliveryStatus,
+    DeliveryTarget,
+    SceneRef,
+)
 from memory import social_store
 
 
@@ -249,8 +256,42 @@ class TestCoercePlatformMessageId:
 
     def test_none_and_garbage(self):
         assert coerce_platform_message_id(None) is None
-        assert coerce_platform_message_id("ok") is None
+        assert coerce_platform_message_id("ok") == "ok"
+        assert coerce_platform_message_id("007") == "007"
         assert coerce_platform_message_id(True) is None
+
+
+class TestOpaqueDeliveryIds:
+    async def test_all_ids_are_persisted_and_indexed(self, social_db):
+        target = DeliveryTarget(
+            BotRef("legacy-qq:10001", "onebot-v11", "qq", "10001"),
+            SceneRef("group", "123"),
+        )
+
+        async def send(_line, _index):
+            return DeliveryResult(
+                target,
+                DeliveryStatus.ACCEPTED,
+                message_ids=("opaque:α", "007"),
+            )
+
+        receipts = await deliver_lines(
+            _sealed_plan(["delivered"], "multi-id-trace", "multi-id-turn"),
+            scope=SCOPE,
+            trace_id="multi-id-trace",
+            turn_id="multi-id-turn",
+            send_one=send,
+        )
+
+        assert receipts[0].status == "acknowledged"
+        assert receipts[0].platform_message_id == "opaque:α"
+        assert receipts[0].platform_message_ids == ("opaque:α", "007")
+        assert social_store.deliveries_for_turn("multi-id-turn")[0]["platform_message_ids"] == [
+            "opaque:α", "007"
+        ]
+        assert social_store.find_delivery_by_platform_id("opaque:α", scope=SCOPE)["turn_id"] == "multi-id-turn"
+        assert social_store.find_delivery_by_platform_id("007", scope=SCOPE)["turn_id"] == "multi-id-turn"
+        assert social_store.acked_bot_message_ids(SCOPE, "multi-id-turn") == ["opaque:α", "007"]
 
 
 class TestStrictScopeVersions:

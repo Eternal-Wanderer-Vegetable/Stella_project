@@ -127,7 +127,18 @@ from core.social.delivery import (
     seal_delivery_plan,
 )
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
-from core.transport import AdmissionPolicy, UnsupportedEvent, normalize_onebot11
+from core.transport import (
+    AdmissionPolicy,
+    BotRef,
+    DeliveryTarget,
+    MediaSource,
+    OutboundMessage,
+    OutboundSegment,
+    SceneRef,
+    UnsupportedEvent,
+    get_outbound_service,
+    normalize_onebot11,
+)
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
 from memory import addressing, capture_gate, expression_learning, social_store
@@ -206,6 +217,25 @@ _group_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 # 不能复用 _group_locks：私聊没有 group_id（0 占位），且绝不因「同一个用户
 # 在多个群」而串行锁住所有会话——锁只锁同一个会话。
 _private_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+
+def _delivery_target_for_context(ctx: ChatContext, event: Any = None) -> DeliveryTarget:
+    """Build an outbound route only from trusted context identities."""
+    bot_ref = getattr(ctx, "bot_ref", None)
+    scene_ref = getattr(ctx, "scene_ref", None)
+    if not isinstance(bot_ref, BotRef) or not isinstance(scene_ref, SceneRef):
+        raise ValueError("outbound target requires trusted BotRef and SceneRef")
+    return DeliveryTarget(bot=bot_ref, scene=scene_ref, event_handle=event)
+
+
+def _delivery_target_for_event(normalized, event: Any = None) -> DeliveryTarget:
+    if isinstance(normalized, UnsupportedEvent):
+        raise ValueError("unsupported events cannot provide outbound targets")
+    return DeliveryTarget(
+        bot=normalized.bot_ref,
+        scene=normalized.scene_ref,
+        event_handle=event,
+    )
 
 
 def _event_key(event: MessageEvent) -> str:
@@ -1707,12 +1737,16 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
 
         scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
-        async def _send_reply_segment(line: str, i: int) -> str | None:
-            if i == 0:
-                msg = Message([MessageSegment.reply(event.message_id), MessageSegment.text(line)])
-            else:
-                msg = Message(line)
-            return await chat_handler.send(msg)
+        async def _send_reply_segment(line: str, i: int):
+            segments = []
+            if i == 0 and normalized.platform_message_id:
+                segments.append(OutboundSegment.reply(normalized.platform_message_id))
+            segments.append(OutboundSegment.text_segment(line))
+            return await get_outbound_service().send(
+                _delivery_target_for_event(normalized, event),
+                OutboundMessage(tuple(segments)),
+                bot_handle=bot,
+            )
 
         ack_receipts = []
 
@@ -2260,10 +2294,14 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         # 修复计划 §6.3：携带 ref 的明确身份 → 会话中立回执可查（不进群学习）
         scope = None
 
-        async def _send_reply_segment(line: str, i: int) -> str | None:
+        async def _send_reply_segment(line: str, i: int):
             # 私聊纯文本分条；reply 引用对私聊的兼容性未经真实 adapter 验证
             # （计划 §12 假设 4，M5 核验），先不构造引用段。
-            return await private_chat_handler.send(Message(line))
+            return await get_outbound_service().send(
+                _delivery_target_for_event(normalized, event),
+                OutboundMessage.text(line),
+                bot_handle=bot,
+            )
 
         ack_receipts = []
 
@@ -2823,13 +2861,33 @@ async def handle_capability_query(bot: Bot, event: GroupMessageEvent):
     # 只把首行记进短期记忆：整段是清单，下一轮整合看到几十行工具名只会把它当群聊
     # 语境（_record_bot_lines 的用途是补「我刚说过什么」，不是存档我发过的正文）。
     head = next((ln for ln in reply.splitlines() if ln.strip()), "")
-    await _record_bot_lines(int(bot.self_id), event.group_id, [head])
-
     image = await _capability_image(reply)
-    body = MessageSegment.image(image) if image else MessageSegment.text(reply)
-    await capability_handler.finish(
-        Message([MessageSegment.reply(event.message_id), body])
+    normalized = _normalized_onebot_event(event)
+    if isinstance(normalized, UnsupportedEvent):
+        return
+    content = (
+        OutboundSegment.image(
+            MediaSource("image", str(image), name=image.name, fallback_text=reply)
+        )
+        if image
+        else OutboundSegment.text_segment(reply)
     )
+    segments = []
+    if normalized.platform_message_id:
+        segments.append(OutboundSegment.reply(normalized.platform_message_id))
+    segments.append(content)
+    result = await get_outbound_service().send(
+        _delivery_target_for_event(normalized, event),
+        OutboundMessage(tuple(segments)),
+        bot_handle=bot,
+    )
+    if result.status.value == "accepted":
+        await _record_bot_lines(int(bot.self_id), event.group_id, [head])
+    else:
+        logger.warning(
+            f"[Capability] send result={result.status.value} code={result.error_code or '-'}"
+        )
+    await capability_handler.finish()
 
 
 # ============================================================
@@ -4087,6 +4145,15 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
                 # （多人身份修复计划 §6.1/T18）。
                 conversation_kind="group",
                 conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+                bot_ref=BotRef(
+                    f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id)
+                ),
+                scene_ref=SceneRef("group", str(group_id)),
+                connection_id=f"legacy-qq:{bot.self_id}",
+                adapter_name="onebot-v11",
+                platform_scope="qq",
+                scene_kind="group",
+                scene_id=str(group_id),
                 bot_id=str(bot.self_id),
                 peer_id=str(group_id),
                 storage_session_id=group_id,
@@ -4183,12 +4250,14 @@ async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
             # 后发送，发送失败时配额/发言占用/学习全被白白消耗。
             scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
-            async def _send_at_segment(seg_line: str, _i: int) -> str | None:
-                message = Message([
-                    MessageSegment.at(target.user_id),
-                    MessageSegment.text(" " + seg_line),
-                ])
-                return await bot.send_group_msg(group_id=group_id, message=message)
+            async def _send_at_segment(seg_line: str, _i: int):
+                message = OutboundMessage((
+                    OutboundSegment.at(str(target.user_id), target.nickname),
+                    OutboundSegment.text_segment(" " + seg_line),
+                ))
+                return await get_outbound_service().send(
+                    _delivery_target_for_context(ctx), message, bot_handle=bot,
+                )
 
             delivery_target = str(target.user_id)
             try:
@@ -4615,6 +4684,15 @@ async def _proactive_speak_impl(
             trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
             conversation_kind="group",
             conversation_key=f"qq:{bot.self_id}:group:{group_id}",
+            bot_ref=BotRef(
+                f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id)
+            ),
+            scene_ref=SceneRef("group", str(group_id)),
+            connection_id=f"legacy-qq:{bot.self_id}",
+            adapter_name="onebot-v11",
+            platform_scope="qq",
+            scene_kind="group",
+            scene_id=str(group_id),
             bot_id=str(bot.self_id),
             peer_id=str(group_id),
             storage_session_id=group_id,
@@ -4707,8 +4785,12 @@ async def _proactive_speak_impl(
         # 发送，发送失败已被记成「说过」并进入学习——正是计划 §2 优先修复项。
         scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
 
-        async def _send_proactive_segment(seg_line: str, _i: int) -> str | None:
-            return await bot.send_group_msg(group_id=group_id, message=seg_line)
+        async def _send_proactive_segment(seg_line: str, _i: int):
+            return await get_outbound_service().send(
+                _delivery_target_for_context(ctx),
+                OutboundMessage.text(seg_line),
+                bot_handle=bot,
+            )
 
         try:
             delivery_plan = _seal_ctx_delivery_plan(
