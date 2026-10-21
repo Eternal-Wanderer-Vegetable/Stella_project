@@ -5,15 +5,18 @@
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
 **Active Feature:** GRAVITAS-IMPL，执行 G00–G09 并按工作包分阶段提交。工作分支 `codex/gravitas-implementation`，起点 `origin/main@c662746`；平台 live、干净 VM 和发布验收独立记录，未完成前保持 NOT READY。
 **Inherited Feature:** XPLAT-IMPL 的代码已合入 PR #111；其平台 live、干净 VM 与发布缺口仍按原证据保留，不属于本轮 Gravitas scope。
-**Scope:** 按[Gravitas 工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)和[机器清单](docs/plans/2026-10-21-gravitas-inventory.json)执行 G00–G09。当前只实施 G00；后续包逐一启动，提交需绑定 HEAD、impact、回归和回滚边界。
+**Scope:** 按[Gravitas 工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)执行 G00–G09。G00、G01 已完成并分阶段提交；当前进入 G02，提交需绑定 HEAD、impact、回归和回滚边界。
 
 ## 2026-10-21 — Gravitas implementation
 
 - Branch/base：`codex/gravitas-implementation` from `origin/main@c662746`，该基线包含已合并的 PR #111。
-- Scope：G00–G09；当前包 G00，包括默认 provider 准入、scheduler waiter 取消安全、db_cleaner 清理水位保护。每包分阶段提交。
-- Baseline evidence：研究阶段定向测试 83 passed / 2 warnings、清理器测试 16 passed；三个隔离探针确认对应缺口。实现前 GitNexus `acquire` 为 CRITICAL（13 direct callers、7 flows、12 modules、1 unresolved receiver，下界）；`trim_group_messages` 为 LOW（13 impacted）；默认 provider 的图结果为 LOW，但入口经源码补证。
-- Current checks：目标 HEAD 的 GitNexus 索引已刷新至 `c662746`；文档检查 119 files / 1246 links / 577 anchors / 0 errors；规划验证 10 packages / 73 sources / 50 entries / 16 scenarios / 368 evidence hashes；plan artifact 的 all/compare 检查均为 5 files / 10 symbols / LOW，无 partial/truncated。
-- Next：完成 G00 三项正式回归和独立修复提交，再推进 G01。没有真实模型、QQ/WebChat、干净 VM 或发布验收时，不标记整体 READY。
+- Scope：G00–G09；G00 三项正式回归与 G01 合同/严格配置/ControlClock 已完成。当前进入 G02 bounded facts 与 shadow 控制器。
+- Commits：G00 `709a4b4`（默认 provider gate）、`82f377d`（flow manifest）、`88de58c`（waiter cancellation）、`f03eb0f`（清理水位）；G01 `dbcbe41`（typed contracts/config/clock/admission/package）。
+- G00 evidence：隔离组合回归 78 passed；Ruff 和 message-flow check 通过。缺失、NULL、零、负数、非法文本与越界 checkpoint 的清理负例均已落入正式测试。
+- G01 evidence：定向合同、发布布局与 flow 回归 65 passed；Ruff、flow check、文档门禁通过（119 files / 1237 links / 577 anchors / 0 errors）。Python 3.10/3.11/3.12 导入通过；Standalone Python zip 与 OneClick Python staging 均含可导入 gravitas 包及配置样例。
+- GitNexus：G01 提交前 `scope=all` 为 12 files / 4 symbols / LOW / 0 affected processes；compare main 为 396 files / 108 symbols / 16 flows / CRITICAL，包含累计计划/证据与 G00 高风险调用路径，结果未 partial/truncated。索引已重建至 `dbcbe41`（100,745 nodes / 249,302 edges / 1,066 clusters / 821 flows）。
+- Blockers：没有已知代码阻塞；真实模型、平台灰度、跨进程 live、干净 VM 和发布仍单独验收，不能用本地测试代替。
+- Next：对 G02 控制器、状态快照、调度器和采集事实入口运行 exact upstream impact 后实施。没有真实模型、QQ/WebChat、干净 VM 或发布验收时，不标记整体 READY。
 
 ## 2026-10-21 — Gravitas engineering planning
 

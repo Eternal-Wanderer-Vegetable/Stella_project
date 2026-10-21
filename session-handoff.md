@@ -5,11 +5,13 @@
 用户要求新建分支并执行[工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)，阶段提交，完成后创建 PR。当前分支 `codex/gravitas-implementation` 基于合并 PR #111 后的 `main@c662746`；本轮范围登记为 GRAVITAS-IMPL G00–G09，严格一次推进一个工作包。
 
 - Files：方案、[机器工作包清单](docs/plans/2026-10-21-gravitas-inventory.json)、[GitNexus 研究与基线证据](docs/reports/evidence/gravitas-20261021/README.md)。
-- Current package：G00，分别关闭 Facade 默认 provider 绕过共享资源门、scheduler waiter 取消残留、db_cleaner 零/缺失/非法水位误删。正式回归随每个独立子提交落地。
-- GitNexus：索引刷新到 `c662746`。`acquire` CRITICAL：13 直接调用、7 条流程、12 模块，另有一接收方未解析；`trim_group_messages` LOW / 13 impacted；默认 provider LOW，但 caller graph 不完整，已用 QQ/WebChat 源码入口补证。编辑前源码影响已报告。
-- Verification baseline：规划验证器 10 packages / 73 sources / 50 entries / 16 scenarios / 368 hashes；文档检查 0 errors。隔离研究已有 83+16 定向通过和缺陷探针。后续所有运行均显式设置临时 STELLA_HOME。
+- Current package：G00、G01 已完成并分阶段提交；当前进入 G02，先完成精确 impact，再实施 bounded facts 与 shadow 控制器。
+- Commits：G00 `709a4b4`、`82f377d`、`88de58c`、`f03eb0f`；G01 `dbcbe41`。G00 组合回归 78 passed；G01 定向合同/发布/flow 回归 65 passed。
+- G01 verification：Ruff、文档门禁（119 files / 1237 local links / 577 anchors / 0 errors）和 flow manifest check 通过；Python 3.10/3.11/3.12 导入通过；Standalone Python zip 和 OneClick staging 的包内导入通过。
+- GitNexus：索引当前在 `dbcbe41`（100,745 nodes / 249,302 edges / 1,066 clusters / 821 flows）。G01 all 为 12 files / 4 symbols / LOW；compare main 累计 CRITICAL（396 files / 108 symbols / 16 flows），无 partial/truncated。
+- Blockers：没有已知代码阻塞；真实模型、QQ/WebChat 灰度、跨进程 live、干净 VM 与发布验收缺失时整体保持 NOT READY。所有 pytest/配置加载显式使用临时 `STELLA_HOME`。
 - Blockers：没有已知代码阻塞；真实模型、平台灰度、跨进程 live、干净 VM 和发布仍单独验收，不能用本地测试代替。
-- Next：完成 G00 正式负例和三个子提交；每个 package 开始时重绑 HEAD 并重跑 upstream impact。
+- Next：为 G02 的 controller/status/scheduler/capture source 运行 query/context/exact upstream impact，再开发并维持 shadow 无副作用合同。
 
 ## Previous Session — Gravitas planning
 
