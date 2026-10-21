@@ -11,6 +11,20 @@ interactive_queue = 16
 background_queue = 4
 max_pending_per_conversation = 1
 
+[pressure]
+window_seconds = 60.0
+max_samples_per_resource = 512
+max_active_scopes = 256
+event_ring_capacity = 1024
+enter_oldest_wait_seconds = 5.0
+enter_queue_depth = 8
+enter_consecutive_windows = 3
+recover_oldest_wait_seconds = 1.0
+recover_queue_depth = 2
+recover_stable_seconds = 15.0
+background_token_interval_seconds = 10.0
+normal_stable_seconds = 30.0
+
 [resources.local_inference]
 slots = ["CHAT", "MEMORY"]
 concurrency = 1

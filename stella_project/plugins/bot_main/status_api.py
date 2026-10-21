@@ -42,6 +42,7 @@ from config import (
 # 放这里比放 setup_status_api() 里早——即便路由因故未注册，uptime 基准也更接近真实启动点。
 _STARTED_AT = time.time()
 _STARTUP_HOOK_REGISTERED = False
+_GRAVITAS_STATUS_PROVIDER = None
 
 # importlib.metadata 查不到（未安装成包 / 源码直接运行）时的最终回退版本号。
 # 仅在「metadata 查不到、pyproject.toml 也读不到」时使用；正常情况下版本号
@@ -165,6 +166,25 @@ def _capture_gate() -> dict:
         return {}
 
 
+def set_gravitas_status_provider(provider) -> None:
+    """Inject a cached provider without making the WebUI import the bot host."""
+    global _GRAVITAS_STATUS_PROVIDER
+    if not callable(provider):
+        raise TypeError("Gravitas status provider must be callable")
+    _GRAVITAS_STATUS_PROVIDER = provider
+
+
+def _gravitas_status() -> dict | None:
+    provider = _GRAVITAS_STATUS_PROVIDER
+    if provider is None:
+        return None
+    try:
+        payload = provider()
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
 def build_payload(
     link: dict | None,
     sched: dict,
@@ -177,6 +197,7 @@ def build_payload(
     skills: dict | None = None,
     chat_engine: dict | None = None,
     memory_capture: dict | None = None,
+    gravitas: dict | None = None,
 ) -> dict:
     """组装状态响应。
 
@@ -222,6 +243,8 @@ def build_payload(
         # 操作员区分「采集不可用」与「存量积压未排空」——后者不是本段
         # 的事实，本段只回答「现在还收不收新消息」。
         payload["memory_capture"] = memory_capture
+    if gravitas is not None:
+        payload["gravitas"] = gravitas
     return payload
 
 
@@ -284,6 +307,7 @@ def collect_status() -> dict:
         skills=_skills(),
         chat_engine=_chat_engine(),
         memory_capture=_capture_gate(),
+        gravitas=_gravitas_status(),
     )
 
 

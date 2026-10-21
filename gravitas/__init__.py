@@ -10,7 +10,13 @@ from gravitas.clock import (
     PerformanceClock,
     SystemControlClock,
 )
-from gravitas.config import GravitasConfig, GravitasMode, load_config, parse_config
+from gravitas.config import (
+    GravitasConfig,
+    GravitasMode,
+    default_config,
+    load_config,
+    parse_config,
+)
 from gravitas.contracts import (
     AdmissionDecision,
     AppliedAck,
@@ -53,6 +59,7 @@ __all__ = [
     "SideEffectClass",
     "SystemControlClock",
     "WorkClass",
+    "default_config",
     "is_operation_supported",
     "load_config",
     "parse_config",

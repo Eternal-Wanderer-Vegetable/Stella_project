@@ -44,6 +44,22 @@ class LimitsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PressureConfig:
+    window_seconds: float
+    max_samples_per_resource: int
+    max_active_scopes: int
+    event_ring_capacity: int
+    enter_oldest_wait_seconds: float
+    enter_queue_depth: int
+    enter_consecutive_windows: int
+    recover_oldest_wait_seconds: float
+    recover_queue_depth: int
+    recover_stable_seconds: float
+    background_token_interval_seconds: float
+    normal_stable_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceGroupConfig:
     group_id: str
     slots: tuple[str, ...]
@@ -55,6 +71,7 @@ class GravitasConfig:
     schema_version: int
     controller: ControllerConfig
     limits: LimitsConfig
+    pressure: PressureConfig
     resources: tuple[ResourceGroupConfig, ...]
 
     def resource(self, group_id: str) -> ResourceGroupConfig | None:
@@ -89,7 +106,11 @@ def load_config(path: str | Path) -> GravitasConfig:
 def _parse_document(raw: object) -> GravitasConfig:
     if not isinstance(raw, dict):
         raise ConfigError("configuration root must be a table")
-    _keys(raw, {"schema_version", "controller", "limits", "resources"}, "root")
+    _keys(
+        raw,
+        {"schema_version", "controller", "limits", "pressure", "resources"},
+        "root",
+    )
     version = _integer(raw.get("schema_version"), "schema_version", minimum=1)
     if version != 1:
         raise ConfigError(f"unsupported schema_version: {version}")
@@ -130,9 +151,95 @@ def _parse_document(raw: object) -> GravitasConfig:
         ),
     )
 
+    pressure = _table(raw.get("pressure"), "pressure")
+    _keys(
+        pressure,
+        {
+            "window_seconds",
+            "max_samples_per_resource",
+            "max_active_scopes",
+            "event_ring_capacity",
+            "enter_oldest_wait_seconds",
+            "enter_queue_depth",
+            "enter_consecutive_windows",
+            "recover_oldest_wait_seconds",
+            "recover_queue_depth",
+            "recover_stable_seconds",
+            "background_token_interval_seconds",
+            "normal_stable_seconds",
+        },
+        "pressure",
+    )
+    pressure_config = PressureConfig(
+        window_seconds=_positive(pressure.get("window_seconds"), "pressure.window_seconds"),
+        max_samples_per_resource=_integer(
+            pressure.get("max_samples_per_resource"),
+            "pressure.max_samples_per_resource",
+            minimum=1,
+        ),
+        max_active_scopes=_integer(
+            pressure.get("max_active_scopes"), "pressure.max_active_scopes", minimum=1
+        ),
+        event_ring_capacity=_integer(
+            pressure.get("event_ring_capacity"),
+            "pressure.event_ring_capacity",
+            minimum=1,
+        ),
+        enter_oldest_wait_seconds=_positive(
+            pressure.get("enter_oldest_wait_seconds"),
+            "pressure.enter_oldest_wait_seconds",
+        ),
+        enter_queue_depth=_integer(
+            pressure.get("enter_queue_depth"), "pressure.enter_queue_depth", minimum=1
+        ),
+        enter_consecutive_windows=_integer(
+            pressure.get("enter_consecutive_windows"),
+            "pressure.enter_consecutive_windows",
+            minimum=1,
+        ),
+        recover_oldest_wait_seconds=_positive(
+            pressure.get("recover_oldest_wait_seconds"),
+            "pressure.recover_oldest_wait_seconds",
+        ),
+        recover_queue_depth=_integer(
+            pressure.get("recover_queue_depth"),
+            "pressure.recover_queue_depth",
+            minimum=0,
+        ),
+        recover_stable_seconds=_positive(
+            pressure.get("recover_stable_seconds"),
+            "pressure.recover_stable_seconds",
+        ),
+        background_token_interval_seconds=_positive(
+            pressure.get("background_token_interval_seconds"),
+            "pressure.background_token_interval_seconds",
+        ),
+        normal_stable_seconds=_positive(
+            pressure.get("normal_stable_seconds"), "pressure.normal_stable_seconds"
+        ),
+    )
+    if pressure_config.max_samples_per_resource > 512:
+        raise ConfigError("pressure.max_samples_per_resource cannot exceed 512")
+    if pressure_config.max_active_scopes > 256:
+        raise ConfigError("pressure.max_active_scopes cannot exceed 256")
+    if pressure_config.event_ring_capacity > 1024:
+        raise ConfigError("pressure.event_ring_capacity cannot exceed 1024")
+    if pressure_config.recover_oldest_wait_seconds >= pressure_config.enter_oldest_wait_seconds:
+        raise ConfigError(
+            "pressure recovery wait threshold must be lower than the entry threshold"
+        )
+    if pressure_config.recover_queue_depth >= pressure_config.enter_queue_depth:
+        raise ConfigError(
+            "pressure recovery queue threshold must be lower than the entry threshold"
+        )
+    if pressure_config.window_seconds < controller["fact_ttl_seconds"]:
+        raise ConfigError("pressure.window_seconds must cover at least one fact TTL")
+
     resources_raw = _table(raw.get("resources"), "resources")
     if not resources_raw:
         raise ConfigError("resources must define at least one resource group")
+    if len(resources_raw) > pressure_config.max_active_scopes:
+        raise ConfigError("resources exceeds pressure.max_active_scopes")
     groups: list[ResourceGroupConfig] = []
     all_slots: set[str] = set()
     for group_id, item in resources_raw.items():
@@ -166,12 +273,57 @@ def _parse_document(raw: object) -> GravitasConfig:
                 ),
             )
         )
+        if groups[-1].concurrency > pressure_config.max_active_scopes:
+            raise ConfigError(
+                f"resources.{group_id}.concurrency exceeds max_active_scopes"
+            )
     groups.sort(key=lambda item: item.group_id)
+    if len(all_slots) > pressure_config.max_active_scopes:
+        raise ConfigError("resources contains more slots than pressure.max_active_scopes")
+    if (
+        limits_config.interactive_queue > 1024
+        or limits_config.background_queue > 1024
+    ):
+        raise ConfigError("queue limits cannot exceed 1024")
     return GravitasConfig(
         schema_version=version,
         controller=ControllerConfig(tick_seconds=tick, fact_ttl_seconds=ttl),
         limits=limits_config,
+        pressure=pressure_config,
         resources=tuple(groups),
+    )
+
+
+def default_config() -> GravitasConfig:
+    """Safe in-memory profile used when no optional local file exists."""
+    return parse_config(
+        """
+schema_version = 1
+[controller]
+tick_seconds = 1.0
+fact_ttl_seconds = 5.0
+[limits]
+turn_timeout_seconds = 120.0
+interactive_queue = 16
+background_queue = 4
+max_pending_per_conversation = 1
+[pressure]
+window_seconds = 60.0
+max_samples_per_resource = 512
+max_active_scopes = 256
+event_ring_capacity = 1024
+enter_oldest_wait_seconds = 5.0
+enter_queue_depth = 8
+enter_consecutive_windows = 3
+recover_oldest_wait_seconds = 1.0
+recover_queue_depth = 2
+recover_stable_seconds = 15.0
+background_token_interval_seconds = 10.0
+normal_stable_seconds = 30.0
+[resources.local_inference]
+slots = ["CHAT", "MEMORY"]
+concurrency = 1
+"""
     )
 
 
@@ -196,6 +348,13 @@ def _number(value: object, name: str) -> float:
     result = float(value)
     if not math.isfinite(result):
         raise ConfigError(f"{name} must be finite")
+    return result
+
+
+def _positive(value: object, name: str) -> float:
+    result = _number(value, name)
+    if result <= 0:
+        raise ConfigError(f"{name} must be positive")
     return result
 
 

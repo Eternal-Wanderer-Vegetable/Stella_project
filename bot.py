@@ -405,6 +405,20 @@ async def _bootstrap_capabilities() -> None:
 
 driver.on_startup(_bootstrap_capabilities)
 
+# Gravitas is attached explicitly after local providers/capabilities register;
+# it starts a read-only shadow collector before the WebUI catch-all is mounted.
+try:
+    from config import STELLA_HOME
+
+    try:
+        from plugins.bot_main.gravitas_bootstrap import setup_gravitas
+    except ImportError:
+        from stella_project.plugins.bot_main.gravitas_bootstrap import setup_gravitas
+
+    setup_gravitas(driver, stella_home=STELLA_HOME, status_api=status_api)
+except Exception:
+    _diag_log("[gravitas][boot] Shadow 状态采集未能装配（不改变业务准入）")
+
 # WebUI（v2 面板）：必须是**最后一个** startup 钩子——挂载发生在 lifespan
 # 末尾，SPA catch-all（Mount "/"）因此排在 OneBot WS 与 /stella/status 之后。
 # Starlette 按注册顺序匹配路由，顺序即安全边界（tests/webui/test_webui_mount.py
