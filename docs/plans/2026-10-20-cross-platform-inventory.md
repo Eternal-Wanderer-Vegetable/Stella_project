@@ -61,42 +61,42 @@
 
 ## B. 适配器验收分母
 
-官方注册快照 32 项；SHA-256 `6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a`。来源：[adapters.json5](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5)。当前所有行均为 not_run；候选方案并非已认证结果。P0/P1/P2仅表示实施顺序。
+官方注册快照 32 项；SHA-256 `6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a`。来源：[adapters.json5](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5)。WP11 已为全部 32 行记录阶段状态与环境证据，详见 [机器可读验收矩阵](../../tests/platforms/adapter_matrix.json)。OneBot V11 只有 L0 本地注册与 L1 事件/回投夹具通过，L3 夹具部分；L2 和 live 未执行，最终仍 NOT CERTIFIED。其余 31 行各阶段均 not_run；P0/P1/P2仅表示实施顺序。
 
 | 平台/协议 | module_name | 包名 | 顺序 | 当前验收 |
 | --- | --- | --- | --- | --- |
-| OneBot V11 | `nonebot.adapters.onebot.v11` | `nonebot-adapter-onebot` | P0 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| 钉钉 | `nonebot.adapters.ding` | `nonebot-adapter-ding` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| 飞书 | `nonebot.adapters.feishu` | `nonebot-adapter-feishu` | P1 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Telegram | `nonebot.adapters.telegram` | `nonebot-adapter-telegram` | P1 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| QQ | `nonebot.adapters.qq` | `nonebot-adapter-qq` | P1 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| 开黑啦 | `nonebot.adapters.kaiheila` | `nonebot-adapter-kaiheila` | P1 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Mirai | `nonebot.adapters.mirai` | `nonebot-adapter-mirai` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| OneBot V12 | `nonebot.adapters.onebot.v12` | `nonebot-adapter-onebot` | P1 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Console | `nonebot.adapters.console` | `nonebot-adapter-console` | P1 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| GitHub | `nonebot.adapters.github` | `nonebot-adapter-github` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Ntchat | `nonebot.adapters.ntchat` | `nonebot-adapter-ntchat` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Minecraft | `nonebot.adapters.minecraft` | `nonebot-adapter-minecraft` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| BilibiliLive | `nonebot.adapters.bilibili` | `nonebot-adapter-bilibili` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Walle-Q | `nonebot_adapter_walleq` | `nonebot-adapter-walleq` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| 大别野 | `nonebot.adapters.villa` | `nonebot-adapter-villa` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| RedProtocol | `nonebot.adapters.red` | `nonebot-adapter-red` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Discord | `nonebot.adapters.discord` | `nonebot-adapter-discord` | P1 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Satori | `nonebot.adapters.satori` | `nonebot-adapter-satori` | P1 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| DoDo | `nonebot.adapters.dodo` | `nonebot-adapter-dodo` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| RocketChat | `nonebot.adapters.rocketchat` | `nonebot-adapter-rocketchat` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Kritor | `nonebot.adapters.kritor` | `nonebot-adapter-kritor` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Tailchat | `nonebot_adapter_tailchat` | `nonebot-adapter-tailchat` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Mail | `nonebot.adapters.mail` | `nonebot-adapter-mail` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| 黑盒语音 | `nonebot.adapters.heybox` | `nonebot-adapter-heybox` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| WXMP | `nonebot.adapters.wxmp` | `nonebot-adapter-wxmp` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| nonebot-adapter-milky | `nonebot.adapters.milky` | `nonebot-adapter-milky` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| nonebot-adapter-efchat | `nonebot.adapters.efchat` | `nonebot-adapter-efchat` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| nonebot-adapter-vocechat | `nonebot.adapters.vocechat` | `nonebot-adapter-vocechat` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| B站直播间 | `nonebot.adapters.bilibili_live` | `nonebot-adapter-bilibili-live` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| 云湖适配器 | `nonebot.adapters.yunhu` | `nonebot-adapter-yunhu` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| WxClaw | `nonebot.adapters.wxclaw` | `nonebot-adapter-wxclaw` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
-| Matrix | `nonebot.adapters.matrix` | `nonebot-adapter-matrix` | P2 | L0/L1/L2/live 未执行；L3逐能力确认 |
+| OneBot V11 | `nonebot.adapters.onebot.v11` | `nonebot-adapter-onebot` | P0 | L0 本地注册通过；L1 夹具通过；L2 未执行；L3 夹具部分；live 未执行；NOT CERTIFIED |
+| 钉钉 | `nonebot.adapters.ding` | `nonebot-adapter-ding` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| 飞书 | `nonebot.adapters.feishu` | `nonebot-adapter-feishu` | P1 | L0-L3 未执行；fixture/live 未执行 |
+| Telegram | `nonebot.adapters.telegram` | `nonebot-adapter-telegram` | P1 | L0-L3 未执行；fixture/live 未执行 |
+| QQ | `nonebot.adapters.qq` | `nonebot-adapter-qq` | P1 | L0-L3 未执行；fixture/live 未执行 |
+| 开黑啦 | `nonebot.adapters.kaiheila` | `nonebot-adapter-kaiheila` | P1 | L0-L3 未执行；fixture/live 未执行 |
+| Mirai | `nonebot.adapters.mirai` | `nonebot-adapter-mirai` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| OneBot V12 | `nonebot.adapters.onebot.v12` | `nonebot-adapter-onebot` | P1 | L0-L3 未执行；fixture/live 未执行 |
+| Console | `nonebot.adapters.console` | `nonebot-adapter-console` | P1 | L0-L3 未执行；fixture/live 未执行 |
+| GitHub | `nonebot.adapters.github` | `nonebot-adapter-github` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| Ntchat | `nonebot.adapters.ntchat` | `nonebot-adapter-ntchat` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| Minecraft | `nonebot.adapters.minecraft` | `nonebot-adapter-minecraft` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| BilibiliLive | `nonebot.adapters.bilibili` | `nonebot-adapter-bilibili` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| Walle-Q | `nonebot_adapter_walleq` | `nonebot-adapter-walleq` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| 大别野 | `nonebot.adapters.villa` | `nonebot-adapter-villa` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| RedProtocol | `nonebot.adapters.red` | `nonebot-adapter-red` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| Discord | `nonebot.adapters.discord` | `nonebot-adapter-discord` | P1 | L0-L3 未执行；fixture/live 未执行 |
+| Satori | `nonebot.adapters.satori` | `nonebot-adapter-satori` | P1 | L0-L3 未执行；fixture/live 未执行 |
+| DoDo | `nonebot.adapters.dodo` | `nonebot-adapter-dodo` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| RocketChat | `nonebot.adapters.rocketchat` | `nonebot-adapter-rocketchat` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| Kritor | `nonebot.adapters.kritor` | `nonebot-adapter-kritor` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| Tailchat | `nonebot_adapter_tailchat` | `nonebot-adapter-tailchat` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| Mail | `nonebot.adapters.mail` | `nonebot-adapter-mail` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| 黑盒语音 | `nonebot.adapters.heybox` | `nonebot-adapter-heybox` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| WXMP | `nonebot.adapters.wxmp` | `nonebot-adapter-wxmp` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| nonebot-adapter-milky | `nonebot.adapters.milky` | `nonebot-adapter-milky` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| nonebot-adapter-efchat | `nonebot.adapters.efchat` | `nonebot-adapter-efchat` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| nonebot-adapter-vocechat | `nonebot.adapters.vocechat` | `nonebot-adapter-vocechat` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| B站直播间 | `nonebot.adapters.bilibili_live` | `nonebot-adapter-bilibili-live` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| 云湖适配器 | `nonebot.adapters.yunhu` | `nonebot-adapter-yunhu` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| WxClaw | `nonebot.adapters.wxclaw` | `nonebot-adapter-wxclaw` | P2 | L0-L3 未执行；fixture/live 未执行 |
+| Matrix | `nonebot.adapters.matrix` | `nonebot-adapter-matrix` | P2 | L0-L3 未执行；fixture/live 未执行 |
 
 ## C. 生产/部署文件审查全集
 

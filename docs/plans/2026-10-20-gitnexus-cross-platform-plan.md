@@ -3,7 +3,7 @@
 - 日期：2026-10-20，Asia/Shanghai。
 - 源码基线：`main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`；工作区 `/home/vegetable/repos/Stella`。
 - 规划阶段交付：本地 GitNexus 代码图谱、原始查询证据、改造清单及执行方案；当时未实施业务改造。
-- 实施状态：2026-10-21；WP00–WP09 完成，下一阶段 WP10。计划完成不代表平台支持、数据迁移或发布验收完成。
+- 实施状态：2026-10-21；WP00–WP10 完成，WP11 本地矩阵与 OneBot V11 夹具已记录；平台 live、L2/L3 完整认证、QQ 灰度、clean VM 与全量回归仍未完成。计划执行不代表平台支持、数据迁移或发布验收完成。
 - 证据目录：[cross-platform-20261020](../reports/evidence/cross-platform-20261020/README.md)。逐文件清单、50 个入口、32 个适配器矩阵见[执行附录](2026-10-20-cross-platform-inventory.md)。
 
 ## 1. 目标与可验收边界
@@ -171,7 +171,7 @@ PERSON 私聊事实保持 PRIVATE_ONLY；共享空间不隐含跨平台个人事
 | WP08 AstrBot 兼容 | WP05、WP06 | `astrbot_compat/{events,components,context,filters,pipeline,po}.py`、`capability/hooks.py`、`capability/adapters/astrbot.py` | 分发和工具两种事件构造都覆盖；通用链转换；真实平台过滤；QQ API 插件不在其他平台伪运行 |
 | WP09 多适配器装配与健康 | WP05、WP06 | `bot.py`、`pyproject.toml`、`requirements.txt`、`.env.example`、新平台装配、`extensions/link_monitor`、`status_api.py` | 注册顺序/driver能力/依赖缺失错误明确；只注册启用项；按 Bot 隔离健康；无心跳平台不误报断线 |
 | WP10 控制面和交付 | WP07、WP08、WP09 | `webui/{routers,services}` 平台/会话/群/空间/cron/KB、`dashboard/src/views` 对应页、i18n、`deploy/*`、CLI/Rust桌面/安装器、Docker/release脚本 | 多连接可配置和脱敏；路由先于 SPA mount；非QQ模式不被NapCat检查阻挡；包布局、随包资源和可选依赖有效 |
-| WP11 全平台认证与发布 | WP00…WP10 | `tests/platforms/`（拟新增）、现有测试、flow catalog/inventory/manifest、CI、双语文档、版本/发行清单 | 每个矩阵行有最终状态与证据；L0/L1/L2/L3分开；代表平台live、多账号恢复、干净VM和QQ回归分别验收 |
+| WP11 全平台认证与发布 | WP00…WP10 | `tests/platforms/`、现有测试、flow catalog/inventory/manifest、CI、双语文档、版本/发行清单 | 每个矩阵行有最终状态与证据；L0/L1/L2/L3分开；代表平台live、多账号恢复、干净VM和QQ回归分别验收 |
 
 ### 实施跟踪
 
@@ -188,8 +188,9 @@ PERSON 私聊事实保持 PRIVATE_ONLY；共享空间不隐含跨平台个人事
 | WP08 AstrBot 兼容 | done | [WP08 实施记录](../reports/2026-10-21-wp08-astrbot-compat.md)：分发与工具事件构造均验证 OneBot v11 Bot；通用链转换；平台过滤按 adapter 类型名；Context 对多 OneBot Bot 歧义 fail closed。定向回归 373 passed，Ruff、文档与 flow 门禁通过。非 OneBot live、插件底层 API 仿真和发布验收未完成。 |
 | WP09 多适配器装配与健康 | done | [WP09 实施记录](../reports/2026-10-21-wp09-adapter-assembly-health.md)：按 `STELLA_ADAPTER_MODULES` 在插件加载前注册适配器；缺包/驱动错误明确；逐 Bot OneBot V11 健康与探活，其他适配器健康未知。定向回归 73 passed，Ruff、文档、flow 与默认 Driver smoke 通过。非 OneBot live、全量 Python、QQ 灰度、clean VM 与发布验收未完成。 |
 | WP10 控制面和交付 | done | [WP10 实施记录](../reports/2026-10-21-wp10-control-plane-delivery.md)：平台页可配置多适配器并保留 OneBot 多 WS/token 脱敏；停用 OneBot 时 Doctor 跳过 NapCat 检查；CLI/安装器准确区分不适用与断线；standalone/installer staging 从最终文件生成 manifest。定向 Python 253 passed（另有平台配置 4、产品包 18 passed，组间重叠）；Dashboard 100 passed/build/typecheck、Ruff、docs、flow、archive/layout 检查通过。真实平台、全量 Python、QQ 灰度、clean VM 与发布验收未完成。 |
+| WP11 全平台认证与发布 | in_progress (NOT READY) | [WP11 认证记录](../reports/2026-10-21-wp11-platform-certification.md)：32 项快照行逐一保留状态、证据和未知字段；OneBot V11 L0 本地注册通过、L1 真实事件模型到 fake 回投夹具通过、L3 夹具部分；其余阶段与 31 行未认证。平台 live、多账号恢复、L2 全链、L3 完整能力、QQ 灰度、clean VM 和全量 Python 仍未验收。 |
 
-WP11 仍为 planned；本表只在阶段实现、回归与提交后更新状态。
+WP11 的本地实现与验收矩阵已完成；由于本阶段外部验收未通过或未执行，保持 in_progress / NOT READY。本表只在阶段实现、回归与提交后更新状态。
 
 具体补充：WP04 不改变 EXTRACT 的语义句型，只让来源主体具有正确平台域；WP05 保留原有开关默认值；WP07 不允许从模型文本恢复路由；WP09 不做自动下载并执行未知第三方适配器；WP10 保留 QQ/NapCat 产品配置为一种连接 profile，不能把现有 QQ 用户的部署入口直接删除。
 

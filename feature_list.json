@@ -138,6 +138,21 @@
           "command": "WP10 state follow-up: python scripts/check_docs.py; feature_list JSON parse; git diff --check; GitNexus detect-changes scope all and compare main",
           "result": "Plan, progress, feature state, and WP10 report updated bilingually where applicable. Docs check: 119 files/1228 links/577 anchors/0 errors; feature_list JSON and staged diff passed. State scope all: 4 files/11 symbols/0 processes/LOW; compare main: 334 files/1128 symbols/106 processes/CRITICAL cumulative, successful with symbol listing capped.",
           "report": "docs/reports/2026-10-21-wp10-control-plane-delivery.md"
+        },
+        {
+          "command": "WP11 fixture and matrix: GitNexus upstream impacts; isolated adapter package metadata; targeted OneBot/normalizer/outbound pytest; Ruff; message-flow check",
+          "result": "Added a frozen-source 32-row matrix and real OneBot V11 GroupMessageEvent-to-fake-reply fixture. Targeted suite: 18 passed; Ruff and message-flow check passed. Local package metadata observed nonebot-adapter-onebot 2.4.6 (Requires-Python >=3.9,<4.0) for the V11/V12 rows only; the other 30 adapter distributions are not installed. All 32 rows remain NOT CERTIFIED.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 full Python release gate: pytest tests/ -q --timeout=120 -n auto --dist loadgroup; serial rerun of all failed cases",
+          "result": "3873 passed / 29 skipped / 6 failed in 79.06s; all six failures reproduced serially. Failures affect proactive delivery, candidate promotion, capture-gate reply delivery, replay gate, and scheduling CRUD. Platform live, complete L2/L3, QQ gray, clean VM, and full release gates remain NOT READY.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
+        },
+        {
+          "command": "WP11 state: python scripts/check_docs.py; ruff check .; generate_message_flow.py --check; feature/matrix JSON parse; git diff --check; GitNexus detect-changes all and compare main",
+          "result": "Docs: 119 files/1235 links/577 anchors/0 errors; Ruff passed; message-flow 9b80952673b2 passed; JSON and diff checks passed. GitNexus all: 5 tracked files/15 symbols/0 processes/LOW. Compare main first returned partial on process lookup; serial rerun completed at 336 files/1140 symbols/106 processes/CRITICAL with no partial/truncated; symbol listing capped.",
+          "report": "docs/reports/2026-10-21-wp11-platform-certification.md"
         }
       ]
     },
