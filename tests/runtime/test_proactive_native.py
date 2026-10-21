@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import sqlite3
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -34,7 +35,22 @@ class _FakeBot:
     self_id = "999"
 
     def __init__(self):
-        self.send_group_msg = AsyncMock()
+        self.adapter = SimpleNamespace(get_name=lambda: "OneBot V11")
+
+
+@pytest.fixture
+def fake_uniseg_transport(monkeypatch):
+    """Stub the adapter effect while retaining target/segment encoding."""
+    from nonebot_plugin_alconna.uniseg import UniMessage
+
+    calls = []
+
+    async def fake_send(message, *, target=None, bot=None, **kwargs):
+        calls.append({"segments": tuple(message), "target": target, "bot": bot})
+        return SimpleNamespace(msg_ids=[f"out:{len(calls)}"])
+
+    monkeypatch.setattr(UniMessage, "send", fake_send)
+    return calls
 
 
 class _FakeTask:
@@ -69,7 +85,9 @@ class _FakeProactive:
         self.skipped.append((group_id, user_id, subject))
 
 
-async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkeypatch, tmp_path):
+async def test_proactive_at_goes_through_native_facade(
+    ai_gateway_module, fake_uniseg_transport, monkeypatch, tmp_path
+):
     gateway = ai_gateway_module
     from config import settings
     from memory import social_store
@@ -139,11 +157,18 @@ async def test_proactive_at_goes_through_native_facade(ai_gateway_module, monkey
     assert seen.get("intent") == "proactive_at"
     assert len(h.provider_calls) == 1, f"seen={seen} store={[r['state'] for r in h.store_lines()]}"
     # 发送：@ + 正文（无引用段），且已记账
-    bot.send_group_msg.assert_awaited()
+    assert len(fake_uniseg_transport) == 1
+    sent = fake_uniseg_transport[0]
+    assert sent["bot"] is bot
+    assert sent["target"].id == "1"
+    assert sent["target"].self_id == "999"
+    assert [type(segment).__name__ for segment in sent["segments"]] == ["At", "Text"]
     assert proactive.recorded and proactive.marked == [1]
 
 
-async def test_proactive_join_goes_through_native_facade(ai_gateway_module, monkeypatch, tmp_path):
+async def test_proactive_join_goes_through_native_facade(
+    ai_gateway_module, fake_uniseg_transport, monkeypatch, tmp_path
+):
     gateway = ai_gateway_module
     from config import settings
     from memory import social_store
@@ -202,4 +227,9 @@ async def test_proactive_join_goes_through_native_facade(ai_gateway_module, monk
     assert seen.get("peer_id") == "1"
     assert seen.get("storage_session_id") == 1
     assert len(h.provider_calls) == 1
-    bot.send_group_msg.assert_awaited()
+    assert len(fake_uniseg_transport) == 1
+    sent = fake_uniseg_transport[0]
+    assert sent["bot"] is bot
+    assert sent["target"].id == "1"
+    assert sent["target"].self_id == "999"
+    assert [type(segment).__name__ for segment in sent["segments"]] == ["Text"]
