@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP02 已完成，下一步 WP03；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)与[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)，平台 live、发布与VM验收单独记录。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP03 已完成，下一步 WP04；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `ec5cf65`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)与[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -40,6 +40,15 @@
 - 定向回归 310 passed；Ruff、`generate_message_flow.py --check` 与暂存 diff check 通过。全量 Python：3782 passed/29 skipped/4 failed，失败项为 Cometa stale lease、两项 WebUI Cometa 401、WebUI chat history TypeError；详见 WP02 报告，保留 NOT READY。
 - `STELLA_HOME` 未设置，pytest 临时隔离；未启动 Bot、未读写生产库。无 live 模型/平台、QQ 灰度或 clean VM 验收。
 - 下一阶段 WP03：刷新索引并先查 schema 20→21、migrations、Python/native backend 与 API 4 wheel 合同的 upstream impact；仅用临时旧库副本验证迁移。
+
+## 2026-10-21 — Cross-platform implementation (WP03)
+
+- 实现提交 `ec5cf65`：schema 21 新增 `platform_message_id` 与 `subject_key`；迁移仅从旧非零 INTEGER `msg_id` 保守复制平台回执，不猜历史主体；Python/native 检索合同升至 API 4 / schema 21，外部用户 ID 作为字符串传入。
+- 修正 flow manifest 检查，使其在所有不可变归档中查找当前源码匹配项；fullchain 验证改为走生产 evidence 写入路径，并检查双方晋升、冲突观察、提交事实和 trace integrity。
+- 定向 pytest 77 passed / 1 skipped；Rust 25 passed；隔离 release wheel 报告 API 4 / schema 21，fullchain PASS；embedding benchmark 101/101 质量与 parity 通过。Rule benchmark 两后端一致但共享一个既有 expected-ranking mismatch（100/101）。
+- Ruff、文档门禁（119 files / 1206 links / 577 anchors / 0 errors）、flow manifest 与 diff 检查通过。全量 pytest 因 `tests/cometa/test_worker.py::TestSingleOwner::test_second_worker_rejected` 451.87 秒无进展而中止（876 passed / 7 skipped）；单测 30 秒重现，集成门禁 NOT READY。WP02 已报告的其他全量失败也未关闭。
+- `STELLA_HOME` 未设置；仅使用临时 SQLite 和隔离 wheel；未启动 Bot、访问生产库或运行真实模型/平台。
+- 阶段实现提交 `ec5cf65`；具体命令、GitNexus 风险、限制及下一步见 [WP03 实施记录](docs/reports/2026-10-21-wp03-storage-backend.md)。下一阶段 WP04。
 
 ## What's Done
 

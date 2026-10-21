@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP02 已完成，下一阶段 WP03；当前分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
+XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP03 已完成，下一阶段 WP04；当前分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`，最新实现提交 `ec5cf65`。
 
 ## Deliverables
 
@@ -12,20 +12,21 @@ XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cr
 - [WP00实施记录](docs/reports/cross-platform-implementation-20261020.md)：依赖冻结、GitNexus风险、QQ/WebChat回归与命令结果。
 - [WP01实施记录](docs/reports/2026-10-21-wp01-identity-registry.md)：opaque 身份合同、隔离注册表、alias 与定向回归证据。
 - [WP02实施记录](docs/reports/2026-10-21-wp02-context-message-identity.md)：projection v7、opaque message ID、turn-bound target_ref、GitNexus 风险与验证结果。
+- [WP03实施记录](docs/reports/2026-10-21-wp03-storage-backend.md)：schema 21 迁移、Python/native API 4、隔离 wheel、双后端 fullchain/parity 与未关闭验收项。
 - `.gitnexus/lbug`：本地代码图谱；`.gitnexus/gn`：固定1.6.11启动器。工具/索引不入业务提交。
 
 ## Verification / Boundaries
 
-基线 main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d；WP00锁定环境基线合并运行 142 passed；WP01 定向回归 160 passed、message-flow 合同 14 passed；WP02 定向回归 310 passed。WP02 全量 pytest 为 3782 passed / 29 skipped / 4 failed，失败项见报告，故集成门禁 NOT READY。提交 `8ab18ce`；GitNexus 1.6.11 预提交检查 scope all 31 files/121 symbols/critical，compare main 187 files/232 symbols/critical；compare 首次中断后重试完整，无 partial/truncated。编辑前影响摘要和源码补查见 WP02 报告。
+基线 main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d；WP00 基线回归 142 passed；WP01 定向回归 160 passed、message-flow 合同 14 passed；WP02 定向回归 310 passed；WP03 定向回归 77 passed / 1 skipped、Rust 25 passed、隔离 native wheel fullchain 和 embedding parity 通过。WP03 全量 pytest 在 876 passed / 7 skipped 后因 Cometa worker 测试 451.87 秒无进展而中止，单测 30 秒复现；WP02 报告中的其他全量失败仍未关闭，集成门禁 NOT READY。WP03 实现提交 `ec5cf65`；预提交 GitNexus scope all 17 files/58 symbols/10 flows/HIGH，compare main 202 files/296 symbols/28 flows/CRITICAL，索引预算限制见 WP03 报告。编辑前影响与源码补查见各阶段报告。
 
-GitNexus 流程抽取仍有入口/分支预算截断、回调和跨语言缺边；UNKNOWN 与零调用者均用源码引用补查，不作为低风险。WP01 中 V2 注册 API 无生产调用点（待后续入口包接线）。WP02 将通用外部消息 ID 与旧 QQ 整数列读法隔离，尚未新增持久化列；WP03 负责迁移。平台注册快照 SHA-256 不变；平台收发 fixture/live 尚未执行。未迁移生产库、未启动 Bot；`STELLA_HOME` 未设置，测试使用临时隔离数据。
+GitNexus 流程抽取仍有入口/分支预算截断、回调和跨语言缺边；UNKNOWN 与零调用者均用源码引用补查，不作为低风险。WP01 中 V2 注册 API 无生产调用点，待后续入口包接线。WP03 已将 opaque 平台回执和规范主体分别持久化，历史 subject 仍为空未知而不猜测。平台注册快照 SHA-256 不变；平台收发 fixture/live 尚未执行。未迁移生产库、未启动 Bot；`STELLA_HOME` 未设置，测试使用临时隔离数据。
 
 ## Next Steps
 
-1. WP00 已提交；WP01 实现阶段提交为 `ea79171`，状态记录收尾已完成。
-2. 下一阶段 WP03：先刷新 GitNexus 到提交 `8ab18ce`，对 `memory/schema.py`、`memory/migrations.py`、Python/native backends、selector 与 Rust schema/retrieval/promotion 合同运行 upstream impact；高风险先报告，再用临时 schema 20 副本验证迁移、恢复和 parity。
-3. WP02 实现提交 `8ab18ce` 已完成；随后更新状态的文档提交待提交。
-4. 各阶段继续按依赖顺序验收和提交；平台 live、QQ 灰度、native wheel 与 clean VM 仍分别验收。GitNexus 固定使用 1.6.11，图不完整或查询 partial 必须重试并补源码引用。
+1. WP03 实现提交 `ec5cf65` 已完成；本次计划、progress、feature_list、handoff 和报告的状态文档待提交。
+2. 下一阶段 WP04：刷新当前 GitNexus 状态；对 `memory/ownership.py`、`memory/evidence_contract.py`、`memory/retrieval_v2.py`、`memory/personal_sharing.py`、`memory/addressing.py`、`memory/social_*`、`knowledge/{acl,domain,store,schema}.py` 和 `capability/providers/knowledge.py` 运行 upstream impact，再按权限与数据边界实施。
+3. 按 WP04 验收同裸 ID 隔离、私聊到群/频道零泄漏、旧 evidence 兼容、分享撤回、KB ACL 和主动目标校验；提交前运行 docs、模块回归与 GitNexus all/compare 门禁。
+4. 平台 live、QQ 灰度、Windows native wheel 与 clean VM 仍分别验收；GitNexus 图的流程/候选预算限制、partial/truncated 重跑和源码补证要求持续适用。
 
 ---
 
