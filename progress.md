@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP06 已完成，下一步 WP07；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `d2270d1`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)与[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)，平台 live、发布与VM验收单独记录。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP07 已完成，下一步 WP08；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `7bea280`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)、[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)、[WP06记录](docs/reports/2026-10-21-wp06-outbound-delivery.md)与[WP07记录](docs/reports/2026-10-21-wp07-background-recovery.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -77,6 +77,14 @@
 - 定向回归 138 passed / 1 warning；改动 Python Ruff、message-flow check 与 diff check 通过。归档 `message-flow.72cc70e6e149.json` 为 141 nodes / 139 source-resolved / 8,952 closure sites / 11,689 reachable symbols。
 - GitNexus 提交前 scope all 21 files/54 symbols/7 processes/HIGH；compare main 264 files/589 symbols/76 processes/CRITICAL，包含 WP00–WP05。状态文档 scope all 7 files/14 symbols/0 processes/LOW；compare main 265 files/591 symbols/76 processes/CRITICAL。
 - `STELLA_HOME` 未设置；只用临时测试数据。未运行全量 Python、真实 QQ/其他平台、clean VM 或发布验收；历史全量缺口仍未关闭，整体 NOT READY。下一阶段 WP07。
+
+## 2026-10-21 — Cross-platform implementation (WP07)
+
+- 实现提交 `7bea280`：后台通知和调度任务现在持久化版本化 `DeliveryTarget`、`BotRef`、主体及作用域；投递前要求精确匹配当前 Bot/连接/adapter/platform/self_id，不从模型文本或默认 Bot 推断。Proactive timer 在无 Bot 或多 Bot 歧义时跳过，主动路径以注册表会话键读取/写入上下文。
+- Scheduling SQL schema 1→2：新增目标、主体和 scope；仅当旧 Bot 与群 ID 可验证为数字且绑定无歧义时转换旧任务，其他旧任务保持不可发送；旧 quota 行保留在 legacy scope。Cometa Origin JSON 2→3，校验目标与 BotRef 一致；CAS、租约和 unknown 不重投语义保留。
+- 编辑前 GitNexus upstream impact 与源码补查见 WP07 报告；高风险 Origin 调用链未扩大其 schema 兼容边界。提交前 GitNexus 1.6.11 scope all：31 files / 162 symbols / 36 flows / CRITICAL；compare main：287 files / 908 symbols / 102 flows / CRITICAL；均未标 partial/truncated。累计 compare 风险包含 WP00–WP07。
+- 定向回归：调度/主动与上下文组合 401 passed；Cometa 目录忽略 worker 用例 194 passed / 7 skipped；身份和出站 67 passed。`tests/cometa/test_worker.py` 在全目录命令中运行超过 8 分钟无进展后被中断（此前已记录该用例 30 秒隔离重现挂起），因此全目录/全量 pytest 没有通过声明。改动 Python Ruff、`git diff --check` 与重生成后的 message-flow manifest 检查通过。
+- `STELLA_HOME` 未设置；pytest 使用临时隔离数据，未读写生产库或运行真实 Bot/模型/平台。live、发布、clean VM 及 Cometa worker 挂起缺口保留，整体 NOT READY。下一阶段 WP08。
 
 ## What's Done
 
