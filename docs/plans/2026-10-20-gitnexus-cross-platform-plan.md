@@ -3,7 +3,7 @@
 - 日期：2026-10-20，Asia/Shanghai。
 - 源码基线：`main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`；工作区 `/home/vegetable/repos/Stella`。
 - 规划阶段交付：本地 GitNexus 代码图谱、原始查询证据、改造清单及执行方案；当时未实施业务改造。
-- 实施状态：2026-10-21；WP00–WP04 完成，下一阶段 WP05。计划完成不代表平台支持、数据迁移或发布验收完成。
+- 实施状态：2026-10-21；WP00–WP05 完成，下一阶段 WP06。计划完成不代表平台支持、数据迁移或发布验收完成。
 - 证据目录：[cross-platform-20261020](../reports/evidence/cross-platform-20261020/README.md)。逐文件清单、50 个入口、32 个适配器矩阵见[执行附录](2026-10-20-cross-platform-inventory.md)。
 
 ## 1. 目标与可验收边界
@@ -63,11 +63,11 @@ pnpm --allow-build=@ladybugdb/core --allow-build=gitnexus --allow-build=tree-sit
 
 表中数字已从 impact 原件同步并在计划验证阶段核验。Class 的导入影响、函数调用影响与 File 的文档影响不等价。
 
-UNKNOWN 的处置：`record_group_chat`、`handle_chat`、`handle_private_chat` 是 NoneBot 注册入口，零静态调用不是未使用；注册扫描证明其存活。`_scheduling_sender` 被 `_build_scheduling_stack` 作为 `sender=` 回调注入。`get_or_register_group` 当前仅有定义/测试引用，群入口尚未统一调用它；WP01/WP05 必须把群入口接入注册表，不能假设已有完整群注册。Rust RetrievalRequest 的 Struct 图仅显出测试构造，不足以覆盖 serde/PyO3 JSON 边界，系统风险仍按 HIGH 管理。
+UNKNOWN 的处置：`record_group_chat`、`handle_chat`、`handle_private_chat` 是 NoneBot 注册入口，零静态调用不是未使用；注册扫描证明其存活。`_scheduling_sender` 被 `_build_scheduling_stack` 作为 `sender=` 回调注入。基线中的 `get_or_register_group` 仅有定义/测试引用；WP05 已将其接入群被动采集和 @ 对话入口。Rust RetrievalRequest 的 Struct 图仅显出测试构造，不足以覆盖 serde/PyO3 JSON 边界，系统风险仍按 HIGH 管理。
 
 ## 4. 目标合同与模块边界
 
-拟新增 `core/transport/`（仅建议路径，尚未创建）：`models.py`、`keys.py`、`registry.py`、`normalizers.py`、`capabilities.py`、`outbound.py`、`media.py`，及 `adapters/onebot11.py`、`adapters/generic.py` 等薄扩展。启动装配可放在 `stella_project/plugins/bot_main/platform_bootstrap.py`，不让 core 反向依赖插件接线。上层 Runtime/记忆消费 Stella 自有 DTO，Alconna/Uninfo 的第三方类型不进入数据库及核心合同。
+`core/transport/` 已包含 `models.py`、`keys.py` 与 `normalizers.py`；`registry.py`、`capabilities.py`、`outbound.py`、`media.py` 和 `adapters/` codec 仍属后续工作包。启动装配可放在 `stella_project/plugins/bot_main/platform_bootstrap.py`，不让 core 反向依赖插件接线。上层 Runtime/记忆消费 Stella 自有 DTO，Alconna/Uninfo 的第三方类型不进入数据库及核心合同。
 
 ```mermaid
 flowchart TD
@@ -182,6 +182,7 @@ PERSON 私聊事实保持 PRIVATE_ONLY；共享空间不隐含跨平台个人事
 | WP02 上下文和消息身份 | done | [WP02 实施记录](../reports/2026-10-21-wp02-context-message-identity.md)：projection v6→v7、transcript v2、opaque message ID / QQ INTEGER codec 分离、bound target_ref；定向回归 310 passed。全量回归 3782 passed / 29 skipped / 4 failed，未关闭项见报告，故集成门禁仍 NOT READY。 |
 | WP03 存储迁移与双后端 | done | [WP03 实施记录](../reports/2026-10-21-wp03-storage-backend.md)：schema 20→21、opaque 平台消息 ID 与主体持久化、Python/native API 4；定向回归 77 passed / 1 skipped，Rust 25 passed；wheel fullchain 与 embedding parity 通过。全量 pytest 因 Cometa worker 用例 30 秒无进展而中止，集成门禁仍 NOT READY。 |
 | WP04 记忆/权限/社交作用域 | done | [WP04 实施记录](../reports/2026-10-21-wp04-memory-authorization-scope.md)：person owner、分享授权、地址偏好、社交记忆和 KB ACL 均按连接与命名空间主体隔离；memory/native schema 22、social schema 4、KB schema 2。定向 Python/Rust 回归、迁移、Ruff、文档、flow 与 GitNexus 证据见报告。全量 Python、平台 live 与发布验收未完成，整体仍 NOT READY。 |
+| WP05 通用入口与命令 | done | [WP05 实施记录](../reports/2026-10-21-wp05-ingress-admission.md)：OneBot/通用 NoneBot normalizer、共享 admission、WebChat 可信身份、群入口注册、vision 与 AstrBot adapter guard；定向回归 214 passed。线程/频道新 adapter、平台 live 与发布验收仍未完成。 |
 
 其他工作包仍为 planned；本表只在阶段实现、回归与提交后更新状态。
 

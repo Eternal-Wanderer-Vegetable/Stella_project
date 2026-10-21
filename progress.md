@@ -3,8 +3,8 @@
 ## Current State
 
 **Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP04 已完成，下一步 WP05；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `eabec23`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)与[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)，平台 live、发布与VM验收单独记录。
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP05 已完成，下一步 WP06；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`，最新实现提交 `28b296c`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)、[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)、[WP02记录](docs/reports/2026-10-21-wp02-context-message-identity.md)、[WP03记录](docs/reports/2026-10-21-wp03-storage-backend.md)、[WP04记录](docs/reports/2026-10-21-wp04-memory-authorization-scope.md)与[WP05记录](docs/reports/2026-10-21-wp05-ingress-admission.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -58,6 +58,16 @@
 - GitNexus 提交前摘要：scope all 49 files / 215 symbols / 48 processes / CRITICAL；compare main 241 files / 496 symbols / 71 processes / CRITICAL（包含 WP00–WP03）。CLI 显示的名字列表有省略，摘要统计保留；图谱刷新至 `eabec23` 后继续维护状态文档。
 - 状态文档提交前复查：GitNexus all/compare 均运行成功，原始风险为 CRITICAL；索引把文档章节关联到大量流程，原始风险照录。新报告/JSON 状态文件用 diff、文档链接与 JSON 解析门禁补证。
 - `STELLA_HOME` 未设置；只使用临时测试数据，未读取/迁移生产库，未启动 Bot、真实模型或平台。全量 Python 与 live/发布认证尚未完成，整体 NOT READY；下一阶段 WP05。
+
+## 2026-10-21 — Cross-platform implementation (WP05)
+
+- 实现提交 `28b296c`：新增 `NormalizedEvent` / `UnsupportedEvent`、OneBot v11 与通用 NoneBot normalizer、共享 `AdmissionPolicy`；外部身份和消息 ID 原样字符串化，通用身份按连接域隔离，未知 session 保留 opaque。WebChat 固定管理员 ID 作为身份，用户名只作显示名。
+- QQ 群/私聊与 WebChat 上下文携带 BotRef/UserRef/SceneRef；群被动采集与 @ 对话都接入 `get_or_register_group`，使用注册表返回的 storage ID/空间。采集门关闭时被动入口先返回，注册表与内容行均不写。插件入口保留纯消息段唤醒，AstrBot 工具事件构造显式跳过非 OneBot adapter。
+- GitNexus 1.6.11 编辑前文件级影响：`ai_gateway.py` HIGH/196 impacted、WebChat ingress CRITICAL/522 impacted；vision LOW/5、capability hook LOW/6。入口 matcher 方法的 UNKNOWN/0 通过 decorator 注册和源码补证；registry 群登记方法原先仅测试调用，本阶段已接入。源码索引基于 `3075d62`，新 normalizer 文件在该索引生成后创建。
+- 回归：Normalizer/vision/群私聊/WebChat/capture gate/AstrBot/registry/context/message-flow 相关测试 214 passed；改动 Python Ruff 通过。message-flow 初检发现函数体变化后生成 `message-flow.3631d3d0ca29.json`，后续 `--check` 通过。
+- GitNexus 提交前：scope all 14 files/26 symbols/16 processes/CRITICAL；compare main 重跑后 254 files/484 symbols/76 processes/CRITICAL（包含 WP00–WP05）。首次 compare 的 process query 被中断并标 PARTIAL，重跑得到非 PARTIAL 完整摘要；CLI 名称列表仍按固定摘要折叠。
+- 状态/报告提交门禁：GitNexus all 5 files/14 symbols/0 processes/LOW；compare 首轮 PARTIAL 后重跑为 255 files/486 symbols/76 processes/CRITICAL。文档检查 119 files / 1213 links / 577 anchors / 0 errors，feature JSON 与 message-flow 检查通过。
+- `STELLA_HOME` 未设置；入口测试 DB、群空间和 WebChat home 使用 pytest 临时隔离数据。未读取/迁移用户库，未启动 Bot、真实模型或平台；未运行全量 Python suite，WP02/WP03 历史全量缺陷仍未关闭。线程/频道 adapter、QQ 灰度、clean VM 和发布认证仍待后续阶段，整体 NOT READY；下一阶段 WP06。
 
 ## What's Done
 
