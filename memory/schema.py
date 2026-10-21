@@ -707,10 +707,39 @@ CREATE TABLE IF NOT EXISTS conversation_registry (
 )
 """
 
+# Transport identities use their own table until the legacy QQ/WebChat consumers
+# migrate to the V2 contract. Keeping the registries separate prevents raw SQL
+# maintenance tools from interpreting opaque keys as legacy bot/user identifiers.
+CONVERSATION_REGISTRY_V2_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS conversation_registry_v2 (
+    conversation_key TEXT PRIMARY KEY,
+    storage_session_id INTEGER NOT NULL UNIQUE CHECK (storage_session_id < -1),
+    memory_space TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+# V2 会话可有多个旧运行时/会话键。映射按 (alias, canonical key) 存储，允许
+# 同一旧 alias 对应多个连接；读取时必须带 Bot/Scene 上下文或拒绝歧义。
+CONVERSATION_ALIASES_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS conversation_aliases (
+    alias_key TEXT NOT NULL,
+    conversation_key TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(alias_key, conversation_key)
+)
+"""
+
 
 def create_conversation_registry_table(conn: sqlite3.Connection) -> None:
-    """确保 conversation_registry 表存在（幂等）。"""
+    """确保旧/V2 会话注册表及其 alias 索引表存在（幂等）。"""
     conn.execute(CONVERSATION_REGISTRY_TABLE_DDL)
+    conn.execute(CONVERSATION_REGISTRY_V2_TABLE_DDL)
+    conn.execute(CONVERSATION_ALIASES_TABLE_DDL)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversation_aliases_key "
+        "ON conversation_aliases(alias_key)"
+    )
 
 
 # 记忆证据去重表（v15 起，计划 §6.5）：同一条 (owner, audience, fact) 对同一

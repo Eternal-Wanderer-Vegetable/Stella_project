@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00 已完成，下一阶段 WP01；当前分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
+XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md) 的 WP00–WP11，按工作包分阶段提交。WP00–WP01 已完成，下一阶段 WP02；当前分支 `codex/cross-platform-implementation`，基线 `ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`。
 
 ## Deliverables
 
@@ -10,19 +10,20 @@ XPLAT-IMPL：执行 [GitNexus 跨平台方案](docs/plans/2026-10-20-gitnexus-cr
 - [执行附录](docs/plans/2026-10-20-cross-platform-inventory.md)：50运行入口、32适配器和180候选文件。
 - [证据索引](docs/reports/evidence/cross-platform-20261020/README.md)：原始query/context/impact、PDG、命令参数、补证、哈希。
 - [WP00实施记录](docs/reports/cross-platform-implementation-20261020.md)：依赖冻结、GitNexus风险、QQ/WebChat回归与命令结果。
+- [WP01实施记录](docs/reports/2026-10-21-wp01-identity-registry.md)：opaque 身份合同、隔离注册表、alias 与定向回归证据。
 - `.gitnexus/lbug`：本地代码图谱；`.gitnexus/gn`：固定1.6.11启动器。工具/索引不入业务提交。
 
 ## Verification / Boundaries
 
-基线 main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d；GitNexus 1.6.11 索引 current。独立入口验证通过：50 entries、9 families、34 discovered，差集为空。源码合同以目标源码为准，不采用旧文档版本号。WP00锁定环境基线合并运行142 passed；Python 3.10/3.11/3.12的依赖解析和运行时导入烟测通过；文档检查0 errors。
+基线 main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d；WP00锁定环境基线合并运行 142 passed；WP01 在本机 Python 3.12 定向回归 160 passed、message-flow 合同 14 passed。GitNexus 1.6.11 索引绑定 `edb8a3d`、status up-to-date、content current；暂存后 `scope=all` 13 文件/83 symbols/low，compare main 156 文件/111 symbols/low。详细风险与流程限制见 WP01 报告。
 
-GitNexus流程抽取有预算截断、回调与跨语言缺边；UNKNOWN已补查，不当低风险。精确UID结果：`conversation_key` CRITICAL/14 impacted；`record_message` CRITICAL/18 lower-bound 且有3个未解析调用点；`scope_for_chat_context` HIGH/5 impacted；群注册函数 UNKNOWN/0 调用并已用 rg 确认只有定义/测试引用。平台注册快照SHA-256不变；所有新平台收发 fixture/live 仍未执行。当前尚未迁移生产库、未启动Bot。
+GitNexus 流程抽取仍有入口/分支预算截断、回调和跨语言缺边；UNKNOWN 与零调用者均用源码引用补查，不作为低风险。WP01 中 V2 注册 API 无生产调用点（待后续入口包接线）；旧 `lookup` CRITICAL/10 impacted，schema helper HIGH/22，负数分配器 HIGH/7，详细调用流程见报告。平台注册快照 SHA-256 不变；平台收发 fixture/live 尚未执行。未迁移生产库、未启动 Bot；`STELLA_HOME` 未设置，测试使用临时隔离数据。
 
 ## Next Steps
 
-1. WP00 已完成并提交时更新本交接记录。
-2. 开始 WP01 前再次刷新 GitNexus 图，对 `core/conversation.py`、`memory/conversation_registry.py`、`config/spaces.py` 运行 upstream impact；按不透明 ID 与 alias 兼容合同实现 keys/models/注册。
-3. 每个工作包按依赖顺序执行，先跑 upstream impact；阶段验收后记录 SHA 并提交。常用命令：`./.gitnexus/gn status --json`、`./.gitnexus/gn context <symbol> --repo Stella_project`。
+1. WP00 已提交；WP01 当前进入阶段提交与状态记录收尾。
+2. 下一阶段 WP02：先刷新图并对 `core/context.py`、RuntimeFacade、turn/projection 与 message-id/reply-envelope 符号运行 upstream impact；再实现 projection 6→7 与旧协议兼容。
+3. 各阶段继续按依赖顺序验收和提交；常用 GitNexus 命令固定使用 1.6.11：`pnpm --allow-build=@ladybugdb/core --allow-build=gitnexus --allow-build=tree-sitter dlx gitnexus@1.6.11 status --json`、`... context <symbol> --repo Stella_project`。
 
 ---
 

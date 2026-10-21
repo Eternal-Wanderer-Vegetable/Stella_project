@@ -16,6 +16,7 @@ import threading
 import pytest
 
 from core.conversation import conversation_key
+from core.transport.models import BotRef, SceneRef
 from memory import conversation_registry as registry
 
 
@@ -150,3 +151,139 @@ class TestDrainEnumeration:
         assert kinds == {"group", "private", "webchat"}
         keys = {ref.conversation_key for ref in refs}
         assert conversation_key("qq", "10000", "group", "263402786") in keys
+
+
+class TestTransportRegistry:
+    def test_v2_registration_preserves_opaque_identity_and_legacy_alias(self, conn, tmp_path):
+        bot = BotRef("connection:one", "adapter", "platform", "bot:007")
+        scene = SceneRef("thread", "频道/雪", ("server:1", "channel/2"), "thread:9")
+        alias = "qq:10000:group:263402786"
+
+        registered = registry.register_conversation_v2(
+            conn, bot, scene, legacy_aliases=(alias,)
+        )
+
+        assert registered.scene == scene
+        assert registered.bot == bot
+        assert registered.storage_session_id < -1
+        assert registered.memory_space == f"transport:{registered.canonical_key}"
+        assert registry.lookup_conversation_v2(conn, bot, scene) == registered
+        assert registry.lookup_conversation_v2_by_alias(
+            conn, alias, bot=bot, scene=scene
+        ) == registered
+
+        # A fresh connection models process restart and must resolve persisted aliases.
+        reopened = sqlite3.connect(tmp_path / "agent_memory.db")
+        try:
+            assert registry.lookup_conversation_v2_by_alias(reopened, alias) == registered
+            assert registry.lookup_conversation_v2(reopened, bot, scene) == registered
+        finally:
+            reopened.close()
+
+    def test_alias_collision_across_bots_fails_closed_without_context(self, conn):
+        scene = SceneRef("channel", "same-opaque-id", ("server",))
+        bots = [
+            BotRef("connection-a", "adapter", "platform", "same-bot-id"),
+            BotRef("connection-b", "adapter", "platform", "same-bot-id"),
+        ]
+        refs = [
+            registry.register_conversation_v2(
+                conn, bot, scene, legacy_aliases=("runtime:shared-alias",)
+            )
+            for bot in bots
+        ]
+
+        assert refs[0].storage_session_id != refs[1].storage_session_id
+        assert refs[0].memory_space != refs[1].memory_space
+        assert registry.lookup_conversation_v2_by_alias(conn, "runtime:shared-alias") is None
+        assert registry.lookup_conversation_v2_by_alias(
+            conn,
+            "runtime:shared-alias",
+            bot=bots[0],
+            scene=scene,
+        ) == refs[0]
+        assert registry.lookup_conversation_v2_by_alias(
+            conn,
+            "runtime:shared-alias",
+            bot=bots[1],
+            scene=scene,
+        ) == refs[1]
+
+    def test_legacy_enumeration_does_not_coerce_v2_rows(self, conn):
+        bot = BotRef("connection-a", "adapter", "platform", "bot-id")
+        scene = SceneRef("group", "not-an-integer")
+        registered = registry.register_conversation_v2(conn, bot, scene)
+
+        assert registry.all_registered(conn) == []
+        assert registry.all_registered_v2(conn) == [registered]
+        assert registry.lookup(conn, registered.canonical_key) is None
+        assert registry.lookup_by_storage_session_id(
+            conn, registered.storage_session_id
+        ) is None
+
+    @pytest.mark.parametrize("register_v2_first", [False, True])
+    def test_legacy_and_v2_allocators_share_negative_id_sequence(
+        self, conn, register_v2_first
+    ):
+        bot = BotRef("connection-a", "adapter", "platform", "bot-id")
+        scene = SceneRef("channel", "opaque-id")
+
+        if register_v2_first:
+            transport_ref = registry.register_conversation_v2(conn, bot, scene)
+            legacy_ref = registry.get_or_register_private(conn, "10000", 20001)
+        else:
+            legacy_ref = registry.get_or_register_private(conn, "10000", 20001)
+            transport_ref = registry.register_conversation_v2(conn, bot, scene)
+
+        assert transport_ref.storage_session_id != legacy_ref.storage_session_id
+        assert min(transport_ref.storage_session_id, legacy_ref.storage_session_id) < -1
+
+    def test_v2_registration_is_idempotent_and_adds_new_aliases(self, conn):
+        bot = BotRef("connection-a", "adapter", "platform", "bot-id")
+        scene = SceneRef("private", "opaque-user-id")
+        first = registry.register_conversation_v2(
+            conn, bot, scene, legacy_aliases=("old-runtime-key",)
+        )
+        second = registry.register_conversation_v2(
+            conn,
+            bot,
+            scene,
+            legacy_aliases=("old-runtime-key", "new-runtime-key"),
+        )
+
+        assert second.storage_session_id == first.storage_session_id
+        assert second.legacy_aliases == ("new-runtime-key", "old-runtime-key")
+        assert registry.lookup_conversation_v2_by_alias(
+            conn, "new-runtime-key", bot=bot, scene=scene
+        ) == second
+
+    def test_concurrent_v2_registrations_allocate_distinct_storage_ids(self, conn, tmp_path):
+        db_path = str(tmp_path / "agent_memory.db")
+        barrier = threading.Barrier(6)
+        results = []
+        errors = []
+
+        def worker(index: int) -> None:
+            local = sqlite3.connect(db_path, timeout=5)
+            try:
+                local.execute("PRAGMA busy_timeout = 5000")
+                bot = BotRef(f"connection-{index}", "adapter", "platform", "bot-id")
+                scene = SceneRef("channel", f"opaque:{index}/雪")
+                barrier.wait(timeout=5)
+                results.append(registry.register_conversation_v2(local, bot, scene))
+            except Exception as exc:  # pragma: no cover - failures are surfaced below
+                errors.append(exc)
+            finally:
+                local.close()
+
+        threads = [threading.Thread(target=worker, args=(index,)) for index in range(6)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        assert not errors, errors
+        assert all(not thread.is_alive() for thread in threads)
+        assert len(results) == 6
+        assert len({ref.storage_session_id for ref in results}) == 6
+        assert all(ref.storage_session_id < -1 for ref in results)

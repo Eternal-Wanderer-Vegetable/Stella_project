@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-20",
+  "updated_at": "2026-10-21",
   "active_feature": "XPLAT-IMPL",
   "features": [
     {
@@ -83,6 +83,10 @@
         {
           "command": ".venv/bin/python -m pytest tests/test_conversation_identity.py tests/test_conversation_registry.py tests/test_multi_user_identity.py tests/test_private_chat_ingress.py tests/test_context_tail.py tests/test_ai_gateway_deterministic_reply.py tests/test_memory_capture_gate.py tests/test_capture_ingress_gating.py -q",
           "result": "WP00 locked-environment QQ/WebChat identity, ingress, context, and capture-gate baseline: 142 passed. STELLA_HOME unset; tests use temporary isolated data/config."
+        },
+        {
+          "command": "WP01: GitNexus 1.6.11 analyze/status/upstream impact + rg source audit; .venv/bin/python -m pytest tests/test_transport_identity.py tests/test_conversation_registry.py tests/test_conversation_identity.py tests/test_multi_user_identity.py tests/test_private_chat_ingress.py tests/test_context_tail.py tests/test_ai_gateway_deterministic_reply.py tests/test_memory_capture_gate.py tests/test_capture_ingress_gating.py -q; .venv/bin/ruff check changed Python; python scripts/check_docs.py; python scripts/generate_message_flow.py --check; GitNexus detect-changes scope all/compare main",
+          "result": "WP01 identity and registry regressions: 160 passed; message-flow contract: 14 passed; Ruff passed; docs 119 files / 1204 local links / 577 anchors / 0 errors; message-flow topology unchanged and generated check passed. GitNexus current at edb8a3d; post-stage scope all 13 files / 83 symbols / low, compare main 156 files / 111 symbols / low, no partial/truncated; see docs/reports/2026-10-21-wp01-identity-registry.md."
         }
       ]
     },

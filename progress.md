@@ -2,9 +2,9 @@
 
 ## Current State
 
-**Last Updated:** 2026-10-20 (Asia/Shanghai)
-**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00 已完成，下一步 WP01；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`。
-**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)，平台 live、发布与VM验收单独记录。
+**Last Updated:** 2026-10-21 (Asia/Shanghai)
+**Active Feature:** XPLAT-IMPL 跨平台接入实施，WP00–WP01 已完成，下一步 WP02；工作分支 `codex/cross-platform-implementation`，基线 `main@ba582a9`。
+**Scope:** 按[执行方案](docs/plans/2026-10-20-gitnexus-cross-platform-plan.md)与[完整清单](docs/plans/2026-10-20-cross-platform-inventory.md)执行 WP00–WP11，阶段验收后分别提交；实施报告见[WP00记录](docs/reports/cross-platform-implementation-20261020.md)与[WP01记录](docs/reports/2026-10-21-wp01-identity-registry.md)，平台 live、发布与VM验收单独记录。
 
 ## 2026-10-20 — GitNexus / Cross-platform planning
 
@@ -22,6 +22,15 @@
 - 基线：会话身份/注册表/用户隔离 79 passed；QQ/WebChat 入口/上下文 32 passed；采集门/入站限制 31 passed；文档门禁 119 files / 1199 links / 577 anchors / 0 errors。
 - WP00 完成：平台桥接依赖设为显式可选 extra，并生成跨 Python 的锁；现有回归向量作为 QQ/WebChat 冻结基线。锁定依赖解析与 3.10/3.11/3.12 导入烟测通过；定向回归 142 passed；文档/JSON/diff 检查通过。下一步 WP01。
 - 影响基线已按 UID 精确核对：`conversation_key` CRITICAL（14 impacted、6 direct、4 flows、5 modules）；`ConversationRef.conversation_key` UNKNOWN/0 edges；`get_or_register_group` UNKNOWN/0 callers，源码引用仅定义与测试；`scope_for_chat_context` HIGH/5 impacted；`record_message` CRITICAL/18 lower-bound，3 个未解析接收者。
+
+## 2026-10-21 — Cross-platform implementation (WP01)
+
+- GitNexus 1.6.11 刷新绑定 `edb8a3d`，status up-to-date、content current、覆盖 1,394 个文件（96,237 nodes / 237,994 edges / 1,012 clusters / 829 flows）。流程入口/分支截断、32 候选上限和跨语言属性缺边仍按计划限制处理。
+- 影响证据：旧 `lookup` 为 CRITICAL（10 impacted / 4 direct / 4 flows）；registry schema helper HIGH（22 / 3）；负数分配器 HIGH（7 / 3）；旧 `conversation_key` 函数 CRITICAL（14 / 6 / 4 flows / 5 modules），同名属性 UNKNOWN。文本核查发现维护工具直接读旧表，故 V2 使用独立表；`register_conversation_v2` 尚无生产调用者，留待后续入口包接线。
+- 完成 transport identity/key codecs 与 `conversation_registry_v2`、可歧义 alias 映射；V2 / V1 负数存储号在事务中统一扫描，旧 QQ/WebChat 读写 API 和表布局保持独立。未扩展 QQ-only 的整数空间配置；generic 会话默认 `transport:<canonical_key>` 独占空间，避免隐式共享。
+- 环境边界：`STELLA_HOME` 未设置；pytest 使用临时数据库和空间配置；未启动 Bot、未访问或迁移生产库。
+- 验收：身份/注册表及 QQ/WebChat 相关测试 **160 passed**，message-flow 合同测试 **14 passed**；改动 Python Ruff 通过；文档门禁 119 文件 / 1204 链接 / 577 锚点 / 0 errors；message-flow 清单已重生成，拓扑未变，`--check` 通过。暂存后 GitNexus `scope=all` 为 13 个文件 / 83 symbols / low；compare main 为 156 文件 / 111 symbols / low，无 partial/truncated。
+- 细节与命令见[WP01实施记录](docs/reports/2026-10-21-wp01-identity-registry.md)。下一阶段 WP02。
 
 ## What's Done
 

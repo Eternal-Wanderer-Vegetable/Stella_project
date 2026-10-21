@@ -3,7 +3,7 @@
 - 日期：2026-10-20，Asia/Shanghai。
 - 源码基线：`main@ba582a922f4d3379b6397c4c0a8d8ef3e7c3e77d`；工作区 `/home/vegetable/repos/Stella`。
 - 规划阶段交付：本地 GitNexus 代码图谱、原始查询证据、改造清单及执行方案；当时未实施业务改造。
-- 实施状态：2026-10-20 已授权；WP00 完成，WP01 待开始。计划完成不代表平台支持、数据迁移或发布验收完成。
+- 实施状态：2026-10-21；WP00、WP01 完成，WP02 待开始。计划完成不代表平台支持、数据迁移或发布验收完成。
 - 证据目录：[cross-platform-20261020](../reports/evidence/cross-platform-20261020/README.md)。逐文件清单、50 个入口、32 个适配器矩阵见[执行附录](2026-10-20-cross-platform-inventory.md)。
 
 ## 1. 目标与可验收边界
@@ -178,7 +178,8 @@ PERSON 私聊事实保持 PRIVATE_ONLY；共享空间不隐含跨平台个人事
 | 包 | 状态 | 结果 |
 | --- | --- | --- |
 | WP00 合同冻结与基线 | done | 可选平台依赖锁定为 Alconna 0.62.1 / Uninfo 0.11.2；Python 3.10/3.11/3.12 解析及导入烟测通过；QQ/WebChat 定向回归 142 passed。 |
-| WP01 身份和注册表 | planned | 下一阶段；修改前按当前 GitNexus 索引复核 upstream impact。 |
+| WP01 身份和注册表 | done | [WP01 实施记录](../reports/2026-10-21-wp01-identity-registry.md)：opaque key/models、独立 V2 注册表与 alias、跨版本负存储号隔离；定向回归 160 passed。 |
+| WP02 上下文和消息身份 | planned | 下一阶段；先按当前 GitNexus 索引复核 upstream impact。 |
 
 其他工作包仍为 planned；本表只在阶段实现、回归与提交后更新状态。
 
@@ -244,7 +245,7 @@ cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml
 
 本轮完成条件：索引可查询且绑定当前源码；风险与缺边被记录并补证；执行方案有合同、文件/入口/平台清单、依赖顺序、迁移回滚和验收标准；文档/状态门禁通过；业务源码零改动。本轮不要求执行跨平台业务测试，也不以未执行测试声称运行支持。GitNexus detect_changes(scope=all)只列当前已跟踪的3个状态文件；未跟踪的方案/证据另以完整新文件清单、链接/JSON/指纹/哈希核验覆盖，不能把该命令的3文件当作本轮全部产物数。
 
-实施已获授权；WP00 已冻结依赖和 QQ/WebChat 基线。下一步刷新 GitNexus 图并从 WP01 身份/alias 设计开始，随后顺序实施。不要直接在 ai_gateway.py 中批量替换 OneBot import、裸群号和 MessageSegment。
+实施已获授权；WP00 冻结依赖和 QQ/WebChat 基线，WP01 身份/alias 已完成。下一步刷新 GitNexus 图并从 WP02 上下文和消息身份开始，随后顺序实施。不要直接在 ai_gateway.py 中批量替换 OneBot import、裸群号和 MessageSegment。
 
 ## 12. 上游依据
 
