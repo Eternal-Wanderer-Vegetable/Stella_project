@@ -783,7 +783,7 @@
         },
         {
           "command": "git merge origin/main@811ab69; gh pr view 115; gh run view 39716099609",
-          "result": "PR #115 merged at main@811ab69 with hosted CI success. Resolved the only merge conflicts in feature_list.json, progress.md and session-handoff.md while preserving TEST-REPO-SYNC and the merged LinkMonitor status."
+          "result": "PR #115 merged at main@811ab69 with hosted CI success. Resolved the only merge conflicts in feature_list.json, progress.md and session-handoff.md while preserving TEST-REPO-SYNC and the merged LinkMonitor status; merge plus fixture fix committed locally as 0520a5a."
         },
         {
           "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",

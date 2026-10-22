@@ -7,11 +7,11 @@
 **Inherited Feature:** PR #115 is merged at `main@811ab69` and its hosted CI passed; Gravitas deployment verification is blocked pending access to the test environment. PR #113 CI repair is complete; XPLAT-IMPL external acceptance gaps remain tracked separately.
 **Scope:** Preserve the cross-platform sync scripts, isolate the social-worker queue in its regression fixture, and reconcile state documents with current main. Work is on `codex/test-repo-sync-scripts`, merging `origin/main@811ab69`.
 
-**What's Done:** Sync implementation commit `37a9f4c` is in PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116). Its hosted run `39718004194` failed only in Python 3.11 on two `social_worker` tests. Root cause: the tests isolated trace storage but left `settings.DB_PATH` shared across parallel xdist workers. The fixture now points the worker queue at a per-test SQLite file; all 7 tests in that file passed with 3 xdist workers. PR #115 and the three state-doc conflicts were reconciled. Docs (119 files / 1247 links / 577 anchors / 0 errors), JSON, Ruff, py_compile, and diff checks pass. A refreshed PR CI run is pending push. Linux/Windows test-host execution remains pending.
+**What's Done:** Sync implementation commit `37a9f4c` is in PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116). Its hosted run `39718004194` failed only in Python 3.11 on two `social_worker` tests. Root cause: the tests isolated trace storage but left `settings.DB_PATH` shared across parallel xdist workers. The fixture now points the worker queue at a per-test SQLite file; all 7 tests in that file passed with 3 xdist workers. PR #115 and the three state-doc conflicts were reconciled; merge and fixture fix are committed locally as `0520a5a`. Docs (119 files / 1247 links / 577 anchors / 0 errors), JSON, Ruff, py_compile, and diff checks pass. A refreshed PR CI run is pending push. Linux/Windows test-host execution remains pending.
 
 **Files:** `tests/observability/test_background_flow_roots.py`, `scripts/sync_test_repo.py`, `scripts/sync_test_repo.sh`, `scripts/sync_test_repo.ps1`, bilingual deployment guides, `feature_list.json`, `progress.md`, and `session-handoff.md`.
 
-**What's Next:** Commit and push the merge plus fixture fix, then inspect refreshed hosted CI. Linux and Windows test-host sync acceptance remains pending.
+**What's Next:** Push the merge plus fixture fix and inspect refreshed hosted CI. Linux and Windows test-host sync acceptance remains pending.
 
 ## 2026-10-22 — Cross-platform test checkout sync
 

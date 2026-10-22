@@ -2,14 +2,14 @@
 
 ## Current Session — PR #116 queue isolation and documentation conflict resolution
 
-用户要求修复 PR #116 的 CI 失败并解决 main 同步后的文档冲突。当前分支 `codex/test-repo-sync-scripts` 正在合并 `origin/main@811ab69`；PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 保持 OPEN，原始同步脚本提交为 `37a9f4c`。
+用户要求修复 PR #116 的 CI 失败并解决 main 同步后的文档冲突。当前分支 `codex/test-repo-sync-scripts` 包含合并提交 `0520a5a`，已合并 `origin/main@811ab69`；PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 保持 OPEN，原始同步脚本提交为 `37a9f4c`。
 
 - Root cause：PR CI run `39718004194` 的 Python 3.11 job 中，`test_no_jobs_creates_no_root` 断言 `claimed == 0` 实际为 1，`test_no_handler_marks_dead` 断言 `dead == 1` 实际为 0。两个测试分别运行于 xdist `gw1` / `gw3`；同类 enqueue 测试在 `gw0` 运行。`flow_db` 仅隔离 `turn_trace.db`，`social_worker._connect()` 仍使用全局 `settings.DB_PATH`，故并行 worker 会竞态读写队列。
 - Fix：`tests/observability/test_background_flow_roots.py::flow_db` 将 `settings.DB_PATH` 指向每个用例独立的 `tmp_path/social.db`，初始化 social schema，并在 teardown 清除 `social_store` 表就绪缓存；没有修改生产逻辑。
 - GitNexus：测试方法 upstream impact UNKNOWN / 0 图调用者（pytest 收集方式，源码引用已查）；`run_due_jobs` upstream LOW / 1 direct / 2 modules / 0 processes。GitNexus 1.6.12 索引于 PR 分支 HEAD；分析报告有 process truncation，不把遗漏流程视为无调用。
 - 文档冲突：PR #115 已合并为 `main@811ab69`，hosted run `39716099609` 全通过。合并冲突只涉及 `feature_list.json`、`progress.md`、`session-handoff.md`；保留 TEST-REPO-SYNC 状态，并同步 LinkMonitor 的 merged 状态，远端 Gravitas 页面验收仍列为 pending。
 - Verification：`STELLA_HOME=/tmp/stella-pr116-social-root-20261022-a .venv/bin/python -m pytest tests/observability/test_background_flow_roots.py -q -n 3 --dist loadgroup` passed (7 tests / 1.68s); changed-file Ruff/py_compile passed; docs gate passed (119 files / 1247 links / 577 anchors / 0 errors); JSON, conflict-marker, and diff checks passed. After a forced GitNexus 1.6.12 reindex, detect all reported 6 files / 11 symbols / 0 processes / LOW; compare main reported 9 files / 28 symbols / 0 processes / LOW. The refreshed index maps the fixture and lifecycle-hook symbols to their correct files. Analyzer process extraction omitted 2,887 entry-point candidates, so zero process hits is not used as proof of no runtime paths. Refreshed hosted CI remains pending. Current host has no PowerShell parser; Linux/Windows test-host execution remains outstanding.
-- Next：commit the merge plus fixture fix, push PR #116, then inspect hosted CI. Keep Linux/Windows test-checkout sync validation pending.
+- Next：push the merge plus fixture fix in PR #116, then inspect hosted CI. Keep Linux/Windows test-checkout sync validation pending.
 
 ## Inherited Session — LinkMonitor and Gravitas follow-up
 
