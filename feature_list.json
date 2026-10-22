@@ -659,6 +659,14 @@
         {
           "command": "git commit -m \"fix(link-monitor): annotate bot lifecycle hooks\"",
           "result": "Original branch commit 067745f was cherry-picked onto origin/main@a568953 as 15e326b; follow-up PR not yet created."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-link-monitor-followup-full-20261022 .venv/bin/pytest tests -q",
+          "result": "4015 passed / 29 skipped / 3 failed in 252.61s: Cometa worker ACK, personal memory concurrent replay, and WebUI groups mute. Each failing test passed alone (1 passed) under a distinct temporary STELLA_HOME; shared ordering/state cause remains unconfirmed."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-link-followup-{cometa,memory,webui}-20261022 .venv/bin/pytest <failed-test-node> -q",
+          "result": "Each of the three full-suite failures passed alone: 1 passed for Cometa, memory concurrency, and WebUI group mute."
         }
       ]
     },

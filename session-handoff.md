@@ -8,7 +8,7 @@
 - Gravitas 页面：当前源代码与 `dashboard/dist` 有页面路由及 chunk；旧 `webui/dist`、`desktop/dashboard-dist` 快照缺少页面 chunk。现已执行 Vue typecheck、Vite build 和 `dashboard/sync-dist.mjs`；三个快照完全相同、各 52 个文件，JS/CSS 引用完整。生成快照在 `.gitignore` 中，不进入提交。
 - API 装配：`bot.py` → `setup_gravitas` 注入 `status_api` provider → `status_api.collect_status` 注入 `webui.status_source` → `/api/v1/status` 的 `data.gravitas`。若静态资源更新后页面出现但内容 unavailable，查看 `data.gravitas`；若为 null，检查启动期 `[gravitas][boot]` 日志。外部测试环境浏览器/API 响应尚未访问。
 - GitNexus：原 `.gitnexus/meta.json` 指向另一 worktree，默认 status / analyze 因 foreign storage 拒绝。已用 `/tmp/gitnexus-stella-codex-link-monitor` 外部 index 分析当前代码；两个 callback impact 为 UNKNOWN / 0 静态 caller，Driver decorator 注册点经源码确认。提交前 `detect-changes all` 为 2 files / 4 symbols、compare main 同值，LOW，无 partial/truncated。
-- Verification：`STELLA_HOME=/tmp/stella-debug-20261022 .venv/bin/pytest tests/test_link_monitor.py tests/test_status_api.py -q`：35 passed；改动文件 Ruff 通过；Dashboard typecheck、Vite build、静态资源同步通过。Vite 输出 chunk size 和 dynamic/static import warnings。没有跑全量 Python suite，也未连接真实 Bot、平台或测试环境浏览器。
+- Verification：定向 LinkMonitor / status API 回归 35 passed；全仓 Ruff、改动 Python `py_compile` 通过；Dashboard typecheck、Vite build、静态资源同步通过。全量 Python suite 4,015 passed / 29 skipped / 3 failed（Cometa worker ACK、personal memory concurrent replay、WebUI groups mute）；三个失败在各自隔离 `STELLA_HOME` 下重跑均 1 passed，顺序/共享状态根因未确认。Vite 有 chunk-size 和 dynamic/static import warnings。未连接真实 Bot、平台或测试环境浏览器。
 - Next：完成状态记录提交，推送新分支并创建 PR。部署新前端 build/sync 后重启 Bot；若 Gravitas 页仍 unavailable，收集登录后的 `/api/v1/status` 中 `data.gravitas`（不要贴凭据）及 Gravitas 启动日志。
 
 ## Previous Session — PR #113 CI repair
