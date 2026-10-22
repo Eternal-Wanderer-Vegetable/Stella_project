@@ -1,5 +1,25 @@
 # Session Handoff
 
+## Current Session — Source Dashboard startup rebuild and release audit
+
+The blank test UI came from a stale `webui/dist`. This branch now rebuilds the Dashboard when `bot.py` is run from a source checkout or source archive, before serving requests; a failed build stops the new process rather than serving stale assets. Release products with a version-marked frontend skip this runtime path.
+
+- Branch: `codex/auto-build-dashboard-on-source-start`. Pre-existing local edits to `progress.md` and `session-handoff.md` from PR #116/Gravitas work were preserved; the ignored local `dashboard/dist`, `webui/dist`, and `desktop/dashboard-dist` were not changed.
+- Source build: `webui/source_build.py` runs frozen dependency install, `pnpm build`, and `pnpm sync:webui`. Git checkouts build even when an old version marker exists; source archives build when no release asset marker exists. `deploy/process.py` startup wait is 180 seconds for cold installs. `dashboard/pnpm-workspace.yaml` uses `allowBuilds` for `esbuild` and `vue-demi`; official pnpm docs state pnpm 10 supports it starting at 10.26 and pnpm 11 replaced the older `onlyBuiltDependencies` config.
+- Release audit: Windows release workflow already builds and stages Dashboard artifacts. Docker previously had no Dashboard build, so clean release checkouts lacked `webui/dist`; Dockerfile now builds with Node 24, copies fresh dist, and adds a version marker. `.dockerignore` excludes local ignored bundles. Dashboard/WebUI PRs trigger Docker build and asset smoke.
+- GitNexus before edit: `bot.py` UNKNOWN / 0 graph callers (source refs verified); `deploy/process.py` MEDIUM / 40 impacted / 6 direct callers; `Dockerfile` UNKNOWN / 0 (compose/workflow source refs verified); package.json UNKNOWN / 0 (manifest/workflow refs verified). `progress.md` returned HIGH / partial and the warning was reported before editing. GitNexus does not index the two deployment guide paths; `rg` confirmed references before changing them.
+- Build evidence: isolated `/tmp/stella-dashboard-source-build-20261022` install/build/sync passed with pnpm 11.25.0, and the synced output contains `GravitasStatusPage-*.js`. No repository ignored dist was touched. Docker CLI build attempt failed before processing because `/var/run/docker.sock` is unavailable; hosted Docker CI remains necessary.
+- Final checks passed: `.venv/bin/ruff check bot.py deploy/process.py webui/source_build.py`; `python3 -m py_compile bot.py deploy/process.py webui/source_build.py`; `python3 scripts/check_docs.py` (119 files / 1247 links / 577 anchors / 0 errors); `python3 -m json.tool feature_list.json`; `git diff --check`. GitNexus detect all: 12 files / 14 symbols / 0 processes / LOW; compare main: 17 files / 25 symbols / 0 processes / LOW. Do not run pytest or start the real Bot; neither was requested, and the running test service was not modified.
+- Next: complete the checks above, inspect the final diff, then run full Docker build/smoke in Docker-enabled CI. Direct Linux/Windows source-start and test-checkout acceptance remain external.
+
+## Previous Session — Gravitas Dashboard test-environment diagnosis
+
+User reported a blank Gravitas page and supplied `/api/v1/status`. The payload contains a Gravitas object with `mode=shadow`, `snapshot_valid=true`, and assessment `partial`, so the backend has status data. The source route and navigation are present, but the test service is serving an older Dashboard bundle.
+
+Confirmed by read-only HTTP requests to `127.0.0.1:8080`: the served index SHA-256 is `bcc60e4d27803f551c9e16089d06f4e0924ad4ff4091412aade9112f59386b0f`; it references `assets/index-UXCygCID.js`, which contains no Gravitas route markers. Current local `webui/dist` has 52 files, SHA-256 `4cbc7dc5a32971508b8f383159fc2ec45a389cab0308273a71c7731c9b011fde`, with route-bearing entry `assets/index-Dqzv2b0Y.js` and lazy chunks `GravitasStatusPage-BM9b9YdZ.js` / `GravitasStatusPage-DwLkJqxt.css`. Both chunks return 404 from the test service. Root cause: test service static assets were not rebuilt/synced after the Gravitas route was added; the source-only sync script and Dockerfile do not build them automatically.
+
+- Next: run `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui` on the deployment checkout, then restart/recreate the service using its deployment method. Verify the served index changes, the Gravitas JS chunk returns 200, and `/#/gravitas` renders.
+
 ## Current Session — PR #116 CI repair and documentation conflict resolution
 
 用户要求修复 PR #116 的 CI 失败并解决 main 同步后的文档冲突。当前分支 `codex/test-repo-sync-scripts` 包含合并提交 `0520a5a`，已合并 `origin/main@811ab69`；PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 保持 OPEN，原始同步脚本提交为 `37a9f4c`。

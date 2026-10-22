@@ -70,7 +70,9 @@ _STAGE_SIGNAL_WAIT_SECONDS = 3.0
 # 轮询间隔（秒）
 _POLL_INTERVAL = 0.3
 # 后台启动不能只以 Popen 成功为成功：uvicorn 可能随后因端口冲突或导入错误退出。
-STARTUP_TIMEOUT_SECONDS = 15.0
+# 源码启动会先运行 Dashboard 的 pnpm 安装/构建/同步，冷启动可能超过原来的
+# 15 秒；给 deploy start 足够时间等待前端构建和服务 API 同时就绪。
+STARTUP_TIMEOUT_SECONDS = 180.0
 STARTUP_POLL_INTERVAL = 0.3
 
 

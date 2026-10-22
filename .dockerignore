@@ -56,6 +56,10 @@ tests
 scripts
 design_docs
 assets
+dashboard/node_modules
+dashboard/dist
+webui/dist
+desktop/dashboard-dist
 requirements-dev.txt
 README.en.md
 README改进简要说明.md

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-22",
-  "active_feature": "TEST-REPO-SYNC",
+  "active_feature": "WEBUI-STARTUP-BUILD",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -735,7 +735,7 @@
       "id": "TEST-REPO-SYNC",
       "name": "测试环境跨平台安全仓库同步",
       "description": "为 Linux 与 Windows 测试 checkout 提供安全的远端 upstream 快进同步入口，检测本地修改并拒绝覆盖。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [],
       "scope": [
         "tests/observability/test_background_flow_roots.py",
@@ -814,6 +814,52 @@
         {
           "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",
           "result": "After a forced GitNexus 1.6.12 reindex, scope all: 6 files / 11 symbols / 0 processes / LOW; compare main: 9 files / 28 symbols / 0 processes / LOW. The refreshed index maps the fixture and merged lifecycle-hook symbols to their correct files. Neither detect output reported partial/truncated; process extraction did omit 2,887 entry-point candidates, so zero process hits is not treated as proof of no runtime paths."
+        }
+      ]
+    },
+    {
+      "id": "WEBUI-STARTUP-BUILD",
+      "name": "源码启动自动重建 Dashboard 与发布资源完整性",
+      "description": "修复源码 bot.py 启动复用旧 WebUI dist 的问题，并保证 Docker 与 Windows 发布资产携带当前 Dashboard。",
+      "status": "in_progress",
+      "dependencies": [],
+      "scope": [
+        "bot.py",
+        "webui/source_build.py",
+        "deploy/process.py",
+        "dashboard/package.json",
+        "dashboard/pnpm-workspace.yaml",
+        "Dockerfile",
+        ".dockerignore",
+        ".github/workflows/docker-publish.yml",
+        "docs/guides/deployment-docker.md",
+        "docs/guides/deployment-docker.en.md",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "源码仓库或无 release marker 的源码归档直接运行 bot.py 时先构建并同步 Dashboard；失败时中止新进程，不提供旧 bundle。",
+        "Windows 的 pnpm.cmd 与 POSIX 启动路径均有实现；后台启动等待覆盖冷依赖安装和前端构建。",
+        "Windows Release 继续使用 Release 工作流构建的 Dashboard 产物，Docker 镜像在构建阶段生成 Dashboard 且忽略宿主机 dist。",
+        "Docker PR 工作流会在 Dashboard/WebUI 变更时运行，并检查镜像中存在前端入口。",
+        "Python lint/编译、Dashboard typecheck/build/sync、双语文档门禁完成；Docker daemon 不可用时保留镜像构建验收缺口。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus impact bot.py, deploy/process.py, Dockerfile, dashboard/package.json upstream; source reference audit",
+          "result": "bot.py UNKNOWN / 0 graph callers; deploy/process.py MEDIUM / 40 impacted; Dockerfile UNKNOWN / 0; dashboard/package.json UNKNOWN / 0. Source audit confirms deploy/process.py and deploy/__main__.py launch bot.py, docker-publish.yml owns Docker builds, and release.yml already builds/stages Windows Dashboard assets."
+        },
+        {
+          "command": "pnpm 11.25.0 install --frozen-lockfile, build, and sync:webui in /tmp/stella-dashboard-source-build-20261022",
+          "result": "Passed with the workspace allowBuilds policy. vue-tsc and Vite build succeeded; synced 51 assets including the GravitasStatusPage JS chunk. Repository dashboard/dist, webui/dist, and desktop/dashboard-dist were not modified."
+        },
+        {
+          "command": ".venv/bin/ruff check bot.py deploy/process.py webui/source_build.py; python3 -m py_compile bot.py deploy/process.py webui/source_build.py; python3 scripts/check_docs.py; git diff --check; GitNexus detect-changes all and compare main",
+          "result": "Ruff and Python compilation passed; documentation checker passed (119 files / 1247 links / 577 anchors / 0 errors); diff check passed. GitNexus detect all: 12 files / 14 symbols / 0 processes / LOW; compare main: 17 files / 25 symbols / 0 processes / LOW."
+        },
+        {
+          "command": "Docker target build and final image smoke",
+          "result": "Not run: Docker CLI is present, but /var/run/docker.sock is unavailable. Docker PR workflow now covers dashboard/** and webui/** changes and checks that /app/webui/dist/index.html is bundled."
         }
       ]
     }
