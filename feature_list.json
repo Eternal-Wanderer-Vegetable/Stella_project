@@ -648,6 +648,54 @@
           "result": "Workflow conclusion success for head 5df7ca53e48771c259fd01c4824cbe14bf287705; every reported PR check passed."
         }
       ]
+    },
+    {
+      "id": "PR113-CI",
+      "name": "PR #113 CI 修复与英文提交信息",
+      "description": "修复 PR #113 的消息流程清单漂移导致的 CI 失败，并将 PR 中的提交信息改为英文。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "memory/post_processors.py",
+        "tests/runtime/fixtures/legacy_traces/p2_protocol/tool_and_evidence_sections.json",
+        "core/observability/flows/message-flow.*.json",
+        "feature_list.json、progress.md、session-handoff.md"
+      ],
+      "done_criteria": [
+        "确认 hosted CI 根因并更新生成的消息流程归档，flow-manifest 门禁通过",
+        "hosted Python 3.10–3.12 全量回归及文档、Ruff、flow、diff 检查通过；本地未通过项如实记录",
+        "PR #113 的所有提交信息均为英文，修复已推送且 hosted CI 结果已读取"
+      ],
+      "evidence": [
+        {
+          "command": "gh pr checks 113 --repo Eternal-Wanderer-Vegetable/Stella_project; gh run view 39699060445 --job 119563537684 --log",
+          "result": "flow-manifest reports source drift in cometa.claim and post.parse; all Python 3.10/3.11/3.12 jobs fail only TestDriftGate.test_committed_manifest_matches_source. Other listed CI jobs pass."
+        },
+        {
+          "command": ".gitnexus/gn status --json; .gitnexus/gn impact Function:memory/post_processors.py:parse_output --direction upstream --repo Stella_project; source rg for hook registration",
+          "result": "Index refreshed at cc4743f. Function impact UNKNOWN/0 edges; source audit confirms ai_gateway post-hook registration and evaluation/runtime harness references. File impact LOW, 7 upstream files / 3 direct imports."
+        },
+        {
+          "command": "python scripts/generate_message_flow.py; python scripts/generate_message_flow.py --check",
+          "result": "Generated message-flow.982a65f5aef2.json; check passed."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-pr113-ci-repair-20261022 python -m pytest tests -q -n 4 --dist loadgroup",
+          "result": "4,014 passed / 29 skipped / 2 failed / 5 warnings in 165.25s on Python 3.12.14. Failures were Cometa TestSingleOwner.test_second_worker_rejected and WebUI test_onebot_config_supports_multiple_urls_and_redacts_token; both are outside the PR diff."
+        },
+        {
+          "command": "Run each failed case separately with distinct isolated STELLA_HOME roots",
+          "result": "Cometa single-owner case 1 passed; WebUI OneBot config case 1 passed. The parallel/full-suite failures were not reproduced in isolation; retain as local suite stability observations."
+        },
+        {
+          "command": "gh run view 39707392594 --repo Eternal-Wanderer-Vegetable/Stella_project; gh pr checks 113 --repo Eternal-Wanderer-Vegetable/Stella_project",
+          "result": "Hosted CI passed on the rebased PR code: Python 3.10, 3.11 and 3.12 each report 4,017 passed / 29 skipped; flow-manifest, flow-closure, Dashboard build, security, CLI, Windows native reliability, benchmark, docs and lint all pass."
+        },
+        {
+          "command": "GitNexus 1.6.11 analyze --index-only --workers 1 --name Stella_pr113 --default-branch main; detect-changes --scope all; detect-changes --scope compare --base-ref main",
+          "result": "Before edit: parse_output upstream impact UNKNOWN / 0 edges, source audit confirmed dynamic post-hook registration; file impact LOW (7 impacted files / 3 direct imports). After rebase, detect all: 3 files / 6 symbols / 0 affected processes / LOW; compare main: 6 files / 8 symbols / 0 affected processes / LOW. GitNexus warned its sibling-worktree index was 2 commits behind the checkout, so graph results have that freshness limitation. JSON/archive files are not symbol-mapped and were verified with Git and flow gates. Process extraction remains truncated: 2,917 entrypoint candidates dropped, 816 callees omitted, 22 depth caps, 44 walks cut; process counts are lower bounds."
+        }
+      ]
     }
   ]
 }

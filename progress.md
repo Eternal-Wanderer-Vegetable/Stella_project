@@ -3,9 +3,26 @@
 ## Current State
 
 **Last Updated:** 2026-10-22 (Asia/Shanghai)
-**Active Feature:** 无。LINK-MONITOR-DI 已完成代码修复、回归检查并提交 PR [#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114)；head `5df7ca5` 的 hosted CI run `39702521767` 全部通过。
-**Inherited Feature:** XPLAT-IMPL 的代码已合入 PR #111；其平台 live、干净 VM 与发布缺口仍按原证据保留，不属于本轮 Gravitas scope。
-**Scope:** 已修复 NoneBot 注册 `@event_preprocessor` 时拒绝 `bot: Any` / `event: Any` 的签名错误；PR #114 开放待审，已检查的 hosted CI 全绿。Gravitas G00–G09 和 PR #112 的验收证据保留在下方历史记录；产品外部验收仍 NOT READY。
+**Active Feature:** None (PR113-CI is complete).
+**Inherited Feature:** LINK-MONITOR-DI 已随 PR #114 合入 `main@386b46f`；XPLAT-IMPL 的平台 live、干净 VM 与发布缺口仍按原证据保留。
+**Scope:** PR #113 `codex/memory-envelope-fallback-followup`, rebased onto `main@386b46f`. The original hosted CI run `39699060445` failed because the committed flow archive was stale; the archive is regenerated and hosted CI run `39707392594` passes.
+
+**What's Done:** PR root cause diagnosed and fixed; all PR commit messages are English. Hosted Python 3.10/3.11/3.12 each passed 4,017 tests with 29 skipped. The flow manifest/closure, Dashboard, security, CLI, Windows native, benchmark, documentation, and lint jobs passed. Local full-suite run was 4,014 passed / 29 skipped / 2 failed; each failure passed alone under an isolated `STELLA_HOME`, so the local ordering-sensitive failures remain recorded rather than treated as a green full run.
+
+**Files:** `memory/post_processors.py`; `tests/runtime/fixtures/legacy_traces/p2_protocol/tool_and_evidence_sections.json`; generated `core/observability/flows/message-flow.982a65f5aef2.json`; `feature_list.json`, `progress.md`, and `session-handoff.md`.
+
+**What's Next:** PR [#113](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/113) remains open for review/merge. No additional implementation work is outstanding for this task.
+
+## 2026-10-22 — PR #113 CI repair
+
+- CI diagnosis：run `39699060445` 的 Python job 均只失败于 `TestDriftGate.test_committed_manifest_matches_source`；semantic diff 为 `cometa.claim`、`post.parse` 正文变化而拓扑未变。PR 的 `parse_output` 文案改动触发 `post.parse` 指纹更新，基线另有 `cometa.claim` 漂移。
+- GitNexus：编辑前 `parse_output` upstream impact UNKNOWN/0 边；源码确认 `ai_gateway.py` 动态注册 post hook，并有 runtime、回放、评估引用。文件级 LOW，7 个影响文件 / 3 个直接 import。rebase 后 `detect-changes all` 为 3 files / 6 symbols，`compare main` 为 6 / 8，均 0 affected processes / LOW；CLI 提示 sibling-worktree 索引落后 2 commits，需保留 freshness 限制。全流程提取有预算截断（2,917 入口候选、816 callees、22 深度截断、44 walk 截断）；JSON/archive 由 Git 与 flow 门禁核验。
+- Fix：`scripts/generate_message_flow.py` 生成 `core/observability/flows/message-flow.982a65f5aef2.json`；`--check` 通过。
+- Local verification：Python 3.12.14 全量回归 4,014 passed / 29 skipped / 2 failed / 5 warnings（165.25s）；Cometa `test_second_worker_rejected` 和 WebUI OneBot config 测试各自在独立临时 `STELLA_HOME` 下复跑为 1 passed。全仓 Ruff、文档门禁（119 files / 1247 links / 577 anchors / 0 errors）、flow `--check`、JSON 与 diff 检查通过。全量并行失败仍如实保留。
+- Hosted verification：run `39707392594` on rebased code completed successfully. Python 3.10 / 3.11 / 3.12 each reported 4,017 passed / 29 skipped; flow-manifest, flow-closure, Dashboard build, security, CLI, Windows native reliability, benchmark, docs and lint all passed. PR checks show the updated branch is mergeable.
+- Commit：英文标题 `fix(memory): simplify invalid reply envelope fallback`；PR 已基于 `main@386b46f` 更新。
+- Remaining local observation：full suite reported 4,014 passed / 29 skipped / 2 failed; both failures passed when isolated with separate temporary `STELLA_HOME` roots. Keep the local full-run instability visible; no PR-scoped CI failure remains.
+- Next：本任务完成；PR [#113](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/113) 等待 review/merge。无新任务时不继续扩展范围。
 
 ## 2026-10-22 — LinkMonitor dependency injection fix
 
@@ -14,7 +31,7 @@
 - Regression：新增测试直接调用 `Dependent.parse(..., allow_types=EVENT_PCS_PARAMS)`。既有 fixture 将 `event_preprocessor` 替换成 identity，因此原测试会跳过启动期解析合同。
 - GitNexus：index at `f5e6a64`，当前 `origin/main@d136c90` 与索引 commit 的 tree diff 为空；`_refresh_on_any_event` upstream impact 为 UNKNOWN / 0 静态调用者，源码审计确认动态 `@event_preprocessor` 注册。提交前 `all` / `compare main` 均为 5 files / 8 symbols / 0 processes / LOW，无 partial/truncated。
 - Verification：定向 `tests/test_link_monitor.py` 12 passed；改动文件 Ruff、`py_compile`、全仓 Ruff、`check_docs.py`（119 files / 1248 links / 577 anchors / 0 errors）、message-flow `--check` 与 `git diff --check` 通过。全量 pytest 为 4014 passed / 29 skipped / 3 failures；三个失败分别是 MemoryConsolidator lifecycle、WebUI chat auth、WebUI Cometa auth，各自用独立 `STELLA_HOME` 单测重跑均 1 passed。失败与本次模块无关，完整顺序相互作用未确认。
-- PR：[#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114)，测试 head `5df7ca5`；CI run `39702521767` conclusion `success`，Python 3.10/3.11/3.12、security、docs、CLI、flow、GitNexus、Windows native、benchmark jobs 均通过。PR 仍待 review/merge。
+- PR：[#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114)，测试 head `5df7ca5`；CI run `39702521767` conclusion `success`，并已于 `386b46f` 合入 `main`。Python 3.10/3.11/3.12、security、docs、CLI、flow、GitNexus、Windows native、benchmark jobs 均通过。
 
 ## 2026-10-21 — Gravitas implementation
 
