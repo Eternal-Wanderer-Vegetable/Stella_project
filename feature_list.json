@@ -625,7 +625,8 @@
       "done_criteria": [
         "event_preprocessor 的 Bot/Event 与 bot connect/disconnect hook 的 Bot 均使用 NoneBot 可解析注解，解析回归通过",
         "回归测试直接验证 NoneBot event_preprocessor 与 BOT_HOOK_PARAMS 两类依赖解析合同",
-        "Follow-up PR is created and hosted CI passes; CI still running remains explicitly pending."
+        "Follow-up PR is created and hosted CI passes; CI still running remains explicitly pending.",
+        "测试环境部署 PR 后同步 Dashboard 静态资源，并确认 LinkMonitor 加载与 Gravitas 页面/status API。"
       ],
       "evidence": [
         {
@@ -667,6 +668,18 @@
         {
           "command": "STELLA_HOME=/tmp/stella-link-followup-{cometa,memory,webui}-20261022 .venv/bin/pytest <failed-test-node> -q",
           "result": "Each of the three full-suite failures passed alone: 1 passed for Cometa, memory concurrency, and WebUI group mute."
+        },
+        {
+          "command": "gh run view 39715248351 --json status,conclusion,jobs; gh pr view 115 --json url,headRefOid,state",
+          "result": "PR #115 https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/115 is OPEN at head 7b9b71a030914f407b8fcf76cc98cd7a96d0f137; hosted run 39715248351 concluded success and every job passed, including Python 3.10/3.11/3.12 full suites."
+        },
+        {
+          "command": "Deploy after merge: pnpm --dir dashboard build && pnpm --dir dashboard sync:webui; restart Bot; inspect Gravitas route and authenticated /api/v1/status",
+          "result": "Local build/sync outputs include the Gravitas page in all three runtime snapshots and have identical tree digest. Remote test environment remains unverified; if the page is visible but unavailable, inspect data.gravitas and [gravitas][boot] logs."
+        },
+        {
+          "command": "python scripts/check_docs.py; python -m json.tool feature_list.json; git diff --check; GitNexus detect-changes --scope all and --scope compare --base-ref main",
+          "result": "Documentation gate passed (119 files / 1247 local links / 577 anchors / 0 errors); JSON and diff checks passed. GitNexus all: 3 files / 7 symbols / 0 processes / LOW; compare main: 5 files / 10 symbols / 0 processes / LOW; no partial/truncated result."
         }
       ]
     },
