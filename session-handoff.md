@@ -1,15 +1,16 @@
 # Session Handoff
 
-## Current Session — PR #116 queue isolation and documentation conflict resolution
+## Current Session — PR #116 CI repair and documentation conflict resolution
 
 用户要求修复 PR #116 的 CI 失败并解决 main 同步后的文档冲突。当前分支 `codex/test-repo-sync-scripts` 包含合并提交 `0520a5a`，已合并 `origin/main@811ab69`；PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 保持 OPEN，原始同步脚本提交为 `37a9f4c`。
 
 - Root cause：PR CI run `39718004194` 的 Python 3.11 job 中，`test_no_jobs_creates_no_root` 断言 `claimed == 0` 实际为 1，`test_no_handler_marks_dead` 断言 `dead == 1` 实际为 0。两个测试分别运行于 xdist `gw1` / `gw3`；同类 enqueue 测试在 `gw0` 运行。`flow_db` 仅隔离 `turn_trace.db`，`social_worker._connect()` 仍使用全局 `settings.DB_PATH`，故并行 worker 会竞态读写队列。
 - Fix：`tests/observability/test_background_flow_roots.py::flow_db` 将 `settings.DB_PATH` 指向每个用例独立的 `tmp_path/social.db`，初始化 social schema，并在 teardown 清除 `social_store` 表就绪缓存；没有修改生产逻辑。
+- Follow-up：docs-only head `5199657` 的 CI run `39720613488` 又暴露一个独立测试时序问题：`tests/runtime/test_facade_turns.py::test_prepare_timeout_is_control_signal_and_cancels_hook` 使用 150ms 总预算，负载高时在 prepare hook 启动前就过期（Python 3.11：4017 passed / 1 failed / 29 skipped）。将其测试预算改为 1.0s，让正常准备步骤先启动 hook 再验证超时取消；整个 facade-turn 文件在 3 个 xdist workers 下 13 passed / 2.04s，Ruff 与 py_compile 通过。此改动没有触及 `submit_turn` 生产实现。
 - GitNexus：测试方法 upstream impact UNKNOWN / 0 图调用者（pytest 收集方式，源码引用已查）；`run_due_jobs` upstream LOW / 1 direct / 2 modules / 0 processes。GitNexus 1.6.12 索引于 PR 分支 HEAD；分析报告有 process truncation，不把遗漏流程视为无调用。
 - 文档冲突：PR #115 已合并为 `main@811ab69`，hosted run `39716099609` 全通过。合并冲突只涉及 `feature_list.json`、`progress.md`、`session-handoff.md`；保留 TEST-REPO-SYNC 状态，并同步 LinkMonitor 的 merged 状态，远端 Gravitas 页面验收仍列为 pending。
-- Verification：`STELLA_HOME=/tmp/stella-pr116-social-root-20261022-a .venv/bin/python -m pytest tests/observability/test_background_flow_roots.py -q -n 3 --dist loadgroup` passed (7 tests / 1.68s); changed-file Ruff/py_compile passed; docs gate passed (119 files / 1247 links / 577 anchors / 0 errors); JSON, conflict-marker, and diff checks passed. After a forced GitNexus 1.6.12 reindex, detect all reported 6 files / 11 symbols / 0 processes / LOW; compare main reported 9 files / 28 symbols / 0 processes / LOW. The refreshed index maps the fixture and lifecycle-hook symbols to their correct files. Analyzer process extraction omitted 2,887 entry-point candidates, so zero process hits is not used as proof of no runtime paths. Hosted CI run `39720042543` succeeded on head `5576e92` across Python 3.10/3.11/3.12 and all other jobs. Current host has no PowerShell parser; Linux/Windows test-host execution remains outstanding.
-- Next：在测试 checkout 分别验证 Linux 与 Windows 的 clean fast-forward 同步和 dirty-worktree 安全中止；在 Windows 环境补做 PowerShell parser 检查。
+- Verification：原 fixture 回归 7 passed / 1.68s；后续 timeout test file 13 passed / 2.04s，均用 3 个 xdist workers。Ruff、py_compile、docs（119/1247/577/0 errors）、JSON、冲突标记和 diff 门禁通过。GitNexus 1.6.12 强制重建后，timeout test impact UNKNOWN / 0 caller（源码引用已查），`submit_turn` CRITICAL / 492 impacted / 1 direct / 178 processes / 20 modules（生产代码未改）；state files impact LOW：feature 19/2、progress 26/3、handoff 19/2。提交前 detect all: 4 files / 7 symbols / 0 processes / LOW; compare main: 10 / 30 / 0 / LOW。流程抽取遗漏 2,887 个入口候选，故零流程不作为无影响证明。PR run `39720042543` 在 head `5576e92` 全绿；新增 timeout 测试修正的 hosted CI 尚待推送后确认。测试端 Linux/Windows 同步验收仍待执行，当前主机也没有 PowerShell parser。
+- Next：提交并推送 timeout-test 修正，确认最新 hosted CI；之后在 Linux 与 Windows 测试 checkout 验证 clean fast-forward 和 dirty-worktree 安全中止。
 
 ## Inherited Session — LinkMonitor and Gravitas follow-up
 

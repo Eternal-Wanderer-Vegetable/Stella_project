@@ -243,7 +243,7 @@ async def test_prepare_timeout_is_control_signal_and_cancels_hook(tmp_path):
     h.pipeline.register_pre_hook(slow_hook, priority=1000)
     await h.start()
     try:
-        deadline = Deadline(clock.now() + 0.15, clock.clock_id)
+        deadline = Deadline(clock.now() + 1.0, clock.clock_id)
         with pytest.raises(DeadlineExceeded) as exc:
             await h.facade.submit_turn(
                 KEY, h.pipeline, h.ctx(), turn_deadline=deadline

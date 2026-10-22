@@ -739,6 +739,7 @@
       "dependencies": [],
       "scope": [
         "tests/observability/test_background_flow_roots.py",
+        "tests/runtime/test_facade_turns.py",
         "scripts/sync_test_repo.py",
         "scripts/sync_test_repo.sh",
         "scripts/sync_test_repo.ps1",
@@ -752,6 +753,7 @@
         "Linux 与 Windows 入口共享安全同步实现，按当前分支 upstream fetch 且只执行 fast-forward，不切换分支。",
         "脏工作区、Git 操作进行中、分叉/领先的本地提交及与入站改动冲突的 ignored 路径均在 merge 前拒绝。",
         "social worker 根追踪回归在 xdist 下使用每用例隔离的队列数据库，不与其他 worker 共享作业状态。",
+        "prepare timeout cancellation 回归在 xdist 负载下保留足够的准备预算，避免 hook 启动前 deadline 先过期。",
         "双语部署说明、文档检查、脚本静态检查和 PR hosted CI 结果已记录。",
         "独立 PR 已创建并通过 hosted CI。",
         "测试端在 Linux 与 Windows 至少各运行一次，确认 clean checkout 同步成功且含本地未提交改动时安全停止。"
@@ -788,6 +790,22 @@
         {
           "command": "GitHub workflow run 39720042543 for PR #116 head 5576e923a33203aa1588fba6cd713726583e8d3a",
           "result": "Completed successfully. Python 3.10, 3.11 and 3.12 tests, CLI, flow-closure, flow-manifest, lint, documentation, security, memory benchmark, Windows native reliability and notify all passed."
+        },
+        {
+          "command": "GitHub workflow run 39720613488 job 119633176658 log; GitNexus impact test_prepare_timeout_is_control_signal_and_cancels_hook and submit_turn upstream",
+          "result": "The Python 3.11 full suite had 4,017 passed / 1 failed / 29 skipped: a separate timeout-cancellation test's 150ms deadline expired before the prepare hook entered (entered=False). The same test passed in the preceding green run; this is a timing-sensitive test. Test symbol impact UNKNOWN / 0 graph callers (pytest collection confirmed by source search); submit_turn is CRITICAL / 492 impacted / 1 direct / 178 processes / 20 modules, and production code is unchanged."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-pr116-timeout-20261022 .venv/bin/python -m pytest tests/runtime/test_facade_turns.py -q -n 3 --dist loadgroup; ruff check tests/runtime/test_facade_turns.py; py_compile tests/runtime/test_facade_turns.py",
+          "result": "Changed the test deadline budget from 0.15s to 1.0s so normal prepare work can reach the hook before timeout. The full facade-turn test file passed under three xdist workers (13 passed / 2.04s); Ruff and py_compile passed. The hosted run for this fix is pending push."
+        },
+        {
+          "command": "GitNexus impact feature_list.json, progress.md and session-handoff.md upstream --summary-only",
+          "result": "After forced reindex, impacts are LOW: feature_list.json 19 / 2 direct, progress.md 26 / 3 direct, session-handoff.md 19 / 2 direct."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main (timeout test fix and final state update)",
+          "result": "All: 4 files / 7 symbols / 0 processes / LOW; compare main: 10 files / 30 symbols / 0 processes / LOW. The timeout test function maps correctly after a forced reindex. Process extraction still omits 2,887 entry-point candidates, so zero process hits is not an absence proof."
         },
         {
           "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",
