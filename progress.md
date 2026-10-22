@@ -3,15 +3,26 @@
 ## Current State
 
 **Last Updated:** 2026-10-22 (Asia/Shanghai)
-**Active Feature:** None (PR113-CI is complete).
-**Inherited Feature:** LINK-MONITOR-DI 已随 PR #114 合入 `main@386b46f`；XPLAT-IMPL 的平台 live、干净 VM 与发布缺口仍按原证据保留。
-**Scope:** PR #113 `codex/memory-envelope-fallback-followup`, rebased onto `main@386b46f`. The original hosted CI run `39699060445` failed because the committed flow archive was stale; the archive is regenerated and hosted CI run `39707392594` passes.
+**Active Feature:** LINK-MONITOR-DI follow-up: fix the remaining `bot: Any` annotations on NoneBot Bot lifecycle hooks and verify Gravitas deployment.
+**Inherited Feature:** PR #114 was merged at `main@386b46f`; PR #113 CI repair is complete at `main@a568953`. XPLAT-IMPL external acceptance gaps remain tracked separately.
+**Scope:** Investigate the second LinkMonitor injection failure and Gravitas page visibility after test environment synchronization. Fix the lifecycle hook annotations; verify the local static assets and API wiring.
 
-**What's Done:** PR root cause diagnosed and fixed; all PR commit messages are English. Hosted Python 3.10/3.11/3.12 each passed 4,017 tests with 29 skipped. The flow manifest/closure, Dashboard, security, CLI, Windows native, benchmark, documentation, and lint jobs passed. Local full-suite run was 4,014 passed / 29 skipped / 2 failed; each failure passed alone under an isolated `STELLA_HOME`, so the local ordering-sensitive failures remain recorded rather than treated as a green full run.
+**What's Done:** Code commit `15e326b` and state commits `b88d821`, `7b9b71a` on `codex/link-monitor-lifecycle-injection-fix`, based on `origin/main@a568953`; PR [#115](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/115) is open and hosted run `39715248351` passed on head `7b9b71a`. Focused regression passed (35 tests), full Ruff passed, and Dashboard build/static sync passed. Full Python suite: 4,015 passed / 29 skipped / 3 failed; each failing test passed alone with isolated `STELLA_HOME` (Cometa worker ACK, memory concurrency, WebUI group mute). Local generated snapshots now include Gravitas and match exactly. External test environment still needs the new Dashboard assets deployed and a live page/API recheck.
 
-**Files:** `memory/post_processors.py`; `tests/runtime/fixtures/legacy_traces/p2_protocol/tool_and_evidence_sections.json`; generated `core/observability/flows/message-flow.982a65f5aef2.json`; `feature_list.json`, `progress.md`, and `session-handoff.md`.
+**Files:** `extensions/link_monitor/__init__.py`, `tests/test_link_monitor.py`, `feature_list.json`, `progress.md`, and `session-handoff.md`. Build snapshots under `dashboard/dist`, `webui/dist`, and `desktop/dashboard-dist` are ignored generated files.
 
-**What's Next:** PR [#113](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/113) remains open for review/merge. No additional implementation work is outstanding for this task.
+**What's Next:** After PR #115 is merged, run `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui` in the test deployment and restart the Bot. Verify the Gravitas route and authenticated `/api/v1/status` `data.gravitas`; if unavailable, inspect that response and `[gravitas][boot]` startup logs.
+
+## 2026-10-22 — LinkMonitor lifecycle hooks and Gravitas frontend diagnosis
+
+- LinkMonitor 原因：NoneBot `Driver.on_bot_connect` / `on_bot_disconnect` 会按 `BOT_HOOK_PARAMS` 调用 `Dependent.parse`；两个回调仍将 `bot` 标为 `Any`，因此在事件预处理器修复后暴露同一类 `Unknown parameter bot`。改为 `nonebot.adapters.Bot`，新增两种 lifecycle hook 的依赖解析回归。代码提交 `15e326b`。
+- Gravitas UI 原因（本地部署快照）：`dashboard/dist` 已含 Gravitas 路由 chunk，而 `webui/dist` 与 `desktop/dashboard-dist` 是旧快照且无该 chunk。Vue typecheck、Vite build 和 `dashboard/sync-dist.mjs` 已成功；三处生成物各 52 个文件、树哈希相同，静态引用检查无缺失。前端源码与编译未发现断链。
+- Gravitas 数据链：`bot.py` 调用 `setup_gravitas` 注入状态 provider，再将 `status_api.collect_status` 注入 WebUI；`/api/v1/status` 应返回 `data.gravitas`。若页面路由已出现但显示 unavailable，应检查响应中的 `data.gravitas`；值为 null 时检查启动日志 `[gravitas][boot]`。没有连接外部测试浏览器，未确认远端响应。
+- GitNexus：原 `.gitnexus/meta.json` 属于另一 worktree；默认 `status` / `analyze` 因 foreign storage 拒绝；用外部临时 storage 对当前工作区建索引。两个 lifecycle handler upstream impact 为 `UNKNOWN / 0`（动态 Driver decorator），源码确认注册点和 `BOT_HOOK_PARAMS` 解析。提交前 all 与 compare/main 均为 2 files / 4 symbols / 0 processes / LOW，无 partial/truncated。
+- Verification：`STELLA_HOME=/tmp/stella-debug-20261022 .venv/bin/pytest tests/test_link_monitor.py tests/test_status_api.py -q`：35 passed；全仓 Ruff、改动文件 `py_compile` 通过。Dashboard typecheck / build / sync 通过；Vite 有 chunk-size 与动态/静态双导入 warning。隔离 `STELLA_HOME=/tmp/stella-link-monitor-followup-full-20261022` 的全量 Python suite 为 4015 passed / 29 skipped / 3 failed（252.61s）；Cometa `test_subprocess_ack_pauses_claim_then_allows_fake_task_once`、memory `test_concurrent_replay_bounded_by_unique_constraint`、WebUI `test_groups_mute` 分别在独立 `/tmp/stella-link-followup-{cometa,memory,webui}-20261022` 下单测 1 passed。共享状态/顺序根因未确认，故本地全量仍记录为失败。
+- PR #115：`https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/115`，head `7b9b71a030914f407b8fcf76cc98cd7a96d0f137`，保持 OPEN。Hosted CI run `39715248351` conclusion `success`，Python 3.10/3.11/3.12 和所有其它 jobs 全通过。
+- GitNexus 状态文件编辑前 upstream impact：`feature_list.json` LOW（19 impacted / 2 direct），`progress.md` LOW（26 / 3），`session-handoff.md` LOW（19 / 2），均 0 affected processes；刷新后的临时 index 为当前工作区建立图谱。状态文件提交前 all 为 3 files / 7 symbols，compare/main 为 5 files / 10 symbols，均 0 affected processes / LOW，无 partial/truncated。
+- Next：PR #115 合并后，在测试环境运行 `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui` 并重启 Bot。确认 Gravitas 路由与登录后的 `/api/v1/status` `data.gravitas`；若仍无法显示，收集该字段与 `[gravitas][boot]` 启动日志继续定位。远端页面/API 尚未访问，本任务保持 in_progress。
 
 ## 2026-10-22 — PR #113 CI repair
 

@@ -1,6 +1,19 @@
 # Session Handoff
 
-## Completed Session — PR #113 CI repair
+## Current Session — LinkMonitor lifecycle injection and Gravitas frontend diagnosis
+
+用户反馈 PR #114 合入并同步到测试环境后，`_on_bot_connect` 仍出现 `Unknown parameter bot`，且 Gravitas 页面无法正常显示。当前分支 `codex/link-monitor-lifecycle-injection-fix`，基于 `origin/main@a568953`；代码提交 `15e326b`，状态提交 `b88d821`、`7b9b71a`；PR [#115](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/115) 已创建，保持 OPEN。
+
+- LinkMonitor 根因：NoneBot `Driver.on_bot_connect` / `on_bot_disconnect` 按 `BOT_HOOK_PARAMS` 解析回调；两者仍标注 `bot: Any`。已改为 `bot: Bot`，并新增通过 NoneBot `Dependent.parse` 验证 lifecycle hook 签名的回归。`@event_preprocessor` 的 `Bot` / `Event` 注解修复保留。
+- Gravitas 页面：当前源代码与 `dashboard/dist` 有页面路由及 chunk；旧 `webui/dist`、`desktop/dashboard-dist` 快照缺少页面 chunk。现已执行 Vue typecheck、Vite build 和 `dashboard/sync-dist.mjs`；三个快照完全相同、各 52 个文件，JS/CSS 引用完整。生成快照在 `.gitignore` 中，不进入提交。
+- API 装配：`bot.py` → `setup_gravitas` 注入 `status_api` provider → `status_api.collect_status` 注入 `webui.status_source` → `/api/v1/status` 的 `data.gravitas`。若静态资源更新后页面出现但内容 unavailable，查看 `data.gravitas`；若为 null，检查启动期 `[gravitas][boot]` 日志。外部测试环境浏览器/API 响应尚未访问。
+- GitNexus：原 `.gitnexus/meta.json` 指向另一 worktree，默认 status / analyze 因 foreign storage 拒绝。已用 `/tmp/gitnexus-stella-codex-link-monitor` 外部 index 分析当前代码；两个 callback impact 为 UNKNOWN / 0 静态 caller，Driver decorator 注册点经源码确认。状态文件提交前 all 为 3 files / 7 symbols，compare main 为 5 files / 10 symbols，均 0 affected processes / LOW，无 partial/truncated。
+- Verification：定向 LinkMonitor / status API 回归 35 passed；全仓 Ruff、改动 Python `py_compile` 通过；Dashboard typecheck、Vite build、静态资源同步通过。全量 Python suite 4,015 passed / 29 skipped / 3 failed（Cometa worker ACK、personal memory concurrent replay、WebUI groups mute）；三个失败在各自隔离 `STELLA_HOME` 下重跑均 1 passed，顺序/共享状态根因未确认。Vite 有 chunk-size 和 dynamic/static import warnings。未连接真实 Bot、平台或测试环境浏览器。
+- Hosted CI：run `39715248351` 在 PR head `7b9b71a030914f407b8fcf76cc98cd7a96d0f137` conclusion `success`；Python 3.10/3.11/3.12 与全部其它 jobs 通过。PR #115 等待 review/merge。
+- Gravitas 部署诊断：本地 `dashboard/dist` 含页面路由和 chunk，但生成/部署用的 `webui/dist`、`desktop/dashboard-dist` 原为旧快照且无 Gravitas chunk；已本地执行 Vue typecheck、Vite build、`dashboard/sync-dist.mjs`，三份快照现相同（52 文件，树 SHA-256 `6e118f0877e7218cda395089bda831a1b56ef8a6e2acce0fbba85669b4d665cf`）。因此同步源码后还必须重新 build/sync 静态资源。远端测试环境尚未实测，静态资源过期是基于本地快照的诊断。
+- Next：PR #115 合并后在测试环境执行 `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui` 并重启 Bot。确认 Gravitas route；若内容 unavailable，检查登录后的 `/api/v1/status` `data.gravitas` 与 `[gravitas][boot]` 日志。暂不把远端 UI 标记验收通过。
+
+## Previous Session — PR #113 CI repair
 
 用户要求检查 PR [#113](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/113) 的 CI、修复失败，并将提交信息改成英文。任务已完成：分支 `codex/memory-envelope-fallback-followup` 已基于 `main@386b46f` 更新，提交标题为 `fix(memory): simplify invalid reply envelope fallback`。
 
