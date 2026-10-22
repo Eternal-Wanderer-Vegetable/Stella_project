@@ -109,6 +109,14 @@ def test_event_preprocessor_signature_is_supported_by_nonebot_di(link_monitor):
     )
 
 
+def test_bot_lifecycle_signatures_are_supported_by_nonebot_di(link_monitor):
+    from nonebot.dependencies import Dependent
+    from nonebot.internal.driver.abstract import BOT_HOOK_PARAMS
+
+    for handler in (*link_monitor["driver"].on_connect, *link_monitor["driver"].on_disconnect):
+        Dependent.parse(call=handler, allow_types=BOT_HOOK_PARAMS)
+
+
 def _bot(link_monitor, adapter: str = "OneBot V11", self_id: str = "1") -> _Bot:
     bot = _Bot(adapter, self_id)
     link_monitor["adapters"][adapter] = object()
