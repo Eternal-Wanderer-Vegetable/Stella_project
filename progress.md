@@ -11,7 +11,7 @@
 
 **Files:** `bot.py`, `webui/source_build.py`, `deploy/process.py`, Dashboard pnpm configuration, Dockerfile/ignore/workflow, bilingual Docker deployment guides, `feature_list.json`, `progress.md`, and `session-handoff.md`.
 
-**What's Next:** Create the PR against current `main`, then confirm hosted Docker build/smoke. Direct source startup on Linux/Windows and test-host verification remain external; TEST-REPO-SYNC acceptance also remains pending.
+**What's Next:** PR [#118](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/118) is open against `main@08dbbb0`; hosted CI and Docker build/smoke are running. Direct source startup on Linux/Windows and test-host verification remain external; TEST-REPO-SYNC acceptance also remains pending.
 
 ## 2026-10-22 — Source Dashboard startup rebuild and release audit
 
