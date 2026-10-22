@@ -142,6 +142,32 @@ docker compose start
 # Restore = unpack over StellaData/, then up -d
 ```
 
+### Syncing a test checkout (Linux / Windows)
+
+When the test host uses a repository checkout, run the matching entry point:
+Git and Python 3 (standard library only) must be installed. The current branch must track a remote
+upstream.
+
+```bash
+# Linux
+bash scripts/sync_test_repo.sh
+```
+
+```powershell
+# Windows PowerShell 5.1 or newer
+.\scripts\sync_test_repo.ps1
+```
+
+Both entry points fetch the remote upstream configured for the **current branch** and allow
+fast-forward updates only; they never switch branches. They stop if the working tree contains
+modified or untracked files, a merge/rebase/cherry-pick is in progress, or local commits have
+diverged from upstream. They do not reset, stash, or rebase. After fetching, the script checks
+again and also refuses an update if incoming paths overlap ignored local files or directories.
+Review `git status` and save local changes yourself before retrying. The script syncs source
+only; it does not build the Dashboard, restart services, or back up application data. When an
+update includes Dashboard changes, run `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui`
+and restart the service according to the deployment method if bundled static assets must be refreshed.
+
 ### 5.1 Runtime status and optional llama
 
 This release uses one Runtime status shape with shared `schema_version`, component,

@@ -3,15 +3,23 @@
 ## Current State
 
 **Last Updated:** 2026-10-22 (Asia/Shanghai)
-**Active Feature:** None (PR113-CI is complete).
-**Inherited Feature:** LINK-MONITOR-DI 已随 PR #114 合入 `main@386b46f`；XPLAT-IMPL 的平台 live、干净 VM 与发布缺口仍按原证据保留。
-**Scope:** PR #113 `codex/memory-envelope-fallback-followup`, rebased onto `main@386b46f`. The original hosted CI run `39699060445` failed because the committed flow archive was stale; the archive is regenerated and hosted CI run `39707392594` passes.
+**Active Feature:** TEST-REPO-SYNC: add safe test-checkout sync entry points for Linux and Windows.
+**Inherited Feature:** PR #113 CI repair is complete; LINK-MONITOR-DI is merged at `main@386b46f`; XPLAT-IMPL external acceptance gaps remain tracked separately.
+**Scope:** Add Bash and PowerShell entry points backed by one Python standard-library sync routine. Update the bilingual deployment guide and task state. Work is on `codex/test-repo-sync-scripts`, based on `origin/main@a568953`.
 
-**What's Done:** PR root cause diagnosed and fixed; all PR commit messages are English. Hosted Python 3.10/3.11/3.12 each passed 4,017 tests with 29 skipped. The flow manifest/closure, Dashboard, security, CLI, Windows native, benchmark, documentation, and lint jobs passed. Local full-suite run was 4,014 passed / 29 skipped / 2 failed; each failure passed alone under an isolated `STELLA_HOME`, so the local ordering-sensitive failures remain recorded rather than treated as a green full run.
+**What's Done:** The shared sync script refuses modified/untracked worktrees, active Git operations, non-fast-forward local history, and ignored local paths overlapping incoming changes. It fetches only the current branch's configured remote and uses `git merge --ff-only`; no reset, stash, rebase, or branch switch is used. Static checks pass. Linux/Windows test-host execution and hosted CI remain pending.
 
-**Files:** `memory/post_processors.py`; `tests/runtime/fixtures/legacy_traces/p2_protocol/tool_and_evidence_sections.json`; generated `core/observability/flows/message-flow.982a65f5aef2.json`; `feature_list.json`, `progress.md`, and `session-handoff.md`.
+**Files:** `scripts/sync_test_repo.py`, `scripts/sync_test_repo.sh`, `scripts/sync_test_repo.ps1`, bilingual deployment guides, `feature_list.json`, `progress.md`, and `session-handoff.md`.
 
-**What's Next:** PR [#113](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/113) remains open for review/merge. No additional implementation work is outstanding for this task.
+**What's Next:** Finish change-impact checks, commit and open a PR. After review/merge, run the script on Linux and Windows test checkouts: verify clean fast-forward and verify that dirty tracked/untracked changes remain untouched while sync aborts.
+
+## 2026-10-22 — Cross-platform test checkout sync
+
+- GitNexus 编辑前影响：`docs/guides/deployment-docker.md` MEDIUM（48 impacted / 4 direct / 0 processes）；English guide MEDIUM（43 / 4 / 0）；`docs/documentation-map.json` HIGH（111 / 4 / 0），本次未编辑索引文件。源码搜索未找到已有测试端仓库同步脚本。
+- GitNexus 提交前 detect：all 8 files / 11 symbols / 0 processes / LOW；compare main 8 / 11 / 0 / LOW；无 partial/truncated。新脚本是用户显式入口，source impact 对尚未索引的新文件为空，文本搜索确认没有仓库内调用方。
+- 实现：`scripts/sync_test_repo.py` 负责发现当前 checkout、校验 branch upstream、干净工作树与 Git 操作状态，fetch 后二次检查并校验 HEAD 未变化；检查 incoming path 不会覆盖 Git ignored local data；只允许快进 merge。`sync_test_repo.sh` 与 `sync_test_repo.ps1` 分别用于 Linux 与 Windows。
+- Verification：Bash `-n`、Python `py_compile`、目标文件 Ruff、`check_docs.py`（119 files / 1247 links / 577 anchors / 0 errors）和 `git diff --check` 通过。当前机器没有 PowerShell parser；未在测试端运行 Linux/Windows 同步，也未执行行为回归测试。
+- Next：PR 合并后，在 Linux 与 Windows 测试 checkout 各验证一次干净快进更新和 dirty-worktree 安全中止；失败时保留现场并人工检查，不要执行 reset。
 
 ## 2026-10-22 — PR #113 CI repair
 

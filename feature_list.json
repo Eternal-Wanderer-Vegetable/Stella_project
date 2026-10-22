@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-22",
-  "active_feature": null,
+  "active_feature": "TEST-REPO-SYNC",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -694,6 +694,40 @@
         {
           "command": "GitNexus 1.6.11 analyze --index-only --workers 1 --name Stella_pr113 --default-branch main; detect-changes --scope all; detect-changes --scope compare --base-ref main",
           "result": "Before edit: parse_output upstream impact UNKNOWN / 0 edges, source audit confirmed dynamic post-hook registration; file impact LOW (7 impacted files / 3 direct imports). After rebase, detect all: 3 files / 6 symbols / 0 affected processes / LOW; compare main: 6 files / 8 symbols / 0 affected processes / LOW. GitNexus warned its sibling-worktree index was 2 commits behind the checkout, so graph results have that freshness limitation. JSON/archive files are not symbol-mapped and were verified with Git and flow gates. Process extraction remains truncated: 2,917 entrypoint candidates dropped, 816 callees omitted, 22 depth caps, 44 walks cut; process counts are lower bounds."
+        }
+      ]
+    },
+    {
+      "id": "TEST-REPO-SYNC",
+      "name": "测试环境跨平台安全仓库同步",
+      "description": "为 Linux 与 Windows 测试 checkout 提供安全的远端 upstream 快进同步入口，检测本地修改并拒绝覆盖。",
+      "status": "in_progress",
+      "dependencies": [],
+      "scope": [
+        "scripts/sync_test_repo.py",
+        "scripts/sync_test_repo.sh",
+        "scripts/sync_test_repo.ps1",
+        "docs/guides/deployment-docker.md",
+        "docs/guides/deployment-docker.en.md",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "Linux 与 Windows 入口共享安全同步实现，按当前分支 upstream fetch 且只执行 fast-forward，不切换分支。",
+        "脏工作区、Git 操作进行中、分叉/领先的本地提交及与入站改动冲突的 ignored 路径均在 merge 前拒绝。",
+        "双语部署说明、文档检查、脚本静态检查和 PR hosted CI 结果已记录。",
+        "独立 PR 已创建并通过 hosted CI。",
+        "测试端在 Linux 与 Windows 至少各运行一次，确认 clean checkout 同步成功且含本地未提交改动时安全停止。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus impact docs/guides/deployment-docker.md and .en.md upstream; impact docs/documentation-map.json upstream; source search for existing repo sync scripts",
+          "result": "Deployment guide impacts were MEDIUM (48/4 direct and 43/4 direct; 0 processes). The documentation map impact was HIGH (111/4 direct) and the map was not edited. No existing test-repository sync script was found."
+        },
+        {
+          "command": "bash -n scripts/sync_test_repo.sh; python -m py_compile scripts/sync_test_repo.py; ruff check scripts/sync_test_repo.py; python scripts/check_docs.py; git diff --check",
+          "result": "Bash syntax, Python compilation, Ruff, docs (119 files / 1247 links / 577 anchors / 0 errors), and diff checks passed. GitNexus all: 8 files / 11 symbols / 0 processes / LOW; compare main: 8 / 11 / 0 / LOW; no partial/truncated result. New scripts are explicit operator entrypoints with no source callers. No PowerShell parser is installed on this host; test-environment behavior on Linux and Windows remains pending."
         }
       ]
     }
