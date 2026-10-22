@@ -786,6 +786,10 @@
           "result": "PR #115 merged at main@811ab69 with hosted CI success. Resolved the only merge conflicts in feature_list.json, progress.md and session-handoff.md while preserving TEST-REPO-SYNC and the merged LinkMonitor status; merge plus fixture fix committed locally as 0520a5a."
         },
         {
+          "command": "GitHub workflow run 39720042543 for PR #116 head 5576e923a33203aa1588fba6cd713726583e8d3a",
+          "result": "Completed successfully. Python 3.10, 3.11 and 3.12 tests, CLI, flow-closure, flow-manifest, lint, documentation, security, memory benchmark, Windows native reliability and notify all passed."
+        },
+        {
           "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",
           "result": "After a forced GitNexus 1.6.12 reindex, scope all: 6 files / 11 symbols / 0 processes / LOW; compare main: 9 files / 28 symbols / 0 processes / LOW. The refreshed index maps the fixture and merged lifecycle-hook symbols to their correct files. Neither detect output reported partial/truncated; process extraction did omit 2,887 entry-point candidates, so zero process hits is not treated as proof of no runtime paths."
         }
