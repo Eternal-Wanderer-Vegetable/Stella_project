@@ -3,15 +3,15 @@
 ## Current State
 
 **Last Updated:** 2026-10-22 (Asia/Shanghai)
-**Active Feature:** TEST-REPO-SYNC: add safe test-checkout sync entry points for Linux and Windows.
-**Inherited Feature:** PR #113 CI repair is complete; LINK-MONITOR-DI is merged at `main@386b46f`; XPLAT-IMPL external acceptance gaps remain tracked separately.
-**Scope:** Add Bash and PowerShell entry points backed by one Python standard-library sync routine. Update the bilingual deployment guide and task state. Work is on `codex/test-repo-sync-scripts`, based on `origin/main@a568953`.
+**Active Feature:** TEST-REPO-SYNC: safe Linux and Windows test-checkout sync, plus isolation of its CI regression and PR state reconciliation.
+**Inherited Feature:** PR #115 is merged at `main@811ab69` and its hosted CI passed; Gravitas deployment verification is blocked pending access to the test environment. PR #113 CI repair is complete; XPLAT-IMPL external acceptance gaps remain tracked separately.
+**Scope:** Preserve the cross-platform sync scripts, isolate the social-worker queue in its regression fixture, and reconcile state documents with current main. Work is on `codex/test-repo-sync-scripts`, merging `origin/main@811ab69`.
 
-**What's Done:** Code commit `37a9f4c` is on `codex/test-repo-sync-scripts`; PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) is open. The shared sync script refuses modified/untracked worktrees, active Git operations, non-fast-forward local history, and ignored local paths overlapping incoming changes. It fetches only the current branch's configured remote and uses `git merge --ff-only`; no reset, stash, rebase, or branch switch is used. Static checks pass. Hosted run `39717886745` was in progress at the last status check; Linux/Windows test-host execution remains pending.
+**What's Done:** Sync implementation commit `37a9f4c` is in PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116). Its hosted run `39718004194` failed only in Python 3.11 on two `social_worker` tests. Root cause: the tests isolated trace storage but left `settings.DB_PATH` shared across parallel xdist workers. The fixture now points the worker queue at a per-test SQLite file; all 7 tests in that file passed with 3 xdist workers. PR #115 and the three state-doc conflicts were reconciled. Docs (119 files / 1247 links / 577 anchors / 0 errors), JSON, Ruff, py_compile, and diff checks pass. A refreshed PR CI run is pending push. Linux/Windows test-host execution remains pending.
 
-**Files:** `scripts/sync_test_repo.py`, `scripts/sync_test_repo.sh`, `scripts/sync_test_repo.ps1`, bilingual deployment guides, `feature_list.json`, `progress.md`, and `session-handoff.md`.
+**Files:** `tests/observability/test_background_flow_roots.py`, `scripts/sync_test_repo.py`, `scripts/sync_test_repo.sh`, `scripts/sync_test_repo.ps1`, bilingual deployment guides, `feature_list.json`, `progress.md`, and `session-handoff.md`.
 
-**What's Next:** Wait for PR #116 hosted checks and review. After merge, run the script on Linux and Windows test checkouts: verify clean fast-forward and verify that dirty tracked/untracked changes remain untouched while sync aborts.
+**What's Next:** Commit and push the merge plus fixture fix, then inspect refreshed hosted CI. Linux and Windows test-host sync acceptance remains pending.
 
 ## 2026-10-22 — Cross-platform test checkout sync
 
@@ -20,6 +20,20 @@
 - 实现：`scripts/sync_test_repo.py` 负责发现当前 checkout、校验 branch upstream、干净工作树与 Git 操作状态，fetch 后二次检查并校验 HEAD 未变化；检查 incoming path 不会覆盖 Git ignored local data；只允许快进 merge。`sync_test_repo.sh` 与 `sync_test_repo.ps1` 分别用于 Linux 与 Windows。
 - Verification：Bash `-n`、Python `py_compile`、目标文件 Ruff、`check_docs.py`（119 files / 1247 links / 577 anchors / 0 errors）和 `git diff --check` 通过。当前机器没有 PowerShell parser；未在测试端运行 Linux/Windows 同步，也未执行行为回归测试。
 - Next：PR 合并后，在 Linux 与 Windows 测试 checkout 各验证一次干净快进更新和 dirty-worktree 安全中止；失败时保留现场并人工检查，不要执行 reset。
+
+## 2026-10-22 — Social worker CI isolation and PR documentation reconciliation
+
+- Failure evidence：PR #116 run `39718004194` failed on Python 3.11 only: `test_no_jobs_creates_no_root` observed `claimed=1`, and `test_no_handler_marks_dead` observed `dead=0`. The log assigned those tests to `gw1` and `gw3` while the sibling lifecycle test ran on `gw0`.
+- Root cause：`flow_db` only configured a temporary `turn_trace.db`; `social_worker._connect()` reads `config.settings.DB_PATH`, which the fixture left under `STELLA_HOME`. CI runs pytest with `-n auto --dist loadgroup`, so tests could observe or claim another worker's queue entry.
+- Fix：the `flow_db` fixture redirects `settings.DB_PATH` to a unique `tmp_path/social.db`, initializes the social schema, and resets the `social_store` table-ready cache after each test. No production code changed.
+- GitNexus before edit：`test_no_jobs_creates_no_root` upstream impact UNKNOWN / 0 callers (pytest collection convention; text/source audit done); `run_due_jobs` LOW, 1 direct caller, 2 modules, 0 processes. After a forced GitNexus 1.6.12 reindex, final detect all: 6 files / 11 symbols / 0 processes / LOW; compare main: 9 files / 28 symbols / 0 processes / LOW. The refreshed index maps the fixture and lifecycle-hook symbols to their correct files. Process extraction omitted 2,887 entry-point candidates, so zero process hits is not treated as proof of no runtime paths.
+- PR state：#115 is merged at `main@811ab69`, hosted run `39716099609` passed. Merging it into #116 surfaced conflicts only in `feature_list.json`, `progress.md`, and `session-handoff.md`; resolved by retaining the TEST-REPO-SYNC record and the merged LinkMonitor status. PR #116 remains open.
+- Verification：`STELLA_HOME=/tmp/stella-pr116-social-root-20261022-a .venv/bin/python -m pytest tests/observability/test_background_flow_roots.py -q -n 3 --dist loadgroup` passed (7 tests / 1.68s); changed-file Ruff and `py_compile` passed; `python scripts/check_docs.py` passed (119 files / 1247 links / 577 anchors / 0 errors); JSON, conflict-marker, and `git diff --check` gates passed. GitNexus detect all/compare passed with no partial/truncated result; analyzer process extraction itself remains truncated (2,887 entry-point candidates omitted), so it is not used to prove absence of runtime paths. Refreshed hosted CI and test-host Linux/Windows sync checks remain outstanding.
+
+## 2026-10-22 — LinkMonitor lifecycle hooks and Gravitas deployment diagnosis
+
+- LinkMonitor's remaining `Any` Bot annotations were changed to `Bot`; PR #115 is merged at `main@811ab69`. Hosted run `39716099609` passed all checks, including Python 3.10/3.11/3.12.
+- Local Dashboard build and asset sync included the Gravitas route in all three snapshots. The test environment still needs asset deployment, service restart, and route/API verification; that external acceptance remains open.
 
 ## 2026-10-22 — PR #113 CI repair
 

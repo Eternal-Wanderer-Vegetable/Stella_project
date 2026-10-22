@@ -154,7 +154,7 @@ def _ws_hint() -> str:
 
 
 @driver.on_bot_connect
-async def _on_bot_connect(bot: Any) -> None:
+async def _on_bot_connect(bot: Bot) -> None:
     """Mark only the connecting Bot healthy and reset its alert throttle."""
     record = _state_for(bot)
     now = time.time()
@@ -166,7 +166,7 @@ async def _on_bot_connect(bot: Any) -> None:
 
 
 @driver.on_bot_disconnect
-async def _on_bot_disconnect(bot: Any) -> None:
+async def _on_bot_disconnect(bot: Bot) -> None:
     """Mark the disconnected Bot without changing any peer's state."""
     record = _state_for(bot)
     record.connected = False

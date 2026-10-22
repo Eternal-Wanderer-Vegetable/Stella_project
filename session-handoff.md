@@ -1,15 +1,19 @@
 # Session Handoff
 
-## Current Session — Cross-platform test checkout sync
+## Current Session — PR #116 queue isolation and documentation conflict resolution
 
-用户要求增加 Linux / Windows 测试端远端仓库同步脚本，不能覆盖本地未提交更新。当前分支 `codex/test-repo-sync-scripts`，基于 `origin/main@a568953`；代码提交 `37a9f4c`，PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 已创建并保持 OPEN。
+用户要求修复 PR #116 的 CI 失败并解决 main 同步后的文档冲突。当前分支 `codex/test-repo-sync-scripts` 正在合并 `origin/main@811ab69`；PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 保持 OPEN，原始同步脚本提交为 `37a9f4c`。
 
-- Files：`scripts/sync_test_repo.py` 是标准库实现；Linux 入口 `scripts/sync_test_repo.sh`，Windows PowerShell 5.1+ 入口 `scripts/sync_test_repo.ps1`。中英文使用说明在 `docs/guides/deployment-docker.md` 与 `.en.md`。
-- Safety：拒绝 detached HEAD、无远端 upstream、modified/untracked 工作区、merge/rebase/cherry-pick/bisect 进行中、本地领先/分叉历史和与入站文件冲突的 ignored 路径；fetch 后重检 dirty / branch / HEAD；只做 `merge --ff-only`，不 reset/stash/rebase/切换分支。fetch 只更新 Git refs。
-- GitNexus：部署指南 upstream MEDIUM（中文 48/4 direct，英文 43/4 direct，均 0 processes）；`docs/documentation-map.json` HIGH（111/4 direct），未编辑。新脚本为用户显式入口；文本搜索确认无既有调用方。代码提交前 detect all / compare main 均 8 files / 11 symbols / 0 processes / LOW；最终状态提交前 all 3 files / 5 symbols，compare main 8 / 11，均 0 processes / LOW，无 partial/truncated。
-- Verification：Bash 语法、Python compile、Ruff、docs gate（119/1247/577/0）和 diff check 通过。当前主机没有 PowerShell parser；没有在测试端实际运行同步，需保留 Linux/Windows 行为验收为待完成。
-- Hosted CI：run `39717886745` 在最后一次状态读取时仍为 in_progress；待完成后复查 PR #116。
-- Next：等待 hosted checks 和 review；合并后在测试 Linux / Windows 主机各验证 clean fast-forward、dirty tracked/untracked 改动安全停止和 ignored-path 冲突停止。同步本身不构建 Dashboard 或重启服务。
+- Root cause：PR CI run `39718004194` 的 Python 3.11 job 中，`test_no_jobs_creates_no_root` 断言 `claimed == 0` 实际为 1，`test_no_handler_marks_dead` 断言 `dead == 1` 实际为 0。两个测试分别运行于 xdist `gw1` / `gw3`；同类 enqueue 测试在 `gw0` 运行。`flow_db` 仅隔离 `turn_trace.db`，`social_worker._connect()` 仍使用全局 `settings.DB_PATH`，故并行 worker 会竞态读写队列。
+- Fix：`tests/observability/test_background_flow_roots.py::flow_db` 将 `settings.DB_PATH` 指向每个用例独立的 `tmp_path/social.db`，初始化 social schema，并在 teardown 清除 `social_store` 表就绪缓存；没有修改生产逻辑。
+- GitNexus：测试方法 upstream impact UNKNOWN / 0 图调用者（pytest 收集方式，源码引用已查）；`run_due_jobs` upstream LOW / 1 direct / 2 modules / 0 processes。GitNexus 1.6.12 索引于 PR 分支 HEAD；分析报告有 process truncation，不把遗漏流程视为无调用。
+- 文档冲突：PR #115 已合并为 `main@811ab69`，hosted run `39716099609` 全通过。合并冲突只涉及 `feature_list.json`、`progress.md`、`session-handoff.md`；保留 TEST-REPO-SYNC 状态，并同步 LinkMonitor 的 merged 状态，远端 Gravitas 页面验收仍列为 pending。
+- Verification：`STELLA_HOME=/tmp/stella-pr116-social-root-20261022-a .venv/bin/python -m pytest tests/observability/test_background_flow_roots.py -q -n 3 --dist loadgroup` passed (7 tests / 1.68s); changed-file Ruff/py_compile passed; docs gate passed (119 files / 1247 links / 577 anchors / 0 errors); JSON, conflict-marker, and diff checks passed. After a forced GitNexus 1.6.12 reindex, detect all reported 6 files / 11 symbols / 0 processes / LOW; compare main reported 9 files / 28 symbols / 0 processes / LOW. The refreshed index maps the fixture and lifecycle-hook symbols to their correct files. Analyzer process extraction omitted 2,887 entry-point candidates, so zero process hits is not used as proof of no runtime paths. Refreshed hosted CI remains pending. Current host has no PowerShell parser; Linux/Windows test-host execution remains outstanding.
+- Next：commit the merge plus fixture fix, push PR #116, then inspect hosted CI. Keep Linux/Windows test-checkout sync validation pending.
+
+## Inherited Session — LinkMonitor and Gravitas follow-up
+
+PR #115 fixed the remaining `bot: Any` lifecycle-hook injection error and was merged at `main@811ab69`; hosted run `39716099609` passed all checks. Local Dashboard build/sync outputs included the Gravitas route, but deployment to the test environment, service restart, and live route plus authenticated status API verification remain blocked pending test-environment access.
 
 ## Completed Session — PR #113 CI repair
 

@@ -612,19 +612,21 @@
     {
       "id": "LINK-MONITOR-DI",
       "name": "LinkMonitor NoneBot 依赖注入修复",
-      "description": "修复 event_preprocessor 注册时 Bot/Event 参数使用 Any 导致 link_monitor 加载失败。",
-      "status": "done",
+      "description": "修复 NoneBot 对 event_preprocessor 与 Bot lifecycle hook 参数使用 Any 时的注入解析失败。",
+      "status": "blocked",
       "dependencies": [],
       "scope": [
         "extensions/link_monitor/__init__.py",
-        "tests/test_link_monitor.py",
+        "feature_list.json",
         "progress.md",
-        "session-handoff.md"
+        "session-handoff.md",
+        "tests/test_link_monitor.py"
       ],
       "done_criteria": [
-        "Bot 与 Event 使用 NoneBot 可解析的类型注解，参数解析回归通过",
-        "回归测试直接验证 NoneBot event_preprocessor 参数解析合同",
-        "PR #114 已创建且 hosted CI 状态已记录；CI 仍运行时明确保留为待确认"
+        "event_preprocessor 的 Bot/Event 与 bot connect/disconnect hook 的 Bot 均使用 NoneBot 可解析注解，解析回归通过",
+        "回归测试直接验证 NoneBot event_preprocessor 与 BOT_HOOK_PARAMS 两类依赖解析合同",
+        "PR #115 is merged at main@811ab69 and hosted CI passed; external test-environment UI/status verification remains pending.",
+        "测试环境部署 PR 后同步 Dashboard 静态资源，并确认 LinkMonitor 加载与 Gravitas 页面/status API。"
       ],
       "evidence": [
         {
@@ -641,11 +643,43 @@
         },
         {
           "command": "GitHub PR creation + workflow run lookup",
-          "result": "PR #114 open; CI run 39702521767 on tested head 5df7ca5 concluded success. Python 3.10/3.11/3.12, security, documentation, CLI, flow, GitNexus, Windows native reliability, benchmark and notify jobs all reported success."
+          "result": "PR #114 merged at main commit 386b46f; CI run 39702521767 on tested head 5df7ca5 concluded success across Python 3.10/3.11/3.12 and all other jobs."
         },
         {
           "command": "gh run view 39702521767 --json status,conclusion,headSha,jobs; gh pr checks 114",
           "result": "Workflow conclusion success for head 5df7ca53e48771c259fd01c4824cbe14bf287705; every reported PR check passed."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-debug-20261022 .venv/bin/pytest tests/test_link_monitor.py tests/test_status_api.py -q",
+          "result": "35 passed; covers EVENT_PCS_PARAMS plus both Driver lifecycle hook BOT_HOOK_PARAMS parser registrations."
+        },
+        {
+          "command": "Dashboard vue-tsc --noEmit; Vite build; node dashboard/sync-dist.mjs; verify generated dist manifests and tree digests",
+          "result": "Typecheck/build/sync passed; dashboard/dist, webui/dist and desktop/dashboard-dist each contain 52 files, identical tree SHA-256 6e118f0877e7218cda395089bda831a1b56ef8a6e2acce0fbba85669b4d665cf; Gravitas chunk present and no referenced JS/CSS missing. External test environment not accessed."
+        },
+        {
+          "command": "git commit -m \"fix(link-monitor): annotate bot lifecycle hooks\"",
+          "result": "The implementation commit 15e326b was included in PR #115, which is now merged at main@811ab69."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-link-monitor-followup-full-20261022 .venv/bin/pytest tests -q",
+          "result": "4015 passed / 29 skipped / 3 failed in 252.61s: Cometa worker ACK, personal memory concurrent replay, and WebUI groups mute. Each failing test passed alone (1 passed) under a distinct temporary STELLA_HOME; shared ordering/state cause remains unconfirmed."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-link-followup-{cometa,memory,webui}-20261022 .venv/bin/pytest <failed-test-node> -q",
+          "result": "Each of the three full-suite failures passed alone: 1 passed for Cometa, memory concurrency, and WebUI group mute."
+        },
+        {
+          "command": "gh run view 39715248351 --json status,conclusion,jobs; gh pr view 115 --json url,headRefOid,state",
+          "result": "PR #115 https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/115 is MERGED at 811ab69; hosted run 39716099609 concluded success for Python 3.10/3.11/3.12 and all other jobs."
+        },
+        {
+          "command": "Deploy after merge: pnpm --dir dashboard build && pnpm --dir dashboard sync:webui; restart Bot; inspect Gravitas route and authenticated /api/v1/status",
+          "result": "Local build/sync outputs include the Gravitas page in all three runtime snapshots and have identical tree digest. Remote test environment remains unverified; if the page is visible but unavailable, inspect data.gravitas and [gravitas][boot] logs."
+        },
+        {
+          "command": "python scripts/check_docs.py; python -m json.tool feature_list.json; git diff --check; GitNexus detect-changes --scope all and --scope compare --base-ref main",
+          "result": "Documentation gate passed (119 files / 1247 local links / 577 anchors / 0 errors); JSON and diff checks passed. GitNexus all: 3 files / 7 symbols / 0 processes / LOW; compare main: 5 files / 10 symbols / 0 processes / LOW; no partial/truncated result."
         }
       ]
     },
@@ -704,6 +738,7 @@
       "status": "in_progress",
       "dependencies": [],
       "scope": [
+        "tests/observability/test_background_flow_roots.py",
         "scripts/sync_test_repo.py",
         "scripts/sync_test_repo.sh",
         "scripts/sync_test_repo.ps1",
@@ -716,6 +751,7 @@
       "done_criteria": [
         "Linux 与 Windows 入口共享安全同步实现，按当前分支 upstream fetch 且只执行 fast-forward，不切换分支。",
         "脏工作区、Git 操作进行中、分叉/领先的本地提交及与入站改动冲突的 ignored 路径均在 merge 前拒绝。",
+        "social worker 根追踪回归在 xdist 下使用每用例隔离的队列数据库，不与其他 worker 共享作业状态。",
         "双语部署说明、文档检查、脚本静态检查和 PR hosted CI 结果已记录。",
         "独立 PR 已创建并通过 hosted CI。",
         "测试端在 Linux 与 Windows 至少各运行一次，确认 clean checkout 同步成功且含本地未提交改动时安全停止。"
@@ -736,6 +772,22 @@
         {
           "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main (final state-document update)",
           "result": "All: 3 files / 5 symbols / 0 processes / LOW; compare main: 8 files / 11 symbols / 0 processes / LOW; no partial/truncated result."
+        },
+        {
+          "command": "gh run view 39718004194 --job 119625293007 --log; GitNexus impact test_no_jobs_creates_no_root and run_due_jobs --direction upstream",
+          "result": "PR #116 Python 3.11 failed only in two social-worker root tests: claimed expected 0 but was 1, and dead expected 1 but was 0. xdist log assigned these to gw1/gw3 while the sibling enqueue/lifecycle test ran on gw0. The fixture isolated turn_trace.db but not settings.DB_PATH; worker queue state could race. Test method impact UNKNOWN/0 graph callers (pytest collection, source audit confirmed); run_due_jobs LOW/1 direct caller/2 modules/0 processes."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-pr116-social-root-20261022-a .venv/bin/python -m pytest tests/observability/test_background_flow_roots.py -q -n 3 --dist loadgroup",
+          "result": "7 passed in 1.68s after the fixture redirected settings.DB_PATH to per-test tmp_path/social.db, initialized the social schema, and reset social_store._TABLES_READY."
+        },
+        {
+          "command": "git merge origin/main@811ab69; gh pr view 115; gh run view 39716099609",
+          "result": "PR #115 merged at main@811ab69 with hosted CI success. Resolved the only merge conflicts in feature_list.json, progress.md and session-handoff.md while preserving TEST-REPO-SYNC and the merged LinkMonitor status."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",
+          "result": "After a forced GitNexus 1.6.12 reindex, scope all: 6 files / 11 symbols / 0 processes / LOW; compare main: 9 files / 28 symbols / 0 processes / LOW. The refreshed index maps the fixture and merged lifecycle-hook symbols to their correct files. Neither detect output reported partial/truncated; process extraction did omit 2,887 entry-point candidates, so zero process hits is not treated as proof of no runtime paths."
         }
       ]
     }
