@@ -797,7 +797,11 @@
         },
         {
           "command": "STELLA_HOME=/tmp/stella-pr116-timeout-20261022 .venv/bin/python -m pytest tests/runtime/test_facade_turns.py -q -n 3 --dist loadgroup; ruff check tests/runtime/test_facade_turns.py; py_compile tests/runtime/test_facade_turns.py",
-          "result": "Changed the test deadline budget from 0.15s to 1.0s so normal prepare work can reach the hook before timeout. The full facade-turn test file passed under three xdist workers (13 passed / 2.04s); Ruff and py_compile passed. The hosted run for this fix is pending push."
+          "result": "Changed the test deadline budget from 0.15s to 1.0s so normal prepare work can reach the hook before timeout. The full facade-turn test file passed under three xdist workers (13 passed / 2.04s); Ruff and py_compile passed. Hosted run 39721493074 on head 6236786 then passed the Python matrix and all other jobs."
+        },
+        {
+          "command": "GitHub workflow run 39721493074 for PR #116 head 6236786e3102c5605c469fc4498dabaadb104e0f",
+          "result": "Completed successfully. Python 3.10/3.11/3.12, Windows native reliability, flow-closure, flow-manifest, lint, documentation, security, memory benchmark, CLI and notify all passed."
         },
         {
           "command": "GitNexus impact feature_list.json, progress.md and session-handoff.md upstream --summary-only",
@@ -805,7 +809,7 @@
         },
         {
           "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main (timeout test fix and final state update)",
-          "result": "All: 4 files / 7 symbols / 0 processes / LOW; compare main: 10 files / 30 symbols / 0 processes / LOW. The timeout test function maps correctly after a forced reindex. Process extraction still omits 2,887 entry-point candidates, so zero process hits is not an absence proof."
+          "result": "Final state-document detect all: 3 files / 5 symbols / 0 processes / LOW; compare main: 10 files / 10 symbols / 0 processes / LOW. The timeout test function maps correctly after a forced reindex. Process extraction still omits 2,887 entry-point candidates, so zero process hits is not an absence proof."
         },
         {
           "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",
