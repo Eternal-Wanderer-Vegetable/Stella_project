@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-22",
-  "active_feature": "LINK-MONITOR-DI",
+  "active_feature": "TEST-REPO-SYNC",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -613,7 +613,7 @@
       "id": "LINK-MONITOR-DI",
       "name": "LinkMonitor NoneBot 依赖注入修复",
       "description": "修复 NoneBot 对 event_preprocessor 与 Bot lifecycle hook 参数使用 Any 时的注入解析失败。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [],
       "scope": [
         "extensions/link_monitor/__init__.py",
@@ -625,7 +625,7 @@
       "done_criteria": [
         "event_preprocessor 的 Bot/Event 与 bot connect/disconnect hook 的 Bot 均使用 NoneBot 可解析注解，解析回归通过",
         "回归测试直接验证 NoneBot event_preprocessor 与 BOT_HOOK_PARAMS 两类依赖解析合同",
-        "Follow-up PR is created and hosted CI passes; CI still running remains explicitly pending.",
+        "PR #115 is merged at main@811ab69 and hosted CI passed; external test-environment UI/status verification remains pending.",
         "测试环境部署 PR 后同步 Dashboard 静态资源，并确认 LinkMonitor 加载与 Gravitas 页面/status API。"
       ],
       "evidence": [
@@ -659,7 +659,7 @@
         },
         {
           "command": "git commit -m \"fix(link-monitor): annotate bot lifecycle hooks\"",
-          "result": "Original branch commit 067745f was cherry-picked onto origin/main@a568953 as 15e326b; follow-up PR not yet created."
+          "result": "The implementation commit 15e326b was included in PR #115, which is now merged at main@811ab69."
         },
         {
           "command": "STELLA_HOME=/tmp/stella-link-monitor-followup-full-20261022 .venv/bin/pytest tests -q",
@@ -671,7 +671,7 @@
         },
         {
           "command": "gh run view 39715248351 --json status,conclusion,jobs; gh pr view 115 --json url,headRefOid,state",
-          "result": "PR #115 https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/115 is OPEN at head 7b9b71a030914f407b8fcf76cc98cd7a96d0f137; hosted run 39715248351 concluded success and every job passed, including Python 3.10/3.11/3.12 full suites."
+          "result": "PR #115 https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/115 is MERGED at 811ab69; hosted run 39716099609 concluded success for Python 3.10/3.11/3.12 and all other jobs."
         },
         {
           "command": "Deploy after merge: pnpm --dir dashboard build && pnpm --dir dashboard sync:webui; restart Bot; inspect Gravitas route and authenticated /api/v1/status",
@@ -728,6 +728,92 @@
         {
           "command": "GitNexus 1.6.11 analyze --index-only --workers 1 --name Stella_pr113 --default-branch main; detect-changes --scope all; detect-changes --scope compare --base-ref main",
           "result": "Before edit: parse_output upstream impact UNKNOWN / 0 edges, source audit confirmed dynamic post-hook registration; file impact LOW (7 impacted files / 3 direct imports). After rebase, detect all: 3 files / 6 symbols / 0 affected processes / LOW; compare main: 6 files / 8 symbols / 0 affected processes / LOW. GitNexus warned its sibling-worktree index was 2 commits behind the checkout, so graph results have that freshness limitation. JSON/archive files are not symbol-mapped and were verified with Git and flow gates. Process extraction remains truncated: 2,917 entrypoint candidates dropped, 816 callees omitted, 22 depth caps, 44 walks cut; process counts are lower bounds."
+        }
+      ]
+    },
+    {
+      "id": "TEST-REPO-SYNC",
+      "name": "测试环境跨平台安全仓库同步",
+      "description": "为 Linux 与 Windows 测试 checkout 提供安全的远端 upstream 快进同步入口，检测本地修改并拒绝覆盖。",
+      "status": "in_progress",
+      "dependencies": [],
+      "scope": [
+        "tests/observability/test_background_flow_roots.py",
+        "tests/runtime/test_facade_turns.py",
+        "scripts/sync_test_repo.py",
+        "scripts/sync_test_repo.sh",
+        "scripts/sync_test_repo.ps1",
+        "docs/guides/deployment-docker.md",
+        "docs/guides/deployment-docker.en.md",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "Linux 与 Windows 入口共享安全同步实现，按当前分支 upstream fetch 且只执行 fast-forward，不切换分支。",
+        "脏工作区、Git 操作进行中、分叉/领先的本地提交及与入站改动冲突的 ignored 路径均在 merge 前拒绝。",
+        "social worker 根追踪回归在 xdist 下使用每用例隔离的队列数据库，不与其他 worker 共享作业状态。",
+        "prepare timeout cancellation 回归在 xdist 负载下保留足够的准备预算，避免 hook 启动前 deadline 先过期。",
+        "双语部署说明、文档检查、脚本静态检查和 PR hosted CI 结果已记录。",
+        "独立 PR 已创建并通过 hosted CI。",
+        "测试端在 Linux 与 Windows 至少各运行一次，确认 clean checkout 同步成功且含本地未提交改动时安全停止。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus impact docs/guides/deployment-docker.md and .en.md upstream; impact docs/documentation-map.json upstream; source search for existing repo sync scripts",
+          "result": "Deployment guide impacts were MEDIUM (48/4 direct and 43/4 direct; 0 processes). The documentation map impact was HIGH (111/4 direct) and the map was not edited. No existing test-repository sync script was found."
+        },
+        {
+          "command": "bash -n scripts/sync_test_repo.sh; python -m py_compile scripts/sync_test_repo.py; ruff check scripts/sync_test_repo.py; python scripts/check_docs.py; git diff --check",
+          "result": "Bash syntax, Python compilation, Ruff, docs (119 files / 1247 links / 577 anchors / 0 errors), and diff checks passed. GitNexus all: 8 files / 11 symbols / 0 processes / LOW; compare main: 8 / 11 / 0 / LOW; no partial/truncated result. New scripts are explicit operator entrypoints with no source callers. No PowerShell parser is installed on this host; test-environment behavior on Linux and Windows remains pending."
+        },
+        {
+          "command": "gh pr view 116 --json url,headRefOid,state; gh run list --branch codex/test-repo-sync-scripts",
+          "result": "Commit 37a9f4c was pushed and PR #116 opened at https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116. Hosted CI run 39717886745 was in progress at the last status check."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main (final state-document update)",
+          "result": "All: 3 files / 5 symbols / 0 processes / LOW; compare main: 8 files / 11 symbols / 0 processes / LOW; no partial/truncated result."
+        },
+        {
+          "command": "gh run view 39718004194 --job 119625293007 --log; GitNexus impact test_no_jobs_creates_no_root and run_due_jobs --direction upstream",
+          "result": "PR #116 Python 3.11 failed only in two social-worker root tests: claimed expected 0 but was 1, and dead expected 1 but was 0. xdist log assigned these to gw1/gw3 while the sibling enqueue/lifecycle test ran on gw0. The fixture isolated turn_trace.db but not settings.DB_PATH; worker queue state could race. Test method impact UNKNOWN/0 graph callers (pytest collection, source audit confirmed); run_due_jobs LOW/1 direct caller/2 modules/0 processes."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-pr116-social-root-20261022-a .venv/bin/python -m pytest tests/observability/test_background_flow_roots.py -q -n 3 --dist loadgroup",
+          "result": "7 passed in 1.68s after the fixture redirected settings.DB_PATH to per-test tmp_path/social.db, initialized the social schema, and reset social_store._TABLES_READY."
+        },
+        {
+          "command": "git merge origin/main@811ab69; gh pr view 115; gh run view 39716099609",
+          "result": "PR #115 merged at main@811ab69 with hosted CI success. Resolved the only merge conflicts in feature_list.json, progress.md and session-handoff.md while preserving TEST-REPO-SYNC and the merged LinkMonitor status; merge plus fixture fix committed locally as 0520a5a."
+        },
+        {
+          "command": "GitHub workflow run 39720042543 for PR #116 head 5576e923a33203aa1588fba6cd713726583e8d3a",
+          "result": "Completed successfully. Python 3.10, 3.11 and 3.12 tests, CLI, flow-closure, flow-manifest, lint, documentation, security, memory benchmark, Windows native reliability and notify all passed."
+        },
+        {
+          "command": "GitHub workflow run 39720613488 job 119633176658 log; GitNexus impact test_prepare_timeout_is_control_signal_and_cancels_hook and submit_turn upstream",
+          "result": "The Python 3.11 full suite had 4,017 passed / 1 failed / 29 skipped: a separate timeout-cancellation test's 150ms deadline expired before the prepare hook entered (entered=False). The same test passed in the preceding green run; this is a timing-sensitive test. Test symbol impact UNKNOWN / 0 graph callers (pytest collection confirmed by source search); submit_turn is CRITICAL / 492 impacted / 1 direct / 178 processes / 20 modules, and production code is unchanged."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-pr116-timeout-20261022 .venv/bin/python -m pytest tests/runtime/test_facade_turns.py -q -n 3 --dist loadgroup; ruff check tests/runtime/test_facade_turns.py; py_compile tests/runtime/test_facade_turns.py",
+          "result": "Changed the test deadline budget from 0.15s to 1.0s so normal prepare work can reach the hook before timeout. The full facade-turn test file passed under three xdist workers (13 passed / 2.04s); Ruff and py_compile passed. Hosted run 39721493074 on head 6236786 then passed the Python matrix and all other jobs."
+        },
+        {
+          "command": "GitHub workflow run 39721493074 for PR #116 head 6236786e3102c5605c469fc4498dabaadb104e0f",
+          "result": "Completed successfully. Python 3.10/3.11/3.12, Windows native reliability, flow-closure, flow-manifest, lint, documentation, security, memory benchmark, CLI and notify all passed."
+        },
+        {
+          "command": "GitNexus impact feature_list.json, progress.md and session-handoff.md upstream --summary-only",
+          "result": "After forced reindex, impacts are LOW: feature_list.json 19 / 2 direct, progress.md 26 / 3 direct, session-handoff.md 19 / 2 direct."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main (timeout test fix and final state update)",
+          "result": "Final state-document detect all: 3 files / 5 symbols / 0 processes / LOW; compare main: 10 files / 10 symbols / 0 processes / LOW. The timeout test function maps correctly after a forced reindex. Process extraction still omits 2,887 entry-point candidates, so zero process hits is not an absence proof."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",
+          "result": "After a forced GitNexus 1.6.12 reindex, scope all: 6 files / 11 symbols / 0 processes / LOW; compare main: 9 files / 28 symbols / 0 processes / LOW. The refreshed index maps the fixture and merged lifecycle-hook symbols to their correct files. Neither detect output reported partial/truncated; process extraction did omit 2,887 entry-point candidates, so zero process hits is not treated as proof of no runtime paths."
         }
       ]
     }

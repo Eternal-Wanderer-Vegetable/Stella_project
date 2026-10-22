@@ -1,19 +1,22 @@
 # Session Handoff
 
-## Current Session — LinkMonitor lifecycle injection and Gravitas frontend diagnosis
+## Current Session — PR #116 CI repair and documentation conflict resolution
 
-用户反馈 PR #114 合入并同步到测试环境后，`_on_bot_connect` 仍出现 `Unknown parameter bot`，且 Gravitas 页面无法正常显示。当前分支 `codex/link-monitor-lifecycle-injection-fix`，基于 `origin/main@a568953`；代码提交 `15e326b`，状态提交 `b88d821`、`7b9b71a`；PR [#115](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/115) 已创建，保持 OPEN。
+用户要求修复 PR #116 的 CI 失败并解决 main 同步后的文档冲突。当前分支 `codex/test-repo-sync-scripts` 包含合并提交 `0520a5a`，已合并 `origin/main@811ab69`；PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 保持 OPEN，原始同步脚本提交为 `37a9f4c`。
 
-- LinkMonitor 根因：NoneBot `Driver.on_bot_connect` / `on_bot_disconnect` 按 `BOT_HOOK_PARAMS` 解析回调；两者仍标注 `bot: Any`。已改为 `bot: Bot`，并新增通过 NoneBot `Dependent.parse` 验证 lifecycle hook 签名的回归。`@event_preprocessor` 的 `Bot` / `Event` 注解修复保留。
-- Gravitas 页面：当前源代码与 `dashboard/dist` 有页面路由及 chunk；旧 `webui/dist`、`desktop/dashboard-dist` 快照缺少页面 chunk。现已执行 Vue typecheck、Vite build 和 `dashboard/sync-dist.mjs`；三个快照完全相同、各 52 个文件，JS/CSS 引用完整。生成快照在 `.gitignore` 中，不进入提交。
-- API 装配：`bot.py` → `setup_gravitas` 注入 `status_api` provider → `status_api.collect_status` 注入 `webui.status_source` → `/api/v1/status` 的 `data.gravitas`。若静态资源更新后页面出现但内容 unavailable，查看 `data.gravitas`；若为 null，检查启动期 `[gravitas][boot]` 日志。外部测试环境浏览器/API 响应尚未访问。
-- GitNexus：原 `.gitnexus/meta.json` 指向另一 worktree，默认 status / analyze 因 foreign storage 拒绝。已用 `/tmp/gitnexus-stella-codex-link-monitor` 外部 index 分析当前代码；两个 callback impact 为 UNKNOWN / 0 静态 caller，Driver decorator 注册点经源码确认。状态文件提交前 all 为 3 files / 7 symbols，compare main 为 5 files / 10 symbols，均 0 affected processes / LOW，无 partial/truncated。
-- Verification：定向 LinkMonitor / status API 回归 35 passed；全仓 Ruff、改动 Python `py_compile` 通过；Dashboard typecheck、Vite build、静态资源同步通过。全量 Python suite 4,015 passed / 29 skipped / 3 failed（Cometa worker ACK、personal memory concurrent replay、WebUI groups mute）；三个失败在各自隔离 `STELLA_HOME` 下重跑均 1 passed，顺序/共享状态根因未确认。Vite 有 chunk-size 和 dynamic/static import warnings。未连接真实 Bot、平台或测试环境浏览器。
-- Hosted CI：run `39715248351` 在 PR head `7b9b71a030914f407b8fcf76cc98cd7a96d0f137` conclusion `success`；Python 3.10/3.11/3.12 与全部其它 jobs 通过。PR #115 等待 review/merge。
-- Gravitas 部署诊断：本地 `dashboard/dist` 含页面路由和 chunk，但生成/部署用的 `webui/dist`、`desktop/dashboard-dist` 原为旧快照且无 Gravitas chunk；已本地执行 Vue typecheck、Vite build、`dashboard/sync-dist.mjs`，三份快照现相同（52 文件，树 SHA-256 `6e118f0877e7218cda395089bda831a1b56ef8a6e2acce0fbba85669b4d665cf`）。因此同步源码后还必须重新 build/sync 静态资源。远端测试环境尚未实测，静态资源过期是基于本地快照的诊断。
-- Next：PR #115 合并后在测试环境执行 `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui` 并重启 Bot。确认 Gravitas route；若内容 unavailable，检查登录后的 `/api/v1/status` `data.gravitas` 与 `[gravitas][boot]` 日志。暂不把远端 UI 标记验收通过。
+- Root cause：PR CI run `39718004194` 的 Python 3.11 job 中，`test_no_jobs_creates_no_root` 断言 `claimed == 0` 实际为 1，`test_no_handler_marks_dead` 断言 `dead == 1` 实际为 0。两个测试分别运行于 xdist `gw1` / `gw3`；同类 enqueue 测试在 `gw0` 运行。`flow_db` 仅隔离 `turn_trace.db`，`social_worker._connect()` 仍使用全局 `settings.DB_PATH`，故并行 worker 会竞态读写队列。
+- Fix：`tests/observability/test_background_flow_roots.py::flow_db` 将 `settings.DB_PATH` 指向每个用例独立的 `tmp_path/social.db`，初始化 social schema，并在 teardown 清除 `social_store` 表就绪缓存；没有修改生产逻辑。
+- Follow-up：docs-only head `5199657` 的 CI run `39720613488` 又暴露一个独立测试时序问题：`tests/runtime/test_facade_turns.py::test_prepare_timeout_is_control_signal_and_cancels_hook` 使用 150ms 总预算，负载高时在 prepare hook 启动前就过期（Python 3.11：4017 passed / 1 failed / 29 skipped）。将其测试预算改为 1.0s，让正常准备步骤先启动 hook 再验证超时取消；整个 facade-turn 文件在 3 个 xdist workers 下 13 passed / 2.04s，Ruff 与 py_compile 通过。此改动没有触及 `submit_turn` 生产实现。
+- GitNexus：测试方法 upstream impact UNKNOWN / 0 图调用者（pytest 收集方式，源码引用已查）；`run_due_jobs` upstream LOW / 1 direct / 2 modules / 0 processes。GitNexus 1.6.12 索引于 PR 分支 HEAD；分析报告有 process truncation，不把遗漏流程视为无调用。
+- 文档冲突：PR #115 已合并为 `main@811ab69`，hosted run `39716099609` 全通过。合并冲突只涉及 `feature_list.json`、`progress.md`、`session-handoff.md`；保留 TEST-REPO-SYNC 状态，并同步 LinkMonitor 的 merged 状态，远端 Gravitas 页面验收仍列为 pending。
+- Verification：原 fixture 回归 7 passed / 1.68s；后续 timeout test file 13 passed / 2.04s，均用 3 个 xdist workers。Ruff、py_compile、docs（119/1247/577/0 errors）、JSON、冲突标记和 diff 门禁通过。GitNexus 1.6.12 强制重建后，timeout test impact UNKNOWN / 0 caller（源码引用已查），`submit_turn` CRITICAL / 492 impacted / 1 direct / 178 processes / 20 modules（生产代码未改）；state files impact LOW：feature 19/2、progress 26/3、handoff 19/2。最终状态文档 detect all: 3 files / 5 symbols / 0 processes / LOW; compare main: 10 / 10 / 0 / LOW。流程抽取遗漏 2,887 个入口候选，故零流程不作为无影响证明。PR run `39720042543` 在 head `5576e92` 全绿；最终 run `39721493074` 在 head `6236786` 的 Python 3.10/3.11/3.12、Windows native、flow、docs、lint、security、CLI 与 benchmark 检查全部成功。测试端 Linux/Windows 同步验收仍待执行，当前主机也没有 PowerShell parser。
+- Next：在 Linux 与 Windows 测试 checkout 验证 clean fast-forward 和 dirty-worktree 安全中止；在 Windows 环境补做 PowerShell parser 检查。
 
-## Previous Session — PR #113 CI repair
+## Inherited Session — LinkMonitor and Gravitas follow-up
+
+PR #115 fixed the remaining `bot: Any` lifecycle-hook injection error and was merged at `main@811ab69`; hosted run `39716099609` passed all checks. Local Dashboard build/sync outputs included the Gravitas route, but deployment to the test environment, service restart, and live route plus authenticated status API verification remain blocked pending test-environment access.
+
+## Completed Session — PR #113 CI repair
 
 用户要求检查 PR [#113](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/113) 的 CI、修复失败，并将提交信息改成英文。任务已完成：分支 `codex/memory-envelope-fallback-followup` 已基于 `main@386b46f` 更新，提交标题为 `fix(memory): simplify invalid reply envelope fallback`。
 

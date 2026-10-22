@@ -21,12 +21,21 @@ from stella_project.plugins.bot_main import ai_gateway as gateway
 
 
 @pytest.fixture()
-def flow_db(tmp_path):
+def flow_db(tmp_path, monkeypatch):
+    from config import settings
+    from memory import social_schema, social_store
+
+    social_db = tmp_path / "social.db"
+    monkeypatch.setattr(settings, "DB_PATH", social_db)
+    monkeypatch.setattr(social_store, "_TABLES_READY", False)
+    social_schema.ensure_social_schema(social_db, backup=False)
+
     db = tmp_path / "turn_trace.db"
     turn_trace.configure(db)
     yield db
     message_flow.flush()
     turn_trace.configure(None)
+    social_store._TABLES_READY = False
 
 
 class TestSocialWorkerRoot:

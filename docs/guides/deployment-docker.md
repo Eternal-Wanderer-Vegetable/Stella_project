@@ -130,6 +130,29 @@ docker compose start
 # 恢复 = 解包覆盖 StellaData/ 后 up -d
 ```
 
+### 测试环境同步源码（Linux / Windows）
+
+测试端使用仓库 checkout 时，执行对应入口：
+需要已安装 Git 与 Python 3（仅使用标准库），并为当前分支配置远端 upstream。
+
+```bash
+# Linux
+bash scripts/sync_test_repo.sh
+```
+
+```powershell
+# Windows PowerShell 5.1 或更新版本
+.\scripts\sync_test_repo.ps1
+```
+
+两个入口都按**当前分支配置的远端 upstream** fetch 并只做 fast-forward，不会切换分支。
+若工作区有已修改文件、未跟踪文件、进行中的 merge/rebase/cherry-pick，或本地提交与远端
+发生分叉，脚本会停止并要求人工处理；不会 reset、stash 或 rebase。fetch 后还会再次检查
+工作区，并在远端改动与本地被 Git 忽略的文件/目录冲突时停止。先检查 `git status` 并自行
+保存本地修改，再重试。脚本只同步源码，不代替 Dashboard 构建、服务重启或数据备份。更新
+Dashboard 后，如部署需要随包静态资源，再运行 `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui`
+并按当前部署方式重启服务。
+
 ### 5.1 Runtime 状态与可选 llama
 
 本版本的 Runtime 状态使用统一的 `schema_version`、组件名、状态、endpoint、
