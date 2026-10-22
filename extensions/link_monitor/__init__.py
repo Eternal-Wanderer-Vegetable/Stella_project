@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import nonebot
 from nonebot import get_driver, logger
+from nonebot.adapters import Bot, Event
 from nonebot.message import event_preprocessor
 from nonebot_plugin_apscheduler import scheduler
 
@@ -121,7 +122,7 @@ def _sync_active_bots() -> list[Any]:
 
 
 @event_preprocessor
-async def _refresh_on_any_event(bot: Any, event: Any) -> None:
+async def _refresh_on_any_event(bot: Bot, event: Event) -> None:
     """Refresh heartbeat only for OneBot V11 events."""
     del event
     if not _is_onebot_v11(_adapter_name(bot)):

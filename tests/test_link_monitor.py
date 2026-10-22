@@ -99,6 +99,16 @@ def _run(coro) -> None:
     asyncio.run(coro)
 
 
+def test_event_preprocessor_signature_is_supported_by_nonebot_di(link_monitor):
+    from nonebot.dependencies import Dependent
+    from nonebot.message import EVENT_PCS_PARAMS
+
+    Dependent.parse(
+        call=link_monitor["handlers"][0],
+        allow_types=EVENT_PCS_PARAMS,
+    )
+
+
 def _bot(link_monitor, adapter: str = "OneBot V11", self_id: str = "1") -> _Bot:
     bot = _Bot(adapter, self_id)
     link_monitor["adapters"][adapter] = object()

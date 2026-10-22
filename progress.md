@@ -2,10 +2,19 @@
 
 ## Current State
 
-**Last Updated:** 2026-10-21 (Asia/Shanghai)
-**Active Feature:** 无。GRAVITAS-IMPL 的 G00–G09 和 PR CI 补充修正已完成，PR #112 保持开放；产品外部验收仍 NOT READY。
+**Last Updated:** 2026-10-22 (Asia/Shanghai)
+**Active Feature:** 无。LINK-MONITOR-DI 已完成代码修复、回归检查并提交 PR [#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114)；head `5df7ca5` 的 hosted CI run `39702521767` 全部通过。
 **Inherited Feature:** XPLAT-IMPL 的代码已合入 PR #111；其平台 live、干净 VM 与发布缺口仍按原证据保留，不属于本轮 Gravitas scope。
-**Scope:** 按[Gravitas 工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)完成 G00–G09 并分阶段提交。PR #112 最新 head `2bfb362` 的最终 run `39629392684` 三版本全量均 4,016 passed / 29 skipped，G07 package smoke、Dashboard、Docker 和其余 CI jobs 全部通过。一次本地全量回归的 WebUI 鉴权 401 保留为本地异常；真实模型/平台、干净 VM 与发布验收仍 NOT READY。
+**Scope:** 已修复 NoneBot 注册 `@event_preprocessor` 时拒绝 `bot: Any` / `event: Any` 的签名错误；PR #114 开放待审，已检查的 hosted CI 全绿。Gravitas G00–G09 和 PR #112 的验收证据保留在下方历史记录；产品外部验收仍 NOT READY。
+
+## 2026-10-22 — LinkMonitor dependency injection fix
+
+- Branch/base：`codex/link-monitor-event-injection-fix` from `origin/main@d136c90`。
+- Root cause：NoneBot 在 `event_preprocessor` 装饰时解析函数参数；`BotParam` / `EventParam` 不接受 `typing.Any`，所以当前日志先报未知参数 `bot`，若只改 `bot`，后续 `event` 也会失败。现改用 `nonebot.adapters.Bot` 与 `Event`。
+- Regression：新增测试直接调用 `Dependent.parse(..., allow_types=EVENT_PCS_PARAMS)`。既有 fixture 将 `event_preprocessor` 替换成 identity，因此原测试会跳过启动期解析合同。
+- GitNexus：index at `f5e6a64`，当前 `origin/main@d136c90` 与索引 commit 的 tree diff 为空；`_refresh_on_any_event` upstream impact 为 UNKNOWN / 0 静态调用者，源码审计确认动态 `@event_preprocessor` 注册。提交前 `all` / `compare main` 均为 5 files / 8 symbols / 0 processes / LOW，无 partial/truncated。
+- Verification：定向 `tests/test_link_monitor.py` 12 passed；改动文件 Ruff、`py_compile`、全仓 Ruff、`check_docs.py`（119 files / 1248 links / 577 anchors / 0 errors）、message-flow `--check` 与 `git diff --check` 通过。全量 pytest 为 4014 passed / 29 skipped / 3 failures；三个失败分别是 MemoryConsolidator lifecycle、WebUI chat auth、WebUI Cometa auth，各自用独立 `STELLA_HOME` 单测重跑均 1 passed。失败与本次模块无关，完整顺序相互作用未确认。
+- PR：[#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114)，测试 head `5df7ca5`；CI run `39702521767` conclusion `success`，Python 3.10/3.11/3.12、security、docs、CLI、flow、GitNexus、Windows native、benchmark jobs 均通过。PR 仍待 review/merge。
 
 ## 2026-10-21 — Gravitas implementation
 

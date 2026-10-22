@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-21",
+  "updated_at": "2026-10-22",
   "active_feature": null,
   "features": [
     {
@@ -606,6 +606,46 @@
           "command": "PR #112 final hosted checks at 2bfb362: CI 39629392684; Dashboard 39629392742; Docker 39629392600; xdist 4-worker facade gate regression; Ruff; py_compile; docs gate; GitNexus all/compare",
           "result": "All checks pass. Python 3.10: 4016 passed / 29 skipped / 3 warnings; Python 3.11: 4016 passed / 29 skipped / 4 warnings; Python 3.12: 4016 passed / 29 skipped / 5 warnings. Python 3.11 G07 S01-S12 fake evaluation and release_package_layout_and_import passed (digest 4a202051d493aaf8a67b8937e9a4003ef70f1ad7). Dashboard, Docker, documentation, lint, security, flow, CLI, Windows native, and benchmark jobs passed. Local xdist facade regression: 13 passed; Ruff, py_compile, docs (119 files / 1248 links / 577 anchors / 0 errors), and diff check passed. Final GitNexus docs all: 4 files / 0 affected processes / LOW; compare/main succeeded without partial result and retained CRITICAL cumulative risk (counters varied; one successful output capped the listing but retained complete counters; see report). External real model/platform, production cross-process, clean VM and release acceptance remain NOT READY.",
           "report": "docs/reports/2026-10-21-gravitas-implementation.md"
+        }
+      ]
+    },
+    {
+      "id": "LINK-MONITOR-DI",
+      "name": "LinkMonitor NoneBot 依赖注入修复",
+      "description": "修复 event_preprocessor 注册时 Bot/Event 参数使用 Any 导致 link_monitor 加载失败。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "extensions/link_monitor/__init__.py",
+        "tests/test_link_monitor.py",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "Bot 与 Event 使用 NoneBot 可解析的类型注解，参数解析回归通过",
+        "回归测试直接验证 NoneBot event_preprocessor 参数解析合同",
+        "PR #114 已创建且 hosted CI 状态已记录；CI 仍运行时明确保留为待确认"
+      ],
+      "evidence": [
+        {
+          "command": "STELLA_HOME=/tmp/stella-link-monitor-di-fix-20261022 .venv/bin/pytest tests/test_link_monitor.py -q",
+          "result": "12 passed; new regression calls Dependent.parse with EVENT_PCS_PARAMS."
+        },
+        {
+          "command": ".venv/bin/ruff check .; .venv/bin/python scripts/check_docs.py; .venv/bin/python scripts/generate_message_flow.py --check; .venv/bin/python -m py_compile extensions/link_monitor/__init__.py tests/test_link_monitor.py",
+          "result": "All passed; docs 119 files / 1248 local links / 577 anchors / 0 errors. Full suite 4014 passed / 29 skipped / 3 order-sensitive failures; each failing case passed alone."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",
+          "result": "Both returned 5 files / 8 symbols / 0 affected processes / LOW; no partial/truncated result. Upstream impact for the dynamically decorated handler was UNKNOWN / 0 graph callers; decorator registration was confirmed in source."
+        },
+        {
+          "command": "GitHub PR creation + workflow run lookup",
+          "result": "PR #114 open; CI run 39702521767 on tested head 5df7ca5 concluded success. Python 3.10/3.11/3.12, security, documentation, CLI, flow, GitNexus, Windows native reliability, benchmark and notify jobs all reported success."
+        },
+        {
+          "command": "gh run view 39702521767 --json status,conclusion,headSha,jobs; gh pr checks 114",
+          "result": "Workflow conclusion success for head 5df7ca53e48771c259fd01c4824cbe14bf287705; every reported PR check passed."
         }
       ]
     }
