@@ -26,7 +26,7 @@ ruff check .
 pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 ```
 
-`requirements-platform.lock` includes the base runtime dependencies and the Alconna / Uninfo bridge dependencies declared by `requirements-platform.in`. The default QQ/WebChat installation continues to use only `requirements.txt`.
+`requirements-platform.lock` includes the base dependencies from `requirements.txt` plus optional Uninfo from `requirements-platform.in`. Alconna, required by the OneBot v11 outbound target codec, is now a base dependency, so the default QQ/WebChat installation gets it from `requirements.txt`.
 
 `pip-audit` is blocking, so CI goes red when an upstream dependency exposes a CVE. If you determine that an upstream issue cannot be fixed immediately, you may temporarily add `|| true` to that step, but record the reason.
 

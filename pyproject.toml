@@ -12,6 +12,8 @@ classifiers = [
 dependencies = [
     "nonebot2[fastapi,websockets]>=2.5.0",
     "nonebot-adapter-onebot>=2.4.6",
+    # OneBot v11 outbound target encoding imports Alconna's UniMessage Target.
+    "nonebot-plugin-alconna==0.62.1",
     "nonebot-plugin-apscheduler>=0.5.0",
     "python-dotenv>=1.0.0",
     # WebUI（v2 面板，webui/）鉴权与上传：见 requirements.txt 内注释。
@@ -29,10 +31,9 @@ dev = [
     "pyright[nodejs]",
     "ruff"
 ]
-# 跨平台消息桥接与结构化会话信息。适配器仍按所选平台单独安装；
-# 此 extra 只提供通用消息/会话合同，避免默认 QQ 部署增加依赖。
+# 结构化会话信息，仅在需要该 API 的平台适配器中使用；Alconna 是 OneBot v11
+# 出站 codec 的核心依赖，已列入上方默认运行依赖。
 platform = [
-    "nonebot-plugin-alconna==0.62.1",
     "nonebot-plugin-uninfo==0.11.2",
 ]
 # MCP Client 的可选依赖（capability/providers/mcp）。刻意不进默认依赖：
