@@ -3,18 +3,18 @@
 ## Current State
 
 **Last Updated:** 2026-10-22 (Asia/Shanghai)
-**Active Feature:** LINK-MONITOR-DI — 修复 `link_monitor` 的 NoneBot event preprocessor 依赖注入类型错误；代码与回归检查已完成，新 PR 待创建。
+**Active Feature:** 无。LINK-MONITOR-DI 已完成代码修复、回归检查并提交 PR [#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114)；hosted CI run `39702431763` 已创建，状态待最终 head 验证。
 **Inherited Feature:** XPLAT-IMPL 的代码已合入 PR #111；其平台 live、干净 VM 与发布缺口仍按原证据保留，不属于本轮 Gravitas scope。
-**Scope:** 当前仅处理 NoneBot 在注册 `@event_preprocessor` 时拒绝 `bot: Any` / `event: Any` 的签名错误；PR CI 尚待创建。Gravitas G00–G09 和 PR #112 的验收证据保留在下方历史记录；产品外部验收仍 NOT READY。
+**Scope:** 已修复 NoneBot 注册 `@event_preprocessor` 时拒绝 `bot: Any` / `event: Any` 的签名错误，PR #114 开放待审、hosted CI 待确认。Gravitas G00–G09 和 PR #112 的验收证据保留在下方历史记录；产品外部验收仍 NOT READY。
 
 ## 2026-10-22 — LinkMonitor dependency injection fix
 
 - Branch/base：`codex/link-monitor-event-injection-fix` from `origin/main@d136c90`。
 - Root cause：NoneBot 在 `event_preprocessor` 装饰时解析函数参数；`BotParam` / `EventParam` 不接受 `typing.Any`，所以当前日志先报未知参数 `bot`，若只改 `bot`，后续 `event` 也会失败。现改用 `nonebot.adapters.Bot` 与 `Event`。
 - Regression：新增测试直接调用 `Dependent.parse(..., allow_types=EVENT_PCS_PARAMS)`。既有 fixture 将 `event_preprocessor` 替换成 identity，因此原测试会跳过启动期解析合同。
-- GitNexus：index at `f5e6a64`，当前 `origin/main@d136c90` 与索引 commit 的 tree diff 为空；`_refresh_on_any_event` upstream impact 为 UNKNOWN / 0 静态调用者，源码审计确认动态 `@event_preprocessor` 注册。完整变更门禁待提交前记录。
+- GitNexus：index at `f5e6a64`，当前 `origin/main@d136c90` 与索引 commit 的 tree diff 为空；`_refresh_on_any_event` upstream impact 为 UNKNOWN / 0 静态调用者，源码审计确认动态 `@event_preprocessor` 注册。提交前 `all` / `compare main` 均为 5 files / 8 symbols / 0 processes / LOW，无 partial/truncated。
 - Verification：定向 `tests/test_link_monitor.py` 12 passed；改动文件 Ruff、`py_compile`、全仓 Ruff、`check_docs.py`（119 files / 1248 links / 577 anchors / 0 errors）、message-flow `--check` 与 `git diff --check` 通过。全量 pytest 为 4014 passed / 29 skipped / 3 failures；三个失败分别是 MemoryConsolidator lifecycle、WebUI chat auth、WebUI Cometa auth，各自用独立 `STELLA_HOME` 单测重跑均 1 passed。失败与本次模块无关，完整顺序相互作用未确认。
-- Next：提交代码与状态，推送并创建新 PR；检查 hosted CI，再将 feature 标记完成并更新 PR/验证状态。
+- PR：[#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114)，head `ef3b1e8`；CI run `39702431763` 初次读取为 queued。修复与 PR 已交付；下一步确认最新 PR head 的 CI，必要时处理新增失败。
 
 ## 2026-10-21 — Gravitas implementation
 

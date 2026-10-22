@@ -2,12 +2,12 @@
 
 ## Current Session — LinkMonitor dependency injection fix
 
-用户要求修复开发环境同步提交后出现的 `link_monitor` 加载错误，并开新 PR。当前分支 `codex/link-monitor-event-injection-fix`，从 `origin/main@d136c90` 创建。原因是 NoneBot 注册 `@event_preprocessor` 时按 `Bot` / `Event` 类型做参数解析，`Any` 不受支持；源码签名已改为 `bot: Bot, event: Event`，并增加对 `Dependent.parse(..., EVENT_PCS_PARAMS)` 的回归测试。改动与定向测试已完成，PR 尚未创建。
+用户要求修复开发环境同步提交后出现的 `link_monitor` 加载错误，并开新 PR。当前分支 `codex/link-monitor-event-injection-fix`，从 `origin/main@d136c90` 创建。原因是 NoneBot 注册 `@event_preprocessor` 时按 `Bot` / `Event` 类型做参数解析，`Any` 不受支持；源码签名已改为 `bot: Bot, event: Event`，并增加对 `Dependent.parse(..., EVENT_PCS_PARAMS)` 的回归测试。PR [#114](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/114) 已开放，初次 hosted CI run `39702431763` 状态为 queued。
 
 - Files：`extensions/link_monitor/__init__.py`、`tests/test_link_monitor.py`。
-- GitNexus：索引 commit `f5e6a64` 与当前 `d136c90` tree 内容一致；目标 upstream impact `UNKNOWN / 0`，原因是 NoneBot 装饰器动态注册，已从源码确认注册点。提交前 all/compare 待跑。
+- GitNexus：索引 commit `f5e6a64` 与当前 `d136c90` tree 内容一致；目标 upstream impact `UNKNOWN / 0`，原因是 NoneBot 装饰器动态注册，已从源码确认注册点。提交前 `all` 与 `compare main` 均为 5 files / 8 symbols / 0 processes / LOW，无 partial/truncated。
 - Verification：`tests/test_link_monitor.py` 12 passed；全仓 Ruff、改动文件 `py_compile`、docs（119 files / 1248 links / 577 anchors / 0 errors）、message-flow `--check`、diff check 均通过。全量 pytest 4014 passed / 29 skipped / 3 failed；失败为一个 memory-flow lifecycle 与两个 WebUI auth 用例，各自隔离重跑均通过，顺序/共享状态根因未确认。测试使用 `/tmp` 隔离 `STELLA_HOME`，未启动真实 Bot、平台或访问用户数据库。
-- Next：跑 GitNexus `detect-changes` all/compare，提交、push、创建新 PR 并检查 hosted CI；确认 PR 后更新 `progress.md`、`feature_list.json` 和本交接的最终状态。
+- Next：确认 PR #114 最终 head 的 hosted CI；若失败，定位并修复后更新此交接。当前 PR head `ef3b1e8`，初始 run `39702431763` queued。全量 pytest 的三个顺序失败各自单测通过，但其共享状态/顺序根因尚未确认。
 
 ## Previous Session — Gravitas implementation
 

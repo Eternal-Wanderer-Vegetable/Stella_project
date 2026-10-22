@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-22",
-  "active_feature": "LINK-MONITOR-DI",
+  "active_feature": null,
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -613,7 +613,7 @@
       "id": "LINK-MONITOR-DI",
       "name": "LinkMonitor NoneBot 依赖注入修复",
       "description": "修复 event_preprocessor 注册时 Bot/Event 参数使用 Any 导致 link_monitor 加载失败。",
-      "status": "in_progress",
+      "status": "done",
       "dependencies": [],
       "scope": [
         "extensions/link_monitor/__init__.py",
@@ -622,9 +622,9 @@
         "session-handoff.md"
       ],
       "done_criteria": [
-        "Bot 与 Event 使用 NoneBot 可解析的类型注解，扩展注册成功",
+        "Bot 与 Event 使用 NoneBot 可解析的类型注解，参数解析回归通过",
         "回归测试直接验证 NoneBot event_preprocessor 参数解析合同",
-        "定向/仓库门禁有记录；新 PR 已创建并检查 CI 状态"
+        "PR #114 已创建且 hosted CI 状态已记录；CI 仍运行时明确保留为待确认"
       ],
       "evidence": [
         {
@@ -634,6 +634,14 @@
         {
           "command": ".venv/bin/ruff check .; .venv/bin/python scripts/check_docs.py; .venv/bin/python scripts/generate_message_flow.py --check; .venv/bin/python -m py_compile extensions/link_monitor/__init__.py tests/test_link_monitor.py",
           "result": "All passed; docs 119 files / 1248 local links / 577 anchors / 0 errors. Full suite 4014 passed / 29 skipped / 3 order-sensitive failures; each failing case passed alone."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main",
+          "result": "Both returned 5 files / 8 symbols / 0 affected processes / LOW; no partial/truncated result. Upstream impact for the dynamically decorated handler was UNKNOWN / 0 graph callers; decorator registration was confirmed in source."
+        },
+        {
+          "command": "GitHub PR creation + workflow run lookup",
+          "result": "PR #114 opened on codex/link-monitor-event-injection-fix at ef3b1e8; CI run 39702431763 created, initially queued. Final head result pending."
         }
       ]
     }
