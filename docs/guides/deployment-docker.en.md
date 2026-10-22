@@ -164,9 +164,13 @@ modified or untracked files, a merge/rebase/cherry-pick is in progress, or local
 diverged from upstream. They do not reset, stash, or rebase. After fetching, the script checks
 again and also refuses an update if incoming paths overlap ignored local files or directories.
 Review `git status` and save local changes yourself before retrying. The script syncs source
-only; it does not build the Dashboard, restart services, or back up application data. When an
-update includes Dashboard changes, run `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui`
-and restart the service according to the deployment method if bundled static assets must be refreshed.
+only and does not back up application data. After syncing, starting `python bot.py` or `deploy start`
+from a source checkout automatically installs the locked frontend dependencies, builds the Dashboard,
+and syncs it to `webui/dist` before the new process starts serving requests. This requires Node.js and
+pnpm 10.26+ or pnpm 11. If an older pnpm is active but npm is available, startup invokes pnpm 10
+automatically. The repository CI uses Node.js 24 and pnpm 10. A failed build stops the new process so
+it cannot serve an old frontend. Docker images build Dashboard assets during image creation, and the
+Windows Release workflow supplies its built assets; neither release runtime requires Node.js.
 
 ### 5.1 Runtime status and optional llama
 

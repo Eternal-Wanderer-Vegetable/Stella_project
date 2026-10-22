@@ -14,6 +14,15 @@
 #   * 容器内 PORT 固定 8080，对外换端口用端口映射，别改 .env 里的 PORT
 #     （否则健康检查与 NapCat 反向 WS 地址都会失配）。
 
+FROM node:24-slim AS dashboard-build
+
+WORKDIR /dashboard
+RUN npm install --global pnpm@10
+COPY dashboard/package.json dashboard/pnpm-lock.yaml dashboard/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY dashboard/ ./
+RUN pnpm build
+
 FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="Stella" \
@@ -62,6 +71,11 @@ RUN if [ "$WITH_RENDER" = "true" ]; \
 # 程序层。.dockerignore 已确保拷不进 .env / 记忆库 / 插件数据 / 人格文件。
 # 保持 root 属主、对运行用户只读：程序目录不该被运行期改写。
 COPY . .
+
+# Dashboard assets are built from this checkout. The build context excludes all
+# local dist directories, so an ignored or stale host bundle cannot enter the image.
+COPY --from=dashboard-build /dashboard/dist /app/webui/dist
+RUN python -c "import tomllib; from pathlib import Path; version = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version']; marker = Path('webui/dist/assets/version'); marker.parent.mkdir(parents=True, exist_ok=True); marker.write_text(version + '\\n', encoding='utf-8')"
 
 # 非 root 运行，写权限只给数据卷。/data 现在建好并交属主：用 named volume 时
 # Docker 会把镜像里这个目录的属主带过去；bind mount 时由宿主机目录属主决定

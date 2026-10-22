@@ -1,3 +1,4 @@
-onlyBuiltDependencies:
-  - esbuild
-  - vue-demi
+# Keep the build-script allowlist compatible with pnpm 10.26+ and pnpm 11+.
+allowBuilds:
+  esbuild: true
+  vue-demi: true

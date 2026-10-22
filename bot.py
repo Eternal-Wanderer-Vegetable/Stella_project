@@ -38,6 +38,27 @@ try:
 except Exception as _e:  # 自重启等待绝不能拦住正常启动
     print(f"[stella] 接任等待跳过：{_e}", flush=True)
 
+# 从源码目录直启时，在接管旧实例前构建并同步 Dashboard，避免服务继续提供
+# 已过期的 webui/dist。发行包通过内嵌版本标记识别，不会在用户运行期安装 Node 依赖。
+if __name__ == "__main__":
+    import sys as _sys
+
+    try:
+        from webui.source_build import rebuild_source_dashboard
+
+        rebuild_source_dashboard()
+    except Exception as _e:
+        _message = (
+            f"[webui][boot] Dashboard 自动构建失败；为避免复用旧前端，启动已中止: {_e}"
+        )
+        nonebot.logger.error(_message)
+        print(
+            _message,
+            file=_sys.stderr,
+            flush=True,
+        )
+        raise SystemExit(1) from _e
+
 # 启动前接管：本安装已有实例在跑（后台受管实例、上次直启残留）时按身份
 # 证明停掉它，避免 uvicorn 绑定失败（winerror 10048，2026-09-24 实测）。
 # 接任路径刚等上一任退出，这里通常无实例直通。随后自登记 ownership——

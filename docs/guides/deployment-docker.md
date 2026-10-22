@@ -149,9 +149,12 @@ bash scripts/sync_test_repo.sh
 若工作区有已修改文件、未跟踪文件、进行中的 merge/rebase/cherry-pick，或本地提交与远端
 发生分叉，脚本会停止并要求人工处理；不会 reset、stash 或 rebase。fetch 后还会再次检查
 工作区，并在远端改动与本地被 Git 忽略的文件/目录冲突时停止。先检查 `git status` 并自行
-保存本地修改，再重试。脚本只同步源码，不代替 Dashboard 构建、服务重启或数据备份。更新
-Dashboard 后，如部署需要随包静态资源，再运行 `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui`
-并按当前部署方式重启服务。
+保存本地修改，再重试。脚本只同步源码，不代替数据备份。此后从源码目录运行 `python bot.py`
+或 `deploy start` 时，会自动安装锁定的前端依赖、构建 Dashboard 并同步到 `webui/dist`；
+需要 Node.js 与 pnpm 10.26+ 或 pnpm 11；若 pnpm 版本较旧但有 npm，也会自动调用 pnpm 10。
+仓库 CI 使用 Node.js 24 / pnpm 10。构建失败会中止新进程，避免继续提供旧前端。
+Docker 镜像在构建期生成 Dashboard 资源，Windows 发布包由 Release 工作流生成资源，运行期
+不会依赖 Node.js。
 
 ### 5.1 Runtime 状态与可选 llama
 
