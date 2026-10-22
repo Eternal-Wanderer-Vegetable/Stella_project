@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-22",
-  "active_feature": null,
+  "active_feature": "LINK-MONITOR-DI",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -612,19 +612,20 @@
     {
       "id": "LINK-MONITOR-DI",
       "name": "LinkMonitor NoneBot 依赖注入修复",
-      "description": "修复 event_preprocessor 注册时 Bot/Event 参数使用 Any 导致 link_monitor 加载失败。",
-      "status": "done",
+      "description": "修复 NoneBot 对 event_preprocessor 与 Bot lifecycle hook 参数使用 Any 时的注入解析失败。",
+      "status": "in_progress",
       "dependencies": [],
       "scope": [
         "extensions/link_monitor/__init__.py",
-        "tests/test_link_monitor.py",
+        "feature_list.json",
         "progress.md",
-        "session-handoff.md"
+        "session-handoff.md",
+        "tests/test_link_monitor.py"
       ],
       "done_criteria": [
-        "Bot 与 Event 使用 NoneBot 可解析的类型注解，参数解析回归通过",
-        "回归测试直接验证 NoneBot event_preprocessor 参数解析合同",
-        "PR #114 已创建且 hosted CI 状态已记录；CI 仍运行时明确保留为待确认"
+        "event_preprocessor 的 Bot/Event 与 bot connect/disconnect hook 的 Bot 均使用 NoneBot 可解析注解，解析回归通过",
+        "回归测试直接验证 NoneBot event_preprocessor 与 BOT_HOOK_PARAMS 两类依赖解析合同",
+        "Follow-up PR is created and hosted CI passes; CI still running remains explicitly pending."
       ],
       "evidence": [
         {
@@ -641,11 +642,23 @@
         },
         {
           "command": "GitHub PR creation + workflow run lookup",
-          "result": "PR #114 open; CI run 39702521767 on tested head 5df7ca5 concluded success. Python 3.10/3.11/3.12, security, documentation, CLI, flow, GitNexus, Windows native reliability, benchmark and notify jobs all reported success."
+          "result": "PR #114 merged at main commit 386b46f; CI run 39702521767 on tested head 5df7ca5 concluded success across Python 3.10/3.11/3.12 and all other jobs."
         },
         {
           "command": "gh run view 39702521767 --json status,conclusion,headSha,jobs; gh pr checks 114",
           "result": "Workflow conclusion success for head 5df7ca53e48771c259fd01c4824cbe14bf287705; every reported PR check passed."
+        },
+        {
+          "command": "STELLA_HOME=/tmp/stella-debug-20261022 .venv/bin/pytest tests/test_link_monitor.py tests/test_status_api.py -q",
+          "result": "35 passed; covers EVENT_PCS_PARAMS plus both Driver lifecycle hook BOT_HOOK_PARAMS parser registrations."
+        },
+        {
+          "command": "Dashboard vue-tsc --noEmit; Vite build; node dashboard/sync-dist.mjs; verify generated dist manifests and tree digests",
+          "result": "Typecheck/build/sync passed; dashboard/dist, webui/dist and desktop/dashboard-dist each contain 52 files, identical tree SHA-256 6e118f0877e7218cda395089bda831a1b56ef8a6e2acce0fbba85669b4d665cf; Gravitas chunk present and no referenced JS/CSS missing. External test environment not accessed."
+        },
+        {
+          "command": "git commit -m \"fix(link-monitor): annotate bot lifecycle hooks\"",
+          "result": "Original branch commit 067745f was cherry-picked onto origin/main@a568953 as 15e326b; follow-up PR not yet created."
         }
       ]
     },

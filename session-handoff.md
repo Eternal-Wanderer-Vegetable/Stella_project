@@ -1,6 +1,17 @@
 # Session Handoff
 
-## Completed Session — PR #113 CI repair
+## Current Session — LinkMonitor lifecycle injection and Gravitas frontend diagnosis
+
+用户反馈 PR #114 合入并同步到测试环境后，`_on_bot_connect` 仍出现 `Unknown parameter bot`，且 Gravitas 页面无法正常显示。当前分支 `codex/link-monitor-lifecycle-injection-fix`，基于 `origin/main@a568953`；代码提交 `15e326b`，状态记录待完成提交，PR 尚未创建。
+
+- LinkMonitor 根因：NoneBot `Driver.on_bot_connect` / `on_bot_disconnect` 按 `BOT_HOOK_PARAMS` 解析回调；两者仍标注 `bot: Any`。已改为 `bot: Bot`，并新增通过 NoneBot `Dependent.parse` 验证 lifecycle hook 签名的回归。`@event_preprocessor` 的 `Bot` / `Event` 注解修复保留。
+- Gravitas 页面：当前源代码与 `dashboard/dist` 有页面路由及 chunk；旧 `webui/dist`、`desktop/dashboard-dist` 快照缺少页面 chunk。现已执行 Vue typecheck、Vite build 和 `dashboard/sync-dist.mjs`；三个快照完全相同、各 52 个文件，JS/CSS 引用完整。生成快照在 `.gitignore` 中，不进入提交。
+- API 装配：`bot.py` → `setup_gravitas` 注入 `status_api` provider → `status_api.collect_status` 注入 `webui.status_source` → `/api/v1/status` 的 `data.gravitas`。若静态资源更新后页面出现但内容 unavailable，查看 `data.gravitas`；若为 null，检查启动期 `[gravitas][boot]` 日志。外部测试环境浏览器/API 响应尚未访问。
+- GitNexus：原 `.gitnexus/meta.json` 指向另一 worktree，默认 status / analyze 因 foreign storage 拒绝。已用 `/tmp/gitnexus-stella-codex-link-monitor` 外部 index 分析当前代码；两个 callback impact 为 UNKNOWN / 0 静态 caller，Driver decorator 注册点经源码确认。提交前 `detect-changes all` 为 2 files / 4 symbols、compare main 同值，LOW，无 partial/truncated。
+- Verification：`STELLA_HOME=/tmp/stella-debug-20261022 .venv/bin/pytest tests/test_link_monitor.py tests/test_status_api.py -q`：35 passed；改动文件 Ruff 通过；Dashboard typecheck、Vite build、静态资源同步通过。Vite 输出 chunk size 和 dynamic/static import warnings。没有跑全量 Python suite，也未连接真实 Bot、平台或测试环境浏览器。
+- Next：完成状态记录提交，推送新分支并创建 PR。部署新前端 build/sync 后重启 Bot；若 Gravitas 页仍 unavailable，收集登录后的 `/api/v1/status` 中 `data.gravitas`（不要贴凭据）及 Gravitas 启动日志。
+
+## Previous Session — PR #113 CI repair
 
 用户要求检查 PR [#113](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/113) 的 CI、修复失败，并将提交信息改成英文。任务已完成：分支 `codex/memory-envelope-fallback-followup` 已基于 `main@386b46f` 更新，提交标题为 `fix(memory): simplify invalid reply envelope fallback`。
 
