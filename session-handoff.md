@@ -1,6 +1,15 @@
 # Session Handoff
 
-## Current Session — Gravitas implementation
+## Current Session — LinkMonitor dependency injection fix
+
+用户要求修复开发环境同步提交后出现的 `link_monitor` 加载错误，并开新 PR。当前分支 `codex/link-monitor-event-injection-fix`，从 `origin/main@d136c90` 创建。原因是 NoneBot 注册 `@event_preprocessor` 时按 `Bot` / `Event` 类型做参数解析，`Any` 不受支持；源码签名已改为 `bot: Bot, event: Event`，并增加对 `Dependent.parse(..., EVENT_PCS_PARAMS)` 的回归测试。改动与定向测试已完成，PR 尚未创建。
+
+- Files：`extensions/link_monitor/__init__.py`、`tests/test_link_monitor.py`。
+- GitNexus：索引 commit `f5e6a64` 与当前 `d136c90` tree 内容一致；目标 upstream impact `UNKNOWN / 0`，原因是 NoneBot 装饰器动态注册，已从源码确认注册点。提交前 all/compare 待跑。
+- Verification：`tests/test_link_monitor.py` 12 passed；全仓 Ruff、改动文件 `py_compile`、docs（119 files / 1248 links / 577 anchors / 0 errors）、message-flow `--check`、diff check 均通过。全量 pytest 4014 passed / 29 skipped / 3 failed；失败为一个 memory-flow lifecycle 与两个 WebUI auth 用例，各自隔离重跑均通过，顺序/共享状态根因未确认。测试使用 `/tmp` 隔离 `STELLA_HOME`，未启动真实 Bot、平台或访问用户数据库。
+- Next：跑 GitNexus `detect-changes` all/compare，提交、push、创建新 PR 并检查 hosted CI；确认 PR 后更新 `progress.md`、`feature_list.json` 和本交接的最终状态。
+
+## Previous Session — Gravitas implementation
 
 用户要求新建分支并执行[工程方案](docs/plans/2026-10-21-gravitas-engineering-plan.md)，阶段提交并创建 PR。GRAVITAS-IMPL G00–G09 已完成，PR [#112](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/112) 已提交且保持开放；当前分支 `codex/gravitas-implementation`，基于合并 PR #111 后的 `main@c662746`，HEAD `2bfb362`。最新 PR checks 全绿。
 
