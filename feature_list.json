@@ -641,7 +641,11 @@
         },
         {
           "command": "GitHub PR creation + workflow run lookup",
-          "result": "PR #114 opened on codex/link-monitor-event-injection-fix at ef3b1e8; CI run 39702431763 created, initially queued. Final head result pending."
+          "result": "PR #114 open; CI run 39702521767 on tested head 5df7ca5 concluded success. Python 3.10/3.11/3.12, security, documentation, CLI, flow, GitNexus, Windows native reliability, benchmark and notify jobs all reported success."
+        },
+        {
+          "command": "gh run view 39702521767 --json status,conclusion,headSha,jobs; gh pr checks 114",
+          "result": "Workflow conclusion success for head 5df7ca53e48771c259fd01c4824cbe14bf287705; every reported PR check passed."
         }
       ]
     }
