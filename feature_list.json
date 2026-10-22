@@ -728,6 +728,14 @@
         {
           "command": "bash -n scripts/sync_test_repo.sh; python -m py_compile scripts/sync_test_repo.py; ruff check scripts/sync_test_repo.py; python scripts/check_docs.py; git diff --check",
           "result": "Bash syntax, Python compilation, Ruff, docs (119 files / 1247 links / 577 anchors / 0 errors), and diff checks passed. GitNexus all: 8 files / 11 symbols / 0 processes / LOW; compare main: 8 / 11 / 0 / LOW; no partial/truncated result. New scripts are explicit operator entrypoints with no source callers. No PowerShell parser is installed on this host; test-environment behavior on Linux and Windows remains pending."
+        },
+        {
+          "command": "gh pr view 116 --json url,headRefOid,state; gh run list --branch codex/test-repo-sync-scripts",
+          "result": "Commit 37a9f4c was pushed and PR #116 opened at https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116. Hosted CI run 39717886745 was in progress at the last status check."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; detect-changes --scope compare --base-ref main (final state-document update)",
+          "result": "All: 3 files / 5 symbols / 0 processes / LOW; compare main: 8 files / 11 symbols / 0 processes / LOW; no partial/truncated result."
         }
       ]
     }

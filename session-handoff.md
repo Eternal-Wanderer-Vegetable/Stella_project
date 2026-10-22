@@ -2,13 +2,14 @@
 
 ## Current Session — Cross-platform test checkout sync
 
-用户要求增加 Linux / Windows 测试端远端仓库同步脚本，不能覆盖本地未提交更新。当前分支 `codex/test-repo-sync-scripts`，基于 `origin/main@a568953`。
+用户要求增加 Linux / Windows 测试端远端仓库同步脚本，不能覆盖本地未提交更新。当前分支 `codex/test-repo-sync-scripts`，基于 `origin/main@a568953`；代码提交 `37a9f4c`，PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 已创建并保持 OPEN。
 
 - Files：`scripts/sync_test_repo.py` 是标准库实现；Linux 入口 `scripts/sync_test_repo.sh`，Windows PowerShell 5.1+ 入口 `scripts/sync_test_repo.ps1`。中英文使用说明在 `docs/guides/deployment-docker.md` 与 `.en.md`。
 - Safety：拒绝 detached HEAD、无远端 upstream、modified/untracked 工作区、merge/rebase/cherry-pick/bisect 进行中、本地领先/分叉历史和与入站文件冲突的 ignored 路径；fetch 后重检 dirty / branch / HEAD；只做 `merge --ff-only`，不 reset/stash/rebase/切换分支。fetch 只更新 Git refs。
-- GitNexus：部署指南 upstream MEDIUM（中文 48/4 direct，英文 43/4 direct，均 0 processes）；`docs/documentation-map.json` HIGH（111/4 direct），未编辑。新脚本为用户显式入口；文本搜索确认无既有调用方。提交前 detect all 8 files / 11 symbols / 0 processes / LOW，compare main 8 / 11 / 0 / LOW，无 partial/truncated。
+- GitNexus：部署指南 upstream MEDIUM（中文 48/4 direct，英文 43/4 direct，均 0 processes）；`docs/documentation-map.json` HIGH（111/4 direct），未编辑。新脚本为用户显式入口；文本搜索确认无既有调用方。代码提交前 detect all / compare main 均 8 files / 11 symbols / 0 processes / LOW；最终状态提交前 all 3 files / 5 symbols，compare main 8 / 11，均 0 processes / LOW，无 partial/truncated。
 - Verification：Bash 语法、Python compile、Ruff、docs gate（119/1247/577/0）和 diff check 通过。当前主机没有 PowerShell parser；没有在测试端实际运行同步，需保留 Linux/Windows 行为验收为待完成。
-- Next：提交 PR 并等待 hosted checks；合并后在测试 Linux / Windows 主机各验证 clean fast-forward、dirty tracked/untracked 改动安全停止和 ignored-path 冲突停止。同步本身不构建 Dashboard 或重启服务。
+- Hosted CI：run `39717886745` 在最后一次状态读取时仍为 in_progress；待完成后复查 PR #116。
+- Next：等待 hosted checks 和 review；合并后在测试 Linux / Windows 主机各验证 clean fast-forward、dirty tracked/untracked 改动安全停止和 ignored-path 冲突停止。同步本身不构建 Dashboard 或重启服务。
 
 ## Completed Session — PR #113 CI repair
 
