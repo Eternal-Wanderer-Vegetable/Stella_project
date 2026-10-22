@@ -1,6 +1,17 @@
 # Session Handoff
 
-## Current Session — PR #116 CI repair and documentation conflict resolution
+## Current Session — OneBot v11 Alconna dependency fix (PR #117)
+
+用户要求补齐 Stella 的默认运行依赖并提交 PR。PR [#117](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/117) 已创建，分支 `codex/onebot-alconna-required-dependency`，提交 `65f1b34`，基于 `main@f340917`。PR CI run `39727575917` 全部成功（Python 3.10/3.11/3.12、Windows native、flow、docs、lint、security、CLI、benchmark、notify）；Docker Publish `39727575966` 成功。
+
+- Root cause：OneBot v11 `OneBotV11TargetCodec.encode` 延迟导入 `nonebot_plugin_alconna.uniseg.Target`，但 Alconna 0.62.1 只在可选 platform 依赖中。活跃 Bot 环境使用 `C:\Users\Vegetable\.conda\envs\stella\python.exe`，此前未安装它；已记录的两个失败 trace 都在 `target_codec_rejected` / `not_delivered` 结束。
+- Fix：把 Alconna 固定版本加入 `pyproject.toml` 与 `requirements.txt`；`requirements-platform.in` 保留可选 Uninfo；重新生成平台锁并同步双语 CI 说明。运行环境已安装；`Target` import 和 `litellm` import 都成功。
+- Environment caveat：pip 将 `importlib-metadata` 从 8.9.0 升到 9.0.1，因 Alconna 要求 `>=9`；现有 `litellm 1.96.0` 声明 `<9`。两者的导入探针通过，但环境元数据约束冲突仍存在，后续需确认是否有独立 LiteLLM 环境约束。未重启 Bot（发送 codec 在运行时延迟导入）。
+- Verification：依赖锁解析 95 packages；TOML 有效；docs 检查 119 files / 1,247 links / 577 anchors / 0 errors；本地 pytest 未运行。没有主动向 QQ 发送测试消息，因此真实收发验收仍待一条用户发起的消息。
+- GitNexus 1.6.12：`OutboundService.send` 上游 HIGH（11 / 6 direct / 2 processes / 3 modules）；codec impact UNKNOWN，源码核实动态路径。变更 all / compare main 均 LOW（6 files / 2 symbols / 0 flows），无 partial/truncated；索引的 flow extraction 本身漏掉 2,887 个候选入口。
+- Files：`pyproject.toml`、`requirements.txt`、`requirements-platform.in`、`requirements-platform.lock`、双语 CI 指南及状态文件。下一步在用户发起的真实 QQ 消息后观察回复并由用户决定合并；TEST-REPO-SYNC 的 Linux/Windows 测试端验证因缺少主机访问而 blocked。
+
+## Previous Session — PR #116 CI repair and documentation conflict resolution
 
 用户要求修复 PR #116 的 CI 失败并解决 main 同步后的文档冲突。当前分支 `codex/test-repo-sync-scripts` 包含合并提交 `0520a5a`，已合并 `origin/main@811ab69`；PR [#116](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/116) 保持 OPEN，原始同步脚本提交为 `37a9f4c`。
 
