@@ -4,13 +4,13 @@
 
 The blank test UI came from a stale `webui/dist`. This branch now rebuilds the Dashboard when `bot.py` is run from a source checkout or source archive, before serving requests; a failed build stops the new process rather than serving stale assets. Release products with a version-marked frontend skip this runtime path.
 
-- Branch: `codex/auto-build-dashboard-on-source-start`. Pre-existing local edits to `progress.md` and `session-handoff.md` from PR #116/Gravitas work were preserved; the ignored local `dashboard/dist`, `webui/dist`, and `desktop/dashboard-dist` were not changed.
+- Branch: `codex/auto-build-dashboard-on-source-start`, synchronized with `origin/main@08dbbb0` while preparing this PR. Earlier PR #116/Gravitas state was preserved; ignored local `dashboard/dist`, `webui/dist`, and `desktop/dashboard-dist` were not changed.
 - Source build: `webui/source_build.py` runs frozen dependency install, `pnpm build`, and `pnpm sync:webui`. Git checkouts build even when an old version marker exists; source archives build when no release asset marker exists. `deploy/process.py` startup wait is 180 seconds for cold installs. `dashboard/pnpm-workspace.yaml` uses `allowBuilds` for `esbuild` and `vue-demi`; official pnpm docs state pnpm 10 supports it starting at 10.26 and pnpm 11 replaced the older `onlyBuiltDependencies` config.
 - Release audit: Windows release workflow already builds and stages Dashboard artifacts. Docker previously had no Dashboard build, so clean release checkouts lacked `webui/dist`; Dockerfile now builds with Node 24, copies fresh dist, and adds a version marker. `.dockerignore` excludes local ignored bundles. Dashboard/WebUI PRs trigger Docker build and asset smoke.
 - GitNexus before edit: `bot.py` UNKNOWN / 0 graph callers (source refs verified); `deploy/process.py` MEDIUM / 40 impacted / 6 direct callers; `Dockerfile` UNKNOWN / 0 (compose/workflow source refs verified); package.json UNKNOWN / 0 (manifest/workflow refs verified). `progress.md` returned HIGH / partial and the warning was reported before editing. GitNexus does not index the two deployment guide paths; `rg` confirmed references before changing them.
 - Build evidence: isolated `/tmp/stella-dashboard-source-build-20261022` install/build/sync passed with pnpm 11.25.0, and the synced output contains `GravitasStatusPage-*.js`. No repository ignored dist was touched. Docker CLI build attempt failed before processing because `/var/run/docker.sock` is unavailable; hosted Docker CI remains necessary.
 - Final checks passed: `.venv/bin/ruff check bot.py deploy/process.py webui/source_build.py`; `python3 -m py_compile bot.py deploy/process.py webui/source_build.py`; `python3 scripts/check_docs.py` (119 files / 1247 links / 577 anchors / 0 errors); `python3 -m json.tool feature_list.json`; `git diff --check`. GitNexus detect all: 12 files / 14 symbols / 0 processes / LOW; compare main: 17 files / 25 symbols / 0 processes / LOW. Do not run pytest or start the real Bot; neither was requested, and the running test service was not modified.
-- Next: complete the checks above, inspect the final diff, then run full Docker build/smoke in Docker-enabled CI. Direct Linux/Windows source-start and test-checkout acceptance remain external.
+- Next: create the PR against current main and confirm hosted Docker build/smoke; direct Linux/Windows source startup and test-host acceptance remain external.
 
 ## Previous Session — Gravitas Dashboard test-environment diagnosis
 
@@ -19,6 +19,17 @@ User reported a blank Gravitas page and supplied `/api/v1/status`. The payload c
 Confirmed by read-only HTTP requests to `127.0.0.1:8080`: the served index SHA-256 is `bcc60e4d27803f551c9e16089d06f4e0924ad4ff4091412aade9112f59386b0f`; it references `assets/index-UXCygCID.js`, which contains no Gravitas route markers. Current local `webui/dist` has 52 files, SHA-256 `4cbc7dc5a32971508b8f383159fc2ec45a389cab0308273a71c7731c9b011fde`, with route-bearing entry `assets/index-Dqzv2b0Y.js` and lazy chunks `GravitasStatusPage-BM9b9YdZ.js` / `GravitasStatusPage-DwLkJqxt.css`. Both chunks return 404 from the test service. Root cause: test service static assets were not rebuilt/synced after the Gravitas route was added; the source-only sync script and Dockerfile do not build them automatically.
 
 - Next: run `pnpm --dir dashboard build && pnpm --dir dashboard sync:webui` on the deployment checkout, then restart/recreate the service using its deployment method. Verify the served index changes, the Gravitas JS chunk returns 200, and `/#/gravitas` renders.
+
+## Previous Session — OneBot v11 Alconna dependency fix (PR #117)
+
+用户要求补齐 Stella 的默认运行依赖并提交 PR。PR [#117](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/117) 已合并至 `main@08dbbb0`，分支 `codex/onebot-alconna-required-dependency`，提交 `65f1b34`，基于 `main@f340917`。PR CI run `39727575917` 全部成功（Python 3.10/3.11/3.12、Windows native、flow、docs、lint、security、CLI、benchmark、notify）；Docker Publish `39727575966` 成功。
+
+- Root cause：OneBot v11 `OneBotV11TargetCodec.encode` 延迟导入 `nonebot_plugin_alconna.uniseg.Target`，但 Alconna 0.62.1 只在可选 platform 依赖中。活跃 Bot 环境使用 `C:\Users\Vegetable\.conda\envs\stella\python.exe`，此前未安装它；已记录的两个失败 trace 都在 `target_codec_rejected` / `not_delivered` 结束。
+- Fix：把 Alconna 固定版本加入 `pyproject.toml` 与 `requirements.txt`；`requirements-platform.in` 保留可选 Uninfo；重新生成平台锁并同步双语 CI 说明。运行环境已安装；`Target` import 和 `litellm` import 都成功。
+- Environment caveat：pip 将 `importlib-metadata` 从 8.9.0 升到 9.0.1，因 Alconna 要求 `>=9`；现有 `litellm 1.96.0` 声明 `<9`。两者的导入探针通过，但环境元数据约束冲突仍存在，后续需确认是否有独立 LiteLLM 环境约束。未重启 Bot（发送 codec 在运行时延迟导入）。
+- Verification：依赖锁解析 95 packages；TOML 有效；docs 检查 119 files / 1,247 links / 577 anchors / 0 errors；本地 pytest 未运行。没有主动向 QQ 发送测试消息，因此真实收发验收仍待一条用户发起的消息。
+- GitNexus 1.6.12：`OutboundService.send` 上游 HIGH（11 / 6 direct / 2 processes / 3 modules）；codec impact UNKNOWN，源码核实动态路径。变更 all / compare main 均 LOW（6 files / 2 symbols / 0 flows），无 partial/truncated；索引的 flow extraction 本身漏掉 2,887 个候选入口。
+- Files：`pyproject.toml`、`requirements.txt`、`requirements-platform.in`、`requirements-platform.lock`、双语 CI 指南及状态文件。下一步在用户发起的真实 QQ 消息后观察回复并由用户决定合并；TEST-REPO-SYNC 的 Linux/Windows 测试端验证因缺少主机访问而 blocked。
 
 ## Current Session — PR #116 CI repair and documentation conflict resolution
 

@@ -818,6 +818,49 @@
       ]
     },
     {
+      "id": "ONEBOT-ALCONNA-DEFAULT",
+      "name": "OneBot v11 默认 Alconna 依赖修复",
+      "description": "让默认安装具备 OneBot v11 outbound target codec 所需的 Alconna 依赖，并提交通过 CI 的 PR。",
+      "status": "blocked",
+      "dependencies": [],
+      "scope": [
+        "pyproject.toml",
+        "requirements.txt",
+        "requirements-platform.in",
+        "requirements-platform.lock",
+        "docs/development/ci.md",
+        "docs/development/ci.en.md",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "Alconna 0.62.1 同步声明在 pyproject.toml 核心依赖与 requirements.txt；platform extra 保留可选 Uninfo，平台锁由 requirements-platform.in 重新生成。",
+        "中英文 CI 安装说明准确描述默认依赖与可选平台依赖。",
+        "活跃 Stella 环境可导入 OneBot codec 所需的 uniseg.Target，并记录本机 Litellm 元数据约束冲突与未执行的真实 QQ 收发验收。",
+        "依赖锁、TOML、文档和 GitNexus 检查通过；PR #117 hosted CI 与 Docker Publish 全绿。",
+        "确认活跃环境的 LiteLLM 元数据约束与 Alconna 共存，并在用户发起的真实 QQ 消息上观察到一条成功回复。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus 1.6.12 impact OneBotV11TargetCodec.encode and OutboundService.send",
+          "result": "OutboundService.send upstream HIGH: 11 impacted, 6 direct callers, 2 processes, 3 modules; 4 unresolved send callers omitted. Codec impact UNKNOWN with 30 unresolved receiver call sites; source refs verified."
+        },
+        {
+          "command": "uv pip compile --universal --python-version 3.10 -o requirements-platform.lock requirements-platform.in; TOML parse; python scripts/check_docs.py; GitNexus detect-changes all and compare main",
+          "result": "95 packages resolved; TOML valid; docs 119 files / 1247 links / 577 anchors / 0 errors. GitNexus all and compare each reported 6 files / 2 symbols / 0 flows / LOW without partial/truncated flags. Local pytest not run."
+        },
+        {
+          "command": "Active Stella Python: install nonebot-plugin-alconna==0.62.1; import Target; import litellm",
+          "result": "Target and litellm imports passed. Pip upgraded importlib-metadata 8.9.0 to 9.0.1 to satisfy Alconna >=9, conflicting with installed litellm 1.96.0 <9; this environment constraint mismatch is documented."
+        },
+        {
+          "command": "GitHub PR #117 hosted workflows for commit 65f1b34766a25e57bf6167af2ba6cb7b058175d0",
+          "result": "CI run 39727575917 and Docker Publish run 39727575966 passed; PR #117 merged into main@08dbbb0."
+        }
+      ]
+    },
+    {
       "id": "WEBUI-STARTUP-BUILD",
       "name": "源码启动自动重建 Dashboard 与发布资源完整性",
       "description": "修复源码 bot.py 启动复用旧 WebUI dist 的问题，并保证 Docker 与 Windows 发布资产携带当前 Dashboard。",

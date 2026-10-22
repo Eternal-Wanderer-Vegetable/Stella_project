@@ -4,14 +4,14 @@
 
 **Last Updated:** 2026-10-22 (Asia/Shanghai)
 **Active Feature:** WEBUI-STARTUP-BUILD: rebuild Dashboard from source startup and include current assets in release images.
-**Inherited Feature:** TEST-REPO-SYNC is blocked pending Linux/Windows test-checkout access. PR #115 is merged at `main@811ab69`; its backend/API status is valid, while the test service was serving an old Dashboard bundle. PR #113 CI repair is complete; XPLAT-IMPL external acceptance gaps remain tracked separately.
+**Inherited Feature:** PR #117 is merged at `main@08dbbb0` with hosted CI and Docker Publish green; real QQ reply verification remains pending. TEST-REPO-SYNC is blocked pending Linux/Windows test-checkout access. Gravitas test-host asset verification remains external.
 **Scope:** On `codex/auto-build-dashboard-on-source-start`, rebuild and sync Dashboard before source `bot.py` serves requests, preserve release-time frontend assets, repair Docker image asset propagation, and update bilingual deployment guidance.
 
-**What's Done:** Source startup now runs the locked dependency install, Dashboard build and `sync:webui` before the new process serves requests; a failed build aborts startup. The pnpm build allowlist is compatible with pnpm 10.26+ and 11. Docker now builds the UI in a Node stage and excludes local dist directories; Windows Release already builds and stages its UI artifact. The isolated pnpm 11.25 install/build/sync passed and produced the Gravitas chunk. Ruff, Python compilation, docs and diff checks are recorded below. The Docker image build could not run because this host has no Docker daemon.
+**What's Done:** Source startup rebuilds and syncs the locked Dashboard before serving and aborts on failure. Windows release assets are already built by Release; Docker now builds Dashboard assets in a Node stage. Isolated pnpm 11.25 install/build/sync passed. Ruff, py_compile, docs and diff checks passed. This machine has no Docker daemon, so the image build remains for hosted CI.
 
-**Files:** Dashboard source build helper and `bot.py` startup, `deploy/process.py`, pnpm build configuration, Dockerfile/ignore/workflow, bilingual deployment guides, and task state documents. Earlier TEST-REPO-SYNC changes remain part of the branch.
+**Files:** `bot.py`, `webui/source_build.py`, `deploy/process.py`, Dashboard pnpm configuration, Dockerfile/ignore/workflow, bilingual Docker deployment guides, `feature_list.json`, `progress.md`, and `session-handoff.md`.
 
-**What's Next:** Run the full Docker image build/smoke in Docker-enabled CI, then verify direct source startup on Linux and Windows. Separately complete TEST-REPO-SYNC acceptance on Linux and Windows test checkouts; this host has no PowerShell parser. No authenticated browser session, clean VM, or release image publish was run.
+**What's Next:** Create the PR against current `main`, then confirm hosted Docker build/smoke. Direct source startup on Linux/Windows and test-host verification remain external; TEST-REPO-SYNC acceptance also remains pending.
 
 ## 2026-10-22 — Source Dashboard startup rebuild and release audit
 
@@ -29,6 +29,15 @@
 - Local-only check: `dashboard/dist` and `webui/dist` each contain 52 files and identical SHA-256 `4cbc7dc5a32971508b8f383159fc2ec45a389cab0308273a71c7731c9b011fde`; both include the Gravitas JS and CSS chunks. This does not establish what the test host serves.
 - Diagnosis confirmed by HTTP inspection of `127.0.0.1:8080`: served `index.html` SHA-256 is `bcc60e4d27803f551c9e16089d06f4e0924ad4ff4091412aade9112f59386b0f`; it loads `assets/index-UXCygCID.js`, which has no `gravitas`, `/gravitas`, `gravitas-status`, or `GravitasStatusPage` marker. The current local entry `assets/index-Dqzv2b0Y.js` contains the route and references `GravitasStatusPage-BM9b9YdZ.js` plus `GravitasStatusPage-DwLkJqxt.css`; both return 404 from the test service. The attached `/api/v1/status` JSON has a valid Gravitas object (`mode=shadow`, `snapshot_valid=true`, assessment `partial`), so backend status data is not the cause of the blank page. Root cause: the test service is serving an older Dashboard dist that predates the Gravitas route.
 - Next: build and sync Dashboard assets on the test deployment, then restart/recreate the service so it serves the new `webui/dist`; verify the served entry references the Gravitas page chunk and that the chunk returns 200. Continue Linux/Windows sync-script acceptance separately.
+
+## 2026-10-22 — Default OneBot v11 Alconna dependency
+
+- Root cause: active Python `C:\Users\Vegetable\.conda\envs\stella\python.exe` lacked `nonebot-plugin-alconna`; `core/transport/adapters/onebot_v11.py` imports `Target` inside `OneBotV11TargetCodec.encode`, and the default `requirements.txt` did not install it. Two earlier outbound traces ended at `target_codec_rejected` / `not_delivered` after generation succeeded.
+- Change: Alconna 0.62.1 is now a core dependency in both manifests. `requirements-platform.in` keeps optional Uninfo only; `requirements-platform.lock` still contains the pinned Alconna package through `requirements.txt`. The Chinese and English CI docs describe the new default.
+- GitNexus 1.6.12 on `Stella_PR117` (`C:\Users\Vegetable\.codex\worktrees\onebot-alconna-runtime\stella_project`, index at `65f1b34`): `OutboundService.send` upstream HIGH, 11 impacted / 6 direct / 2 processes / 3 modules; four receiver-typed callers were omitted. `OneBotV11TargetCodec.encode` returned UNKNOWN / 0 resolved callers with 30 unresolved receiver call sites; source references were checked. Process extraction remains truncated (2,887 entry-point candidates omitted). Before the code commit, detect all and compare main each reported 6 files / 2 symbols / 0 flows / LOW, without partial/truncated flags.
+- Verification: `uv pip compile --universal --python-version 3.10 -o requirements-platform.lock requirements-platform.in` resolved 95 packages; TOML parsed; `python scripts/check_docs.py` passed (119 files / 1,247 links / 577 anchors / 0 errors); `git diff --check` passed. Local pytest was not run. GitHub run `39727575917` passed Python 3.10/3.11/3.12, Windows native, flow, docs, lint, security, CLI, benchmark, and notify; Docker Publish `39727575966` passed.
+- Runtime: installed Alconna 0.62.1 into the active environment; `from nonebot_plugin_alconna.uniseg import Target` and `import litellm` succeeded. Pip reports the pre-existing `litellm 1.96.0` constraint `importlib-metadata<9` conflicts with Alconna's `>=9`; the resolver upgraded it to 9.0.1. This mismatch remains to reconcile; no real QQ send was exercised after install.
+- PR: commit `65f1b34` on `codex/onebot-alconna-required-dependency`; PR #117 merged into `main@08dbbb0`.
 
 ## 2026-10-22 — Cross-platform test checkout sync
 
