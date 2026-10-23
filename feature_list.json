@@ -880,6 +880,8 @@
         ".github/workflows/ci.yml",
         "tests/__init__.py",
         "tests/cometa_helpers.py",
+        "tests/webui/conftest.py",
+        "tests/webui/test_webui_readonly.py",
         "feature_list.json",
         "progress.md",
         "session-handoff.md"
@@ -924,6 +926,10 @@
         {
           "command": "PR #119 CI run 39935046437, Docker Publish 39935046467, Dashboard CI 39935046449; test package import reproduction",
           "result": "Lint, security, documentation, CLI, flow-manifest, flow-closure, memory benchmark, Windows native matrix, Docker Publish, and Dashboard CI passed. Python 3.10/3.11/3.12 test jobs failed only where tests use absolute imports such as tests.astrbot_compat, tests.cometa_helpers, and tests.test_migrations: pytest could not resolve the repository tests directory as a package because tests/__init__.py was absent. Added that package marker; Python 3.10 import resolution now finds the repository package and five previously failing test helper/module paths. Hosted matrix rerun pending."
+        },
+        {
+          "command": "PR #119 CI run 39936164733 and test package follow-up commit ef85ca5",
+          "result": "Adding tests/__init__.py made Python 3.10 and 3.11 test jobs pass. Python 3.12 then exposed one separate isolation failure: test_query_daily_reads_temp_db expected one row but got six because query_daily flushes usage_store's process-global pending rows into the monkeypatched SQLite path. Added a scoped WebUI test fixture to reset usage_store before and after this database-boundary test. In an isolated Python 3.12 environment, the targeted test passed both normally and with a plugin that seeded a pending usage row immediately before fixture setup. Hosted rerun for the fixture is pending. Docker Publish and Dashboard CI passed on commit ef85ca5."
         }
       ]
     },

@@ -36,6 +36,16 @@ def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
+def clean_usage_store():
+    """Prevent usage accounting buffered by another test from leaking into this DB."""
+    from core.llm import usage_store
+
+    usage_store.reset_state()
+    yield
+    usage_store.reset_state()
+
+
+@pytest.fixture
 def client(isolated_home: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """关闭静态托管的纯 API 客户端；每个用例独立 app（限流桶随 app 重建）。"""
     monkeypatch.setattr(settings, "WEBUI_SERVE_DIST", False)
