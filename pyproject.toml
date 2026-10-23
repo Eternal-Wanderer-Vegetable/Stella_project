@@ -30,7 +30,7 @@ dependencies = [
     "nonebot-adapter-rocketchat",
     "nonebot-adapter-kritor",
     "nonebot-adapter-tailchat",
-    "nonebot-adapter-mail",
+    # nonebot-adapter-mail remains blocked until it supports patched aiosmtplib 5.1.2+.
     "nonebot-adapter-heybox; python_version >= '3.11'",
     "nonebot-adapter-wxmp",
     "nonebot-adapter-milky",

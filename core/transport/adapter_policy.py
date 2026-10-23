@@ -5,10 +5,10 @@
 
 import sys
 
-
 BLOCKED_ADAPTERS = {
     "nonebot_adapter_walleq": "walleQ",
     "nonebot.adapters.ntchat": "ntchat",
+    "nonebot.adapters.mail": "mailSecurityCompatibility",
 }
 
 def unavailable_adapter_reasons() -> dict[str, str]:

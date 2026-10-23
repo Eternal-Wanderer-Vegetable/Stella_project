@@ -25,7 +25,7 @@ nonebot-adapter-dodo
 nonebot-adapter-rocketchat
 nonebot-adapter-kritor
 nonebot-adapter-tailchat
-nonebot-adapter-mail
+# nonebot-adapter-mail is blocked: its only release requires vulnerable aiosmtplib 3.x.
 nonebot-adapter-heybox; python_version >= "3.11"
 nonebot-adapter-wxmp
 nonebot-adapter-milky

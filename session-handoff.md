@@ -1,5 +1,14 @@
 # Session Handoff
 
+## Current Session — PR #119 CI repair (in progress)
+
+- Objective: diagnose and repair the failed checks for [PR #119](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/119), branch `codex/frontend-ui-polish`; initial head `b61b4a17047335858eed3957b757a79bd08333bd`.
+- Hosted failure evidence: run `39932294138` failed `lint` (Ruff I001 at `core/transport/adapter_policy.py:6`) and `security` (`pip-audit` found cryptography 48.0.1 and aiosmtplib 3.0.2 advisories); Docker Publish run `39932294215` failed `pnpm build` with TS2307 because `PlatformsPage.vue` imports `webui/services/nonebot_adapter_catalog.json`, which the Dashboard build stage did not copy.
+- Fixes in the worktree: removed the extra Ruff blank line; copied the catalog into `/webui/services/` before Docker Dashboard build; blocked Mail in catalog/runtime/UI and removed it from `requirements.txt`, `pyproject.toml`, and the regenerated platform lock because its only release requires `aiosmtplib~=3.0` while the security fix requires 5.1.2+. QQ upstream still caps cryptography `<49`; the workflow ignores only `PYSEC-2026-3552`, `3553`, and `3554`, with that exception and removal condition documented in both CI guides.
+- Reproduction/validation so far: exact merge worktree `95e1e8fe3e7fcf9150508eca904bb3068ef151f0`; Ruff 0.17.2 `ruff check .` passed; clean temporary dashboard stage failed before the catalog copy with the same TS2307 and passed `pnpm build` after the copy; `uv pip compile --universal --python-version 3.10 -o requirements-platform.lock requirements-platform.in` resolved 167 packages; exact `pip-audit` command exited 0 with no known vulnerabilities and 6 findings ignored by the three specified PYSEC IDs; docs check (121 files / 1262 links / 577 anchors / 0 errors), JSON parse, and `git diff --check` passed. Local Docker daemon is unavailable.
+- GitNexus: index `Stella_project` (`E:\\stella\\stella_project`) at `b61b4a1`; `unavailable_adapter_reasons` upstream impact HIGH (3 direct callers, 2 platform processes); `BLOCKED_ADAPTERS` UNKNOWN/0 supplemented by source references. `detect-changes --scope all`: 18 files / 18 symbols / 0 processes / LOW. `--scope compare --base-ref main`: 37 files / 369 symbols / 20 processes / CRITICAL from the cumulative branch; neither result had partial/truncated flags.
+- Pending: inspect final diff, commit and push to PR #119, then wait for the latest hosted lint/security/test/Docker checks. Do not mark the CI repair complete until the pushed head's checks finish. No test suite has been run; no Bot or platform was started.
+
 ## Current Session — Settings page, advanced configuration and doctor results
 
 用户要求提交上一批工作后，移除设置页内与顶栏重复的外观设置，并把“配置”界面融合为设置页中的“高级设置”。前一批改动已提交到当前分支 `codex/frontend-ui-polish`，提交 `a799ac8`；本轮设置页整合、自检结果保留和高级设置常驻显示已提交到同一分支。

@@ -6,7 +6,7 @@ Stella 使用 NoneBot 适配器连接聊天平台。NoneBot 将适配器包安�
 
 ## 目录与安装
 
-平台页内置的目录快照基于 [NoneBot 官方适配器目录](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5)，共有 32 条记录。OneBot V11 与 V12 共用 `nonebot-adapter-onebot`；Stella 随常规安装包预装 30 条可选记录对应的 29 个发行包。Walle-Q 和 NTChat 不提供选择，详情见下表。
+平台页内置的目录快照基于 [NoneBot 官方适配器目录](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5)，共有 32 条记录。OneBot V11 与 V12 共用 `nonebot-adapter-onebot`；Stella 随常规安装包预装 29 条可选记录对应的 28 个发行包。Walle-Q、NTChat 和 Mail 不提供选择，详情见下表。
 
 这些依赖由 `requirements.txt` 与 `pyproject.toml` 声明，因此进入 Docker、在线/离线 Windows 安装器和源码安装。适配器的凭据、平台权限和回调地址仍由各项目文档定义；NoneBot 的 `DRIVER` 是全局设置，可从任一已选适配器的「运行时配置」窗口编辑，并对所有已选适配器生效。安装包不会替你创建平台账号或自动启用适配器。自定义适配器可在对应卡片的「运行时配置」中填写其文档要求的变量。
 
@@ -18,12 +18,13 @@ Stella 使用 NoneBot 适配器连接聊天平台。NoneBot 将适配器包安�
 | --- | --- | --- |
 | Walle-Q | `nonebot_adapter_walleq` | 上游 0.2.0 发布于 2023-04-10，并要求 `nonebot-adapter-onebot~=2.2.2`；Stella 核心要求 `nonebot-adapter-onebot>=2.4.6`，约束无法同时满足。参见 [PyPI 元数据](https://pypi.org/pypi/nonebot-adapter-walleq/0.2.0/json)。 |
 | NTChat | `nonebot.adapters.ntchat` | 上游 0.3.5 发布于 2023-02-03，并固定 `httpx==0.23.0`；Stella 核心要求 `httpx>=0.24.0`。参见 [PyPI 元数据](https://pypi.org/pypi/nonebot-adapter-ntchat/0.3.5/json)。 |
+| Mail | `nonebot.adapters.mail` | 唯一发布版 1.0.0a7 于 2025-01-04 上传，要求 `aiosmtplib~=3.0`；该范围仍含安全公告影响版本，修复版从 5.1.2 起，无法同时满足。参见 [PyPI 元数据](https://pypi.org/pypi/nonebot-adapter-mail/1.0.0a7/json) 与 [安全公告](https://osv.dev/vulnerability/PYSEC-2026-3805)。 |
 
-这两个模块不随 Stella 安装包安装；运行时注册器也会跳过它们并记录日志。若升级前的 `.env` 仍列出其中之一，「平台」页会保留可见的旧配置并提示移除；删除对应卡片后保存即可清理。手工环境变量中的同名模块同样不会被注册。
+这三个模块不随 Stella 安装包安装；运行时注册器也会跳过它们并记录日志。若升级前的 `.env` 仍列出其中之一，「平台」页会保留可见的旧配置并提示移除；删除对应卡片后保存即可清理。手工环境变量中的同名模块同样不会被注册。
 
 ## 接入步骤
 
-1. 在「平台 → 添加适配器」中搜索并选择一个或多个可用平台。
+1. 在「平台 → 添加适配器」中搜索并选择一个或多个可用平台。存在未修复的上游安全依赖时，目录项会被隐藏并由运行时策略拒绝。
 2. 点击已选卡片的「运行时配置」，在悬浮窗口填写按适配器项目文档预设的字段。支持多账号的适配器可在表单中添加多条 Bot 配置；扩展字段收在「高级环境变量」中。旧版未关联环境变量会保留在未分配分组中，可再指定所属卡片。
 3. 按该适配器项目的安装/连接说明配置账号、凭据和平台侧权限。安装包内已有受支持目录依赖；Python 3.10 使用黑盒语音时需升级到 Python 3.11+。
 4. 关闭窗口返回页面草稿，使用页面底部保存按钮统一写入本机 `.env`，再重启 Stella。启动日志会列出已注册适配器；缺包、模块导入或 Driver 注册错误会给出对应模块路径。

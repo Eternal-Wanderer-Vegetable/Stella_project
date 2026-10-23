@@ -223,6 +223,7 @@
       "description": "邮件收发协议",
       "homepage": "https://github.com/mobyw/nonebot-adapter-mail",
       "official": false,
+      "unavailable_reason": "mailSecurityCompatibility",
       "tags": []
     },
     {

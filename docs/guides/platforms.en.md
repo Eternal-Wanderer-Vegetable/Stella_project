@@ -6,7 +6,7 @@ Stella uses NoneBot adapters to connect to chat platforms. NoneBot separates ins
 
 ## Catalog and installation
 
-The catalog snapshot in the Platforms page follows the [official NoneBot adapter directory](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5) and contains 32 entries. OneBot V11 and V12 share `nonebot-adapter-onebot`. Stella bundles 29 distributions for the 30 selectable entries in its standard installers. Walle-Q and NTChat are unavailable; see the table below.
+The catalog snapshot in the Platforms page follows the [official NoneBot adapter directory](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5) and contains 32 entries. OneBot V11 and V12 share `nonebot-adapter-onebot`. Stella bundles 28 distributions for the 29 selectable entries in its standard installers. Walle-Q, NTChat, and Mail are unavailable; see the table below.
 
 These dependencies are declared in `requirements.txt` and `pyproject.toml`, so they are included in Docker, online/offline Windows installers, and source installations. Adapter credentials, platform permissions, and callback URLs remain adapter-specific. NoneBot's `DRIVER` is global; edit it from any selected adapter's **Runtime settings** dialog and it applies to all selected adapters. The installer does not create platform accounts or enable adapters automatically. Use **Runtime settings** on a custom adapter card to enter variables documented by its project.
 
@@ -18,8 +18,9 @@ The Heybox adapter requires Python 3.11 or newer. The project still supports Pyt
 | --- | --- | --- |
 | Walle-Q | `nonebot_adapter_walleq` | Upstream 0.2.0 was released on 2023-04-10 and requires `nonebot-adapter-onebot~=2.2.2`; Stella core requires `nonebot-adapter-onebot>=2.4.6`, so the constraints cannot be resolved together. See [PyPI metadata](https://pypi.org/pypi/nonebot-adapter-walleq/0.2.0/json). |
 | NTChat | `nonebot.adapters.ntchat` | Upstream 0.3.5 was released on 2023-02-03 and pins `httpx==0.23.0`; Stella core requires `httpx>=0.24.0`. See [PyPI metadata](https://pypi.org/pypi/nonebot-adapter-ntchat/0.3.5/json). |
+| Mail | `nonebot.adapters.mail` | Its only release, 1.0.0a7, was uploaded on 2025-01-04 and requires `aiosmtplib~=3.0`; the affected range is fixed starting in 5.1.2. See [PyPI metadata](https://pypi.org/pypi/nonebot-adapter-mail/1.0.0a7/json) and the [security advisory](https://osv.dev/vulnerability/PYSEC-2026-3805). |
 
-Neither package is installed by Stella's installers. The runtime registrar skips either module and logs a warning. If an older `.env` still lists one, the Platforms page keeps it visible and asks you to remove the card; remove it and save to clean up the configuration. The same module paths are skipped when supplied through process environment variables.
+These packages are not installed by Stella's installers. The runtime registrar skips these modules and logs a warning. If an older `.env` still lists one, the Platforms page keeps it visible and asks you to remove the card; remove it and save to clean up the configuration. The same module paths are skipped when supplied through process environment variables.
 
 ## Connect a platform
 

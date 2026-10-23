@@ -137,6 +137,7 @@
   "unavailableReasons": {
     "walleQ": "上游长期未更新，且要求旧版 OneBot 适配器，与 Stella 核心依赖冲突。",
     "ntchat": "上游长期未更新，且固定旧版 httpx，与 Stella / NoneBot 当前依赖栈冲突。",
+    "mailSecurityCompatibility": "上游版本仍限制在存在安全公告的 aiosmtplib 3.x，尚无兼容的修复版本。",
     "requiresPython311": "此适配器要求 Python 3.11 或更高版本；当前安装器 Python 版本不满足。"
   },
       "noAdaptersFound": "没有匹配的平台，请修改搜索词或在上方添加自定义适配器。",

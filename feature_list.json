@@ -884,6 +884,7 @@
         "源码仓库或无 release marker 的源码归档直接运行 bot.py 时先构建并同步 Dashboard；失败时中止新进程，不提供旧 bundle。",
         "Windows 的 pnpm.cmd 与 POSIX 启动路径均有实现；后台启动等待覆盖冷依赖安装和前端构建。",
         "Windows Release 继续使用 Release 工作流构建的 Dashboard 产物，Docker 镜像在构建阶段生成 Dashboard 且忽略宿主机 dist。",
+        "Docker Dashboard build stage 复制 Dashboard 对仓库根目录共享源码的显式依赖后再运行构建。",
         "Docker PR 工作流会在 Dashboard/WebUI 变更时运行，并检查镜像中存在前端入口。",
         "Python lint/编译、Dashboard typecheck/build/sync、双语文档门禁完成；Docker daemon 不可用时保留镜像构建验收缺口。"
       ],
@@ -902,11 +903,19 @@
         },
         {
           "command": "Docker target build and final image smoke",
-          "result": "Not run: Docker CLI is present, but /var/run/docker.sock is unavailable. Docker PR workflow now covers dashboard/** and webui/** changes and checks that /app/webui/dist/index.html is bundled."
+          "result": "The original local Docker target build was unavailable because the Docker daemon was not reachable. PR #119 hosted Docker build then exposed TS2307 for the dashboard's root-level NoneBot catalog import. A clean temporary staging directory reproduced that error before placing the catalog beside /dashboard and passed the Dashboard production build afterward; hosted Docker rerun is pending."
         },
         {
           "command": "GitHub PR #118 status on head fc202b9",
           "result": "PR https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/118 is open against main@08dbbb0 and mergeable. Hosted CI, Dashboard CI, and Docker Publish checks are pending on the latest PR head."
+        },
+        {
+          "command": "PR #119 initial hosted checks 39932294138 and 39932294215; isolated Docker dashboard-stage reproduction",
+          "result": "Ruff failed I001 at adapter_policy.py:6; pip-audit failed on cryptography 48.0.1 and aiosmtplib 3.0.2; Docker pnpm build failed TS2307 because the root-level adapter catalog was absent from the dashboard build stage. Fixed the import formatting and Docker COPY. Mail is blocked and removed from the base dependency set because its only release cannot use the patched aiosmtplib 5.1.2; the three cryptography advisories blocked by QQ's <49 upstream cap are narrowly ignored and documented. A fresh temporary dashboard build reproduced TS2307 before copying the catalog and passed pnpm build afterward."
+        },
+        {
+          "command": "ruff check .; pip-audit -r requirements.txt with three scoped ignores; lock compile; docs and GitNexus gates",
+          "result": "Ruff passed. pip-audit exited 0 with no known vulnerabilities and 6 findings ignored by the three exact PYSEC IDs. uv pip compile resolved 167 packages; documentation passed (121 files / 1262 links / 577 anchors / 0 errors); JSON and git diff --check passed. GitNexus index bound to Stella_project at E:\\stella\\stella_project, commit b61b4a1: pre-edit unavailable_adapter_reasons impact HIGH (3 direct callers, 2 platform processes); BLOCKED_ADAPTERS had UNKNOWN/0 graph callers and was source-checked. detect all: 18 files / 18 symbols / 0 processes / LOW; compare main: 37 files / 369 symbols / 20 processes / CRITICAL cumulative branch scope. No partial/truncated flags. Hosted rerun is pending."
         }
       ]
     },
@@ -1000,6 +1009,7 @@
         "docs/guides/webui.en.md",
         "docs/development/ci.md",
         "docs/development/ci.en.md",
+        ".github/workflows/ci.yml",
         "docs/guides/README.md",
         "docs/guides/README.en.md",
         "feature_list.json",
@@ -1008,10 +1018,10 @@
       ],
       "done_criteria": [
         "平台主视图只呈现已选择的适配器；添加对话框支持搜索、多选和移除，配置表单与目录选择联动。",
-        "32 条目录记录中有 30 条可选择，对应 29 个唯一发行包；OneBot V11/V12 共用一个包。Walle-Q 与 NTChat 不进入依赖，Python 3.10 下 Heybox 由 marker 跳过。",
-        "Walle-Q 与 NTChat 在选择器、服务端保存边界和运行时注册器均被屏蔽；历史配置可见并能移除，不会被静默清除。",
+        "32 条目录记录中有 29 条可选择，对应 28 个唯一发行包；OneBot V11/V12 共用一个包。Walle-Q、NTChat 与 Mail 不进入依赖，Python 3.10 下 Heybox 由 marker 跳过。",
+        "Walle-Q、NTChat 与 Mail 在选择器、服务端保存边界和运行时注册器均被屏蔽；历史配置可见并能移除，不会被静默清除。",
         "其余目录发行包进入 requirements.txt 与 pyproject 默认依赖；Windows 在线/离线安装器、源码运行时和 Docker 均消费同一 requirements.txt，锁文件成功解析。",
-        "新建双语平台适配器指南说明安装/注册区别、Python 条件、两个屏蔽原因和验收边界。",
+        "新建双语平台适配器指南说明安装/注册区别、Python 条件、三个屏蔽原因和验收边界。",
         "Dashboard 构建、配置语法/元数据解析、文档和 GitNexus 变更门禁有可复核结果；未运行测试或真实平台连接。"
       ],
       "evidence": [
@@ -1021,7 +1031,7 @@
         },
         {
           "command": "PyPI metadata and wheel source inspection for Walle-Q 0.2.0, NTChat 0.3.5, Heybox 0.1.1; OneBot V12 API symbol comparison for 2.2.2 and 2.4.6",
-          "result": "The user decided to block Walle-Q and NTChat because both are unmaintained. Their upstream metadata conflicts with Stella core (Walle-Q requires nonebot-adapter-onebot~=2.2.2 vs >=2.4.6; NTChat pins httpx==0.23.0 vs >=0.24.0). Both are disabled in the picker, rejected when newly enabled through the API, and skipped by the runtime loader; old selections remain visible/removable. Heybox requires Python >=3.11 and is conditionally omitted on 3.10."
+          "result": "The user decided to block Walle-Q and NTChat because both are unmaintained. Their upstream metadata conflicts with Stella core (Walle-Q requires nonebot-adapter-onebot~=2.2.2 vs >=2.4.6; NTChat pins httpx==0.23.0 vs >=0.24.0). Both are disabled in the picker, rejected when newly enabled through the API, and skipped by the runtime loader; old selections remain visible/removable. Heybox requires Python >=3.11 and is conditionally omitted on 3.10. A later CI security repair also blocked Mail: its only release requires aiosmtplib~=3.0, which cannot take the security fix in 5.1.2; the UI, API/runtime policy, and base dependency manifests now agree."
         },
         {
           "command": "uv pip compile --universal --python-version 3.10 -o requirements-platform.lock requirements-platform.in; isolated Python 3.10 and 3.12 uv pip install --dry-run -r requirements-platform.lock",
@@ -1034,6 +1044,10 @@
         {
           "command": "NoneBot official docs + PyPI JSON for Walle-Q 0.2.0, NTChat 0.3.5, Matrix/python3-olm 0.4.1/3.2.20",
           "result": "NoneBot distinguishes package installation from runtime registration. Walle-Q 0.2.0 and NTChat 0.3.5 PyPI metadata show the incompatible constraints and last-upload dates 2023-04-10 and 2023-02-03; the user chose to block them as unmaintained. Current python3-olm 3.2.20 publishes CPython 3.12 Windows wheels, so Matrix remains available."
+        },
+        {
+          "command": "PR #119 pip-audit failure triage; PyPI metadata for nonebot-adapter-mail and aiosmtplib advisory PYSEC-2026-3805",
+          "result": "nonebot-adapter-mail 1.0.0a7 is its only published release (2025-01-04) and requires aiosmtplib~=3.0; the security fix requires aiosmtplib>=5.1.2. Mail is therefore added to unavailable_adapter_reasons, hidden from the picker, rejected at save/runtime, removed from requirements.txt/pyproject.toml, and its transitive packages removed from requirements-platform.lock. QQ's maintained adapter still caps cryptography<49; the CI audit exception is limited to PYSEC-2026-3552/3553/3554 with removal criteria in bilingual CI docs."
         }
       ]
     },
@@ -1058,7 +1072,7 @@
         "session-handoff.md"
       ],
       "done_criteria": [
-        "30 条可选目录模块全部有适配器表单 schema，包含项目文档所示的常用字段、多账号结构和配置类型。",
+        "29 条当前可选目录模块全部有适配器表单 schema，包含项目文档所示的常用字段、多账号结构和配置类型；Mail schema 保留给升级遗留配置查看。",
         "Villa Bot 的公钥与连接配置按项目真实 JSON 结构归入每项 Bot；Matrix 使用正确的登录/OAuth 字段并覆盖同步、邀请、E2EE 与连接选项；WxClaw 包含账号和已文档化全局默认项。",
         "读取适配器 JSON 时递归脱敏嵌套凭据；按稳定账号标识恢复空白凭据，删除条目仍可移除；非密钥时间戳和 token 状态路径保持可编辑。",
         "中英文使用指南链接到研究记录并说明表单字段依据、配置局限和安全保存行为。",

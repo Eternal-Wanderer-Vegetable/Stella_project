@@ -25,9 +25,9 @@ The **Platforms** page (`/#/platforms`) edits the Bot adapter module list and sh
 both the configured modules and the effective runtime list, including whether a
 process environment override is active. Saving writes `STELLA_HOME/.env` and
 requires a bot restart. Standard installers bundle the available catalog adapter
-dependencies but do not enable platforms automatically. Walle-Q and NTChat are
-blocked because their upstreams are inactive and their dependencies conflict with
-Stella core. OneBot V11 still supports multiple forward WebSocket URLs. Reads reveal
+dependencies but do not enable platforms automatically. Walle-Q, NTChat, and Mail
+are blocked because of inactive upstreams, dependency conflicts, or an unresolved
+security dependency. OneBot V11 still supports multiple forward WebSocket URLs. Reads reveal
 only whether an access token is set, never its value. Health for adapters without a
 supported probe is shown as unknown. See the [platform adapter guide](platforms.en.md)
 for the catalog, setup steps, and block reasons.
