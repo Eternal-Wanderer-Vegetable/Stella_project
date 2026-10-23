@@ -877,6 +877,10 @@
         ".github/workflows/docker-publish.yml",
         "docs/guides/deployment-docker.md",
         "docs/guides/deployment-docker.en.md",
+        ".github/workflows/ci.yml",
+        "tests/__init__.py",
+        "tests/cometa_helpers.py",
+        "feature_list.json",
         "progress.md",
         "session-handoff.md"
       ],
@@ -916,6 +920,10 @@
         {
           "command": "ruff check .; pip-audit -r requirements.txt with three scoped ignores; lock compile; docs and GitNexus gates",
           "result": "Ruff passed. pip-audit exited 0 with no known vulnerabilities and 6 findings ignored by the three exact PYSEC IDs. uv pip compile resolved 167 packages; documentation passed (121 files / 1262 links / 577 anchors / 0 errors); JSON and git diff --check passed. GitNexus index bound to Stella_project at E:\\stella\\stella_project, commit b61b4a1: pre-edit unavailable_adapter_reasons impact HIGH (3 direct callers, 2 platform processes); BLOCKED_ADAPTERS had UNKNOWN/0 graph callers and was source-checked. detect all: 18 files / 18 symbols / 0 processes / LOW; compare main: 37 files / 369 symbols / 20 processes / CRITICAL cumulative branch scope. No partial/truncated flags. Hosted rerun is pending."
+        },
+        {
+          "command": "PR #119 CI run 39935046437, Docker Publish 39935046467, Dashboard CI 39935046449; test package import reproduction",
+          "result": "Lint, security, documentation, CLI, flow-manifest, flow-closure, memory benchmark, Windows native matrix, Docker Publish, and Dashboard CI passed. Python 3.10/3.11/3.12 test jobs failed only where tests use absolute imports such as tests.astrbot_compat, tests.cometa_helpers, and tests.test_migrations: pytest could not resolve the repository tests directory as a package because tests/__init__.py was absent. Added that package marker; Python 3.10 import resolution now finds the repository package and five previously failing test helper/module paths. Hosted matrix rerun pending."
         }
       ]
     },
