@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 
 from deploy import __main__ as deploy_main
+from deploy import control_client
 
 
 def test_fmt_secs_none():
@@ -25,128 +26,72 @@ def test_fmt_secs_units():
     assert deploy_main._fmt_secs(7200) == "2.0 小时"
 
 
-def _fake_status(link: dict | None = None, **overrides) -> dict:
+def _fake_status(**overrides) -> dict:
     data = {
+        "ok": True,
+        "controller_reachable": True,
+        "controller_failed": False,
         "pid": 18432,
-        "alive": True,
-        "pid_file_present": True,
-        "api_reachable": True,
-        "log_file": "logs/stella.jsonl",
-        "recent_log": None,
-        "link": link,
-        "scheduler": {},
-        "usage": None,
-        # capability_view.collect() 读的就是这个键：不在的话它会退到磁盘声明分支，
-        # 于是「测 live 渲染」的用例悄悄变成「测 offline 渲染」
-        "capabilities": None,
-        "uptime_seconds": 4127.5,
-        "note": "test",
+        "public_base_url": "http://127.0.0.1:8080",
+        "webui_enabled": True,
+        "core": {"phase": "ready", "error": None},
+        "error": None,
     }
     data.update(overrides)
     return data
 
 
 def _run_status(monkeypatch, capsys, fake: dict):
-    monkeypatch.setattr(deploy_main.process, "status", lambda: fake)
+    monkeypatch.setattr(control_client, "status", lambda: fake)
     rc = deploy_main._cmd_status(argparse.Namespace(json=False))
     out = capsys.readouterr().out
     return rc, out
 
 
-def test_cmd_status_link_disconnected_no_crash(monkeypatch, capsys):
-    """未连接时所有可空字段为 None，打印不崩且给出可操作提示。"""
+def test_cmd_status_reports_live_corona_and_nucleus(monkeypatch, capsys):
+    """Status reports the authenticated Corona owner and its separate core phase."""
+    fake = _fake_status()
+    rc, out = _run_status(monkeypatch, capsys, fake)
+    assert rc == 0
+    assert "Corona 管理面在线（Corona PID 18432）" in out
+    assert "Nucleus 阶段：ready" in out
+    assert "http://127.0.0.1:8080" in out
+
+
+def test_cmd_status_reports_unreachable_owner_failure(monkeypatch, capsys):
     fake = _fake_status(
-        link={
-            "enabled": True,
-            "connected": False,
-            "bot_self_id": None,
-            "connected_seconds": None,
-            "last_event_seconds_ago": None,
-            "last_probe_ok": None,
-            "last_probe_seconds_ago": None,
-            "timeout": 300,
-            "healthy": False,
-        }
+        ok=False,
+        controller_reachable=False,
+        controller_failed=True,
+        error={"message": "controller_unreachable"},
+    )
+    rc, out = _run_status(monkeypatch, capsys, fake)
+    assert rc == 1
+    assert "Corona 控制器状态不可用" in out
+    assert "controller_unreachable" in out
+
+
+def test_cmd_status_reports_stopped_owner_as_success(monkeypatch, capsys):
+    fake = _fake_status(
+        controller_reachable=False,
+        controller_failed=False,
+        pid=None,
+        public_base_url=None,
+        core=None,
     )
     rc, out = _run_status(monkeypatch, capsys, fake)
     assert rc == 0
-    assert "协议端未连接" in out
-    assert "检查 NapCat 是否运行并已登录" in out
-    assert "链路：健康" not in out
-
-
-def test_cmd_status_link_connected(monkeypatch, capsys):
-    fake = _fake_status(
-        link={
-            "enabled": True,
-            "connected": True,
-            "bot_self_id": "3213194821",
-            "connected_seconds": 4127.5,
-            "last_event_seconds_ago": 12.3,
-            "last_probe_ok": None,
-            "last_probe_seconds_ago": None,
-            "timeout": 300,
-            "healthy": True,
-        }
-    )
-    rc, out = _run_status(monkeypatch, capsys, fake)
-    assert rc == 0
-    assert "链路：健康" in out
-    assert "QQ 3213194821" in out
-    assert "已连接 1.1 小时" in out
-    assert "12 秒前" in out
-
-
-def test_cmd_status_link_disabled(monkeypatch, capsys):
-    fake = _fake_status(
-        link={
-            "enabled": False,
-            "connected": False,
-            "bot_self_id": None,
-            "connected_seconds": None,
-            "last_event_seconds_ago": None,
-            "last_probe_ok": None,
-            "last_probe_seconds_ago": None,
-            "timeout": 300,
-            "healthy": False,
-        }
-    )
-    rc, out = _run_status(monkeypatch, capsys, fake)
-    assert rc == 0
-    assert "链路监测已关闭" in out
-
-
-def test_cmd_status_renders_cached_gravitas_diagnostics(monkeypatch, capsys):
-    rc, out = _run_status(
-        monkeypatch,
-        capsys,
-        _fake_status(
-            gravitas={
-                "mode": "shadow",
-                "configured_mode": "enforce",
-                "snapshot_valid": False,
-                "snapshot_age_seconds": 4.0,
-                "assessment": {
-                    "facts": [{"dimension": "pressure"}],
-                    "unassessed": [{"dimensions": ["integrity"]}],
-                    "applied_ack": {"state": "not_received"},
-                },
-            }
-        ),
-    )
-    assert rc == 0
-    assert "Gravitas：shadow（配置 enforce，策略快照 过期或缺失，年龄 4 秒）" in out
-    assert "评估：1 条事实，1 项未评估；应用回执 not_received" in out
+    assert "Corona 与 Nucleus 均未运行" in out
 
 
 def test_cmd_status_json_branch(monkeypatch, capsys):
-    fake = _fake_status(link=None)
-    monkeypatch.setattr(deploy_main.process, "status", lambda: fake)
+    fake = _fake_status()
+    monkeypatch.setattr(control_client, "status", lambda: fake)
     rc = deploy_main._cmd_status(argparse.Namespace(json=True))
     out = capsys.readouterr().out
     assert rc == 0
-    assert '"alive": true' in out
-    assert '"link": null' in out
+    assert '"controller_reachable": true' in out
+    assert '"phase": "ready"' in out
 
 
 def test_migrate_subcommand_is_registered(capsys):
@@ -172,7 +117,7 @@ def test_migrate_subcommand_is_registered(capsys):
 
 def test_paths_env_file_prints_single_path(capsys):
     """start.bat 靠 `paths --env-file` 判断配置过没有：必须只输出一行路径。"""
-    rc = deploy_main._cmd_paths(argparse.Namespace(json=False, env_file=True))
+    rc = deploy_main.main(["paths", "--env-file"])
     out = capsys.readouterr().out.strip().splitlines()
     assert rc == 0
     assert len(out) == 1
@@ -183,7 +128,7 @@ def test_paths_json_exposes_both_roots(capsys):
     """GUI 靠这份 JSON 找用户数据目录，两个根目录都必须在。"""
     import json
 
-    rc = deploy_main._cmd_paths(argparse.Namespace(json=True, env_file=False))
+    rc = deploy_main.main(["paths", "--json"])
     data = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert data["project_root"] and data["stella_home"]
@@ -251,8 +196,11 @@ def _fake_capabilities() -> dict:
 
 def test_cmd_capabilities_renders_the_live_snapshot(monkeypatch, capsys):
     """接口给了 capabilities 就用它，可路由与不可路由分两张表。"""
-    fake = _fake_status(capabilities=_fake_capabilities())
-    monkeypatch.setattr(deploy_main.process, "status", lambda: fake)
+    from deploy import capability_view
+    from deploy.capability_view import CapabilityView
+
+    view = CapabilityView(live=_fake_capabilities(), offline=None, api_reachable=True)
+    monkeypatch.setattr(capability_view, "collect", lambda: view)
     rc = deploy_main._cmd_capabilities(argparse.Namespace(json=False))
     out = capsys.readouterr().out
     assert rc == 0
@@ -268,10 +216,12 @@ def test_cmd_capabilities_json_branch(monkeypatch, capsys):
     """GUI 读的是这一份：source 明说数据来自哪边，capabilities 原样透传。"""
     import json
 
+    from deploy import capability_view
+    from deploy.capability_view import CapabilityView
+
     caps = _fake_capabilities()
-    monkeypatch.setattr(
-        deploy_main.process, "status", lambda: _fake_status(capabilities=caps)
-    )
+    view = CapabilityView(live=caps, offline=None, api_reachable=True)
+    monkeypatch.setattr(capability_view, "collect", lambda: view)
     rc = deploy_main._cmd_capabilities(argparse.Namespace(json=True))
     data = json.loads(capsys.readouterr().out)
     assert rc == 0
@@ -287,11 +237,11 @@ def test_cmd_capabilities_offline_still_exits_zero(monkeypatch, capsys):
     退出码非零会让 CI 与 GUI 把「新装的实例还没启动」当故障处理；这条查询命令的
     退出码恒为 0（见 _cmd_capabilities 的 docstring）。
     """
-    monkeypatch.setattr(
-        deploy_main.process,
-        "status",
-        lambda: _fake_status(alive=False, api_reachable=False, capabilities=None),
-    )
+    from deploy import capability_view
+    from deploy.capability_view import CapabilityView
+
+    view = CapabilityView(live=None, offline={"files": [], "drafts": []}, api_reachable=False)
+    monkeypatch.setattr(capability_view, "collect", lambda: view)
     rc = deploy_main._cmd_capabilities(argparse.Namespace(json=False))
     out = capsys.readouterr().out
     assert rc == 0

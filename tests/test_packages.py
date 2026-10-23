@@ -247,6 +247,9 @@ def test_profile_catalog_includes_only_declared_default_embedding(tmp_path):
 
 
 def test_profile_catalog_is_available_from_cli(monkeypatch, tmp_path, capsys):
+    import config
+
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(packages, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(deploy_main, "PROJECT_ROOT", tmp_path)
     (tmp_path / "start.bat").write_text("start", encoding="utf-8")

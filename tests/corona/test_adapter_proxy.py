@@ -4,9 +4,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
+import platform
 import socket
 import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -16,9 +22,17 @@ from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from corona.adapter_proxy import AdapterProxyMiddleware
+from corona.app import create_corona_app
 from corona.bootstrap import prepare_corona_bootstrap
 from corona.supervisor import CoreSupervisor
 from stella_bootstrap.config import build_config_revision, write_revision
+from stella_contracts.control import valid_request_id
+from webui.security import reset_auth_runtime
+
+try:
+    import resource
+except ImportError:  # pragma: no cover - Windows CI does not expose resource
+    resource = None
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -92,6 +106,7 @@ routes = create_route_catalog(identity, [
     AdapterRoute("OneBot V11", "/onebot/v11/http", "http", ("POST",), "OneBot V11 Root HTTP"),
     AdapterRoute("OneBot V11", "/onebot/v11/http/", "http", ("POST",), "OneBot V11 HTTP Slash"),
     AdapterRoute("OneBot V11", "/onebot/v11/events", "http", ("GET",), "OneBot V11 Events"),
+    AdapterRoute("OneBot V11", "/onebot/v11/long-events", "http", ("GET",), "OneBot V11 Long Events"),
     AdapterRoute("OneBot V11", "/onebot/v11/download", "http", ("GET",), "OneBot V11 Download"),
     AdapterRoute("OneBot V11", "/onebot/v11/", "websocket", (), "OneBot V11 Root WS"),
     AdapterRoute("OneBot V11", "/onebot/v11/ws", "websocket", (), "OneBot V11 Root WebSocket"),
@@ -111,6 +126,7 @@ async def onebot_http(request: Request):
     response.headers["x-seen-raw-path"] = request.scope["raw_path"].decode("ascii")
     response.headers["x-seen-raw-query"] = request.scope["query_string"].decode("ascii")
     response.headers["x-stella-spoof-seen"] = request.headers.get("x-stella-generation-id", "")
+    response.headers["x-stella-request-id-seen"] = request.state.stella_request_id
     response.headers["x-adapter-actor"] = request.state.stella_actor["actor_id"]
     response.raw_headers.extend([
         (b"set-cookie", b"platform-a=1; Path=/"),
@@ -124,6 +140,14 @@ async def onebot_events():
         yield b"data: first\n\n"
         await asyncio.sleep(0)
         yield b"data: second\n\n"
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+@api.get("/onebot/v11/long-events")
+async def onebot_long_events():
+    async def stream():
+        for index in range(5):
+            yield f"data: {index}\n\n".encode()
+            await asyncio.sleep(0.02)
     return StreamingResponse(stream(), media_type="text/event-stream")
 
 @api.get("/onebot/v11/download")
@@ -191,6 +215,187 @@ def _proxy_app(supervisor: CoreSupervisor) -> FastAPI:
         return HTMLResponse("spa")
 
     return app
+
+
+def _percentile(samples: list[float], percentile: float) -> float:
+    ordered = sorted(samples)
+    index = max(0, min(len(ordered) - 1, int((len(ordered) - 1) * percentile + 0.5)))
+    return ordered[index]
+
+
+def _process_rss_kib(pid: int | None) -> int | None:
+    if pid is None:
+        return None
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text(encoding="utf-8").splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1])
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="CN10 proxy measurements and peak RSS use Linux /proc"
+)
+@pytest.mark.asyncio
+async def test_proxy_metrics_and_control_health_during_core_restarts(
+    tmp_path: Path,
+) -> None:
+    bootstrap = _bootstrap(tmp_path)
+    supervisor = CoreSupervisor(
+        bootstrap,
+        readiness_timeout=5,
+        poll_interval=0.02,
+        max_attempts=1,
+        command_factory=lambda _bootstrap: [sys.executable, "-c", _FAKE_PLATFORM_CORE],
+    )
+    app = create_corona_app(bootstrap, supervisor)
+    # Do not enter TestClient's lifespan: the supervisor is owned by this test's
+    # event loop so start/stop/restart and ASGI polling observe one snapshot.
+    client = TestClient(app, client=("127.0.0.1", 12345))
+    normal_latencies: list[float] = []
+    upload_latencies: list[float] = []
+    control_latencies: list[float] = []
+    control_statuses: list[int] = []
+    peak_core_rss_kib = 0
+    upload_bytes = 256 * 1024
+    body = bytes(range(256)) * 1024
+    polls_started = threading.Event()
+    stop_polls = threading.Event()
+
+    def poll_control_plane() -> None:
+        while not stop_polls.is_set():
+            started = time.perf_counter()
+            try:
+                response = client.get("/_corona/v1/health")
+                control_statuses.append(response.status_code)
+                if response.status_code == 200:
+                    phase = response.json()["data"]["core_phase"]
+                    if phase not in {
+                        "starting", "ready", "stopping", "failed", "stopped", "backoff"
+                    }:
+                        control_statuses.append(599)
+            except Exception:
+                control_statuses.append(599)
+            finally:
+                control_latencies.append(time.perf_counter() - started)
+                polls_started.set()
+            stop_polls.wait(0.005)
+
+    try:
+        first = await supervisor.start()
+        assert first.phase == "ready"
+        for _ in range(30):
+            started = time.perf_counter()
+            response = client.post(
+                "/onebot/v11/http",
+                content=b"normal-request",
+                headers={"X-Stella-Request-ID": "caller-forged-request-id"},
+            )
+            normal_latencies.append(time.perf_counter() - started)
+            assert response.status_code == 202
+            assert response.content == b"normal-request"
+            request_id = response.headers["x-stella-request-id-seen"]
+            assert request_id != "caller-forged-request-id"
+            assert valid_request_id(request_id)
+
+        long_sse = client.get("/onebot/v11/long-events")
+        assert long_sse.status_code == 200
+        assert long_sse.text == "".join(f"data: {index}\n\n" for index in range(5))
+
+        with client.websocket_connect("/onebot/v11/ws", subprotocols=["onebot"]) as websocket:
+            for index in range(12):
+                message = f"cn10-{index}"
+                websocket.send_text(message)
+                assert json.loads(websocket.receive_text())["message"] == message
+                peak_core_rss_kib = max(
+                    peak_core_rss_kib, _process_rss_kib(supervisor.snapshot.pid) or 0
+                )
+
+        def upload_once() -> float:
+            started = time.perf_counter()
+            response = client.post("/onebot/v11/http", content=body)
+            elapsed = time.perf_counter() - started
+            assert response.status_code == 202
+            assert len(response.content) == upload_bytes
+            return elapsed
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            upload_latencies.extend(pool.map(lambda _index: upload_once(), range(4)))
+        peak_core_rss_kib = max(
+            peak_core_rss_kib, _process_rss_kib(supervisor.snapshot.pid) or 0
+        )
+
+        poller = threading.Thread(target=poll_control_plane, name="cn10-control-poller")
+        poller.start()
+        assert await asyncio.to_thread(polls_started.wait, 2)
+        for _ in range(3):
+            await supervisor.stop()
+            assert supervisor.snapshot.phase == "stopped"
+            assert client.get("/_corona/v1/health").status_code == 200
+            restarted = await supervisor.start()
+            assert restarted.phase == "ready"
+            peak_core_rss_kib = max(
+                peak_core_rss_kib, _process_rss_kib(restarted.pid) or 0
+            )
+        stop_polls.set()
+        await asyncio.to_thread(poller.join, 5)
+        assert not poller.is_alive()
+
+        assert control_statuses
+        assert all(status == 200 for status in control_statuses), control_statuses
+        control_p95_ms = _percentile(control_latencies, 0.95) * 1000
+        assert control_p95_ms < 500
+        assert all(latency < 5 for latency in upload_latencies)
+
+        evidence = {
+            "scope": "CN10 A23 proxy load and independent control health",
+            "platform": platform.platform(),
+            "python": sys.version.split()[0],
+            "cpu_count": os.cpu_count(),
+            "normal_proxy_requests": len(normal_latencies),
+            "normal_proxy_ms": {
+                "p50": round(_percentile(normal_latencies, 0.50) * 1000, 3),
+                "p95": round(_percentile(normal_latencies, 0.95) * 1000, 3),
+            },
+            "sse_events": 5,
+            "websocket_round_trips": 12,
+            "concurrent_uploads": 4,
+            "upload_bytes_each": upload_bytes,
+            "upload_ms": {
+                "p50": round(_percentile(upload_latencies, 0.50) * 1000, 3),
+                "p95": round(_percentile(upload_latencies, 0.95) * 1000, 3),
+            },
+            "core_restart_cycles": 3,
+            "control_health_responses": len(control_statuses),
+            "control_http_5xx_or_transport_failures": sum(
+                status >= 500 for status in control_statuses
+            ),
+            "control_latency_ms": {
+                "p50": round(_percentile(control_latencies, 0.50) * 1000, 3),
+                "p95": round(control_p95_ms, 3),
+            },
+            "target_control_p95_ms": 500,
+            "peak_controller_rss_kib": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss),
+            "peak_core_rss_kib": peak_core_rss_kib,
+            "trace_correlation": "30/30 proxy requests had a valid Nucleus-minted x-stella-request-id; caller-supplied value was replaced",
+        }
+        output_dir = os.environ.get("STELLA_CN10_EVIDENCE_DIR")
+        if output_dir:
+            evidence_path = Path(output_dir) / "cn10-proxy-metrics.json"
+            evidence_path.parent.mkdir(parents=True, exist_ok=True)
+            evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        print("CN10_METRIC " + json.dumps(evidence, sort_keys=True))
+    finally:
+        stop_polls.set()
+        try:
+            await supervisor.stop()
+        finally:
+            client.close()
+            # create_corona_app normally resets this in its lifespan shutdown;
+            # this test deliberately owns the supervisor on its outer loop.
+            reset_auth_runtime()
 
 
 @pytest.mark.asyncio

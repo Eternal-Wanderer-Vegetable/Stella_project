@@ -80,6 +80,31 @@ class TestRuntimeEntryInventory:
             if entry.boundary:
                 assert entry.notes, f"{entry.entry_id}: boundary without reason"
 
+    def test_corona_cross_process_flows_are_declared_as_boundaries(self):
+        entries = {
+            entry.entry_id: entry
+            for entry in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY
+        }
+        expected = {
+            "corona.owner.start",
+            "corona.owner.stop",
+            "corona.config.apply",
+            "corona.desktop.ipc_dispatch",
+            "corona.adapter_proxy.nucleus",
+        }
+        assert expected <= entries.keys()
+        for entry_id in expected:
+            entry = entries[entry_id]
+            assert entry.family == "lifecycle"
+            assert entry.root_kind == ""
+            assert entry.boundary
+            assert entry.contract_files
+        proxy = entries["corona.adapter_proxy.nucleus"]
+        assert "request_id" in proxy.boundary
+        assert {"corona/nucleus_client.py", "nucleus/api.py"} <= {
+            path for path, _line_filter in proxy.contract_files
+        }
+
     def test_root_kinds_resolve_to_entry_nodes(self):
         """已接入 root 的入口，其 root_kind 必须映射到目录入口节点。"""
         for entry in internal_flow_catalog.RUNTIME_ENTRY_INVENTORY:

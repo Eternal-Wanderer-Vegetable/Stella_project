@@ -95,6 +95,7 @@ async def test_proactive_at_goes_through_native_facade(
 
     delivery_db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(settings, "DB_PATH", delivery_db)
+    monkeypatch.setattr(gateway, "DB_PATH", delivery_db)
     with sqlite3.connect(delivery_db) as conn:
         create_memory_scope_versions_table(conn)
     monkeypatch.setattr(social_store, "_TABLES_READY", False)
@@ -178,6 +179,7 @@ async def test_proactive_join_goes_through_native_facade(
 
     delivery_db = tmp_path / "agent_memory.db"
     monkeypatch.setattr(settings, "DB_PATH", delivery_db)
+    monkeypatch.setattr(gateway, "DB_PATH", delivery_db)
     with sqlite3.connect(delivery_db) as conn:
         create_memory_scope_versions_table(conn)
     monkeypatch.setattr(social_store, "_TABLES_READY", False)

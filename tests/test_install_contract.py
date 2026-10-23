@@ -366,6 +366,10 @@ def test_helper_legacy_packages_still_gate_on_manifest(tmp_path, monkeypatch):
 
 def _run_cmd_bootstrap(monkeypatch, install_result=None, exc=None):
     from deploy import __main__ as deploy_main
+
+    # A direct handler call bypasses main()'s normal legacy-configuration load.
+    # Use the same setup as the real bootstrap command without a user home.
+    deploy_main._load_legacy_modules()
     from deploy import bootstrap
 
     if exc is not None:

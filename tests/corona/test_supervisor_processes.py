@@ -5,14 +5,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import platform
 import socket
+import statistics
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 import pytest
+
+try:
+    import resource
+except ImportError:  # pragma: no cover - Windows CI does not expose resource
+    resource = None
 
 from corona.bootstrap import prepare_corona_bootstrap
 from corona.ownership import CoronaOwnershipError, CoronaOwnershipLock
@@ -72,6 +80,24 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 mode = sys.argv[1]
+writer_lock = None
+if mode.startswith("exclusive_"):
+    import fcntl
+    from pathlib import Path
+
+    lock_path = Path(os.environ["STELLA_HOME"]) / "cn10-core-writer.lock"
+    writer_lock = lock_path.open("a+")
+    try:
+        fcntl.flock(writer_lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise SystemExit(92)
+    with (lock_path.parent / "cn10-core-writer-pids.txt").open("a") as stream:
+        stream.write(f"{os.getpid()}\n")
+    mode = {
+        "exclusive_ready": "ready",
+        "exclusive_crash": "crash",
+        "exclusive_crash_after_ready": "crash_after_ready",
+    }[mode]
 if mode == "import_error":
     raise RuntimeError("synthetic import error")
 if mode == "crash":
@@ -195,6 +221,138 @@ async def test_crash_after_ready_uses_bounded_restart_budget(tmp_path: Path) -> 
     assert supervisor.snapshot.error_code == "core_crashed"
     assert supervisor._tree is None
     await supervisor.stop()
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="CN10 resource soak uses Linux /proc and flock"
+)
+@pytest.mark.asyncio
+async def test_linux_real_core_100_cycles_do_not_leak_or_overlap(
+    tmp_path: Path,
+) -> None:
+    bootstrap = _bootstrap(tmp_path, instance_id="cn10-process-soak")
+    selected_mode = ["exclusive_ready"]
+    supervisor = CoreSupervisor(
+        bootstrap,
+        readiness_timeout=2,
+        poll_interval=0.02,
+        backoff_base=0.01,
+        max_attempts=1,
+        command_factory=lambda _boot: [
+            sys.executable,
+            "-c",
+            _FAKE_CORE,
+            selected_mode[0],
+        ],
+    )
+    samples: list[dict[str, int]] = []
+    ready_pids: list[int] = []
+    cycle_modes = ("exclusive_ready", "exclusive_crash", "exclusive_crash_after_ready")
+
+    def resources() -> dict[str, int]:
+        return {
+            "fd_count": sum(1 for _ in Path("/proc/self/fd").iterdir()),
+            "thread_count": sum(1 for _ in Path("/proc/self/task").iterdir()),
+            "pending_async_tasks": sum(
+                not task.done() for task in asyncio.all_tasks()
+            ),
+            "controller_peak_rss_kib": int(
+                resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            ),
+        }
+
+    try:
+        for cycle in range(100):
+            selected_mode[0] = cycle_modes[cycle % len(cycle_modes)]
+            snapshot = await supervisor.start()
+            if selected_mode[0] == "exclusive_ready":
+                assert snapshot.phase == "ready"
+                assert snapshot.pid is not None
+                ready_pids.append(snapshot.pid)
+                await supervisor.stop()
+            elif selected_mode[0] == "exclusive_crash":
+                assert snapshot.phase == "failed"
+                assert snapshot.error_code == "process_exited_before_ready"
+                await supervisor.stop()
+            else:
+                assert snapshot.phase == "ready"
+                assert snapshot.pid is not None
+                ready_pids.append(snapshot.pid)
+                deadline = time.monotonic() + 2
+                while supervisor.snapshot.phase != "failed" and time.monotonic() < deadline:
+                    await asyncio.sleep(0.01)
+                assert supervisor.snapshot.phase == "failed"
+                assert supervisor._tree is None
+                await supervisor.stop()
+            assert supervisor.snapshot.phase == "stopped"
+            assert supervisor._tree is None
+            await asyncio.sleep(0.01)
+            samples.append(resources())
+
+        writer_pids = [
+            int(line)
+            for line in (Path(bootstrap.stella_home) / "cn10-core-writer-pids.txt")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        assert len(writer_pids) == 100
+        assert len(set(writer_pids)) == 100
+        assert len(set(ready_pids)) == len(ready_pids)
+        assert all(not Path(f"/proc/{pid}").exists() for pid in writer_pids)
+
+        log_files = list(
+            (runtime_dir(bootstrap.stella_home, bootstrap.instance_id) / "generations")
+            .glob("*/nucleus.log")
+        )
+        assert len(log_files) == 100
+
+        # Ignore startup and executor-pool warm-up. Compare fixed 20-cycle windows
+        # and allow small allocator/pytest noise instead of claiming zero variation.
+        warm_window = samples[40:60]
+        final_window = samples[80:100]
+        medians = {
+            key: {
+                "warm": statistics.median(item[key] for item in warm_window),
+                "final": statistics.median(item[key] for item in final_window),
+                "final_max": max(item[key] for item in final_window),
+            }
+            for key in ("fd_count", "thread_count", "pending_async_tasks")
+        }
+        assert medians["fd_count"]["final"] <= medians["fd_count"]["warm"] + 2
+        assert medians["fd_count"]["final_max"] <= medians["fd_count"]["warm"] + 4
+        assert medians["thread_count"]["final"] <= medians["thread_count"]["warm"] + 1
+        assert medians["thread_count"]["final_max"] <= medians["thread_count"]["warm"] + 2
+        assert medians["pending_async_tasks"]["final"] <= medians["pending_async_tasks"]["warm"] + 1
+        assert medians["pending_async_tasks"]["final_max"] <= medians["pending_async_tasks"]["warm"] + 2
+
+        evidence = {
+            "scope": "CN10 A31 Linux real child process soak",
+            "platform": platform.platform(),
+            "python": sys.version.split()[0],
+            "cycles": 100,
+            "cycle_pattern": list(cycle_modes),
+            "warmup_cycles_excluded": 40,
+            "comparison_windows": {"warm": "cycles 41-60", "final": "cycles 81-100"},
+            "tolerance": {"fd_median_delta": 2, "fd_final_max_delta": 4,
+                          "thread_median_delta": 1, "thread_final_max_delta": 2,
+                          "pending_async_task_median_delta": 1,
+                          "pending_async_task_final_max_delta": 2},
+            "resource_windows": medians,
+            "peak_controller_rss_kib": max(item["controller_peak_rss_kib"] for item in samples),
+            "orphan_child_processes": 0,
+            "per_generation_log_files": len(log_files),
+            "log_queue": "not_applicable; supervisor redirects each child to a generation log file",
+            "unique_child_pids": len(set(writer_pids)),
+            "single_writer_flock": "100/100 child processes acquired exclusive lock serially",
+        }
+        output_dir = os.environ.get("STELLA_CN10_EVIDENCE_DIR")
+        if output_dir:
+            evidence_path = Path(output_dir) / "cn10-process-soak.json"
+            evidence_path.parent.mkdir(parents=True, exist_ok=True)
+            evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        print("CN10_METRIC " + json.dumps(evidence, sort_keys=True))
+    finally:
+        await supervisor.stop()
 
 
 @pytest.mark.parametrize(

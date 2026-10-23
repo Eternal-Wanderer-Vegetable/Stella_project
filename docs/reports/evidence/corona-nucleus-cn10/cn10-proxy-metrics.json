@@ -1,0 +1,30 @@
+{
+  "scope": "CN10 A23 proxy load and independent control health",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.12.14",
+  "cpu_count": 16,
+  "normal_proxy_requests": 30,
+  "normal_proxy_ms": {
+    "p50": 10.606,
+    "p95": 15.077
+  },
+  "sse_events": 5,
+  "websocket_round_trips": 12,
+  "concurrent_uploads": 4,
+  "upload_bytes_each": 262144,
+  "upload_ms": {
+    "p50": 61.674,
+    "p95": 61.848
+  },
+  "core_restart_cycles": 3,
+  "control_health_responses": 156,
+  "control_http_5xx_or_transport_failures": 0,
+  "control_latency_ms": {
+    "p50": 3.072,
+    "p95": 5.181
+  },
+  "target_control_p95_ms": 500,
+  "peak_controller_rss_kib": 435344,
+  "peak_core_rss_kib": 51032,
+  "trace_correlation": "30/30 proxy requests had a valid Nucleus-minted x-stella-request-id; caller-supplied value was replaced"
+}
