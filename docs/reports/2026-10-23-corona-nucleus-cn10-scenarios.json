@@ -4,6 +4,7 @@
   "timezone": "Asia/Shanghai",
   "work_package": "CN10",
   "based_on_commit": "d010dd5",
+  "implementation_commit": "a300151",
   "assessment": "implementation_evidence_with_acceptance_gaps",
   "status_counts": {
     "pass": 12,

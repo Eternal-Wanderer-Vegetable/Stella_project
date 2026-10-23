@@ -1,6 +1,6 @@
 # Corona / Nucleus CN10: Fault Injection, Cross-Process Recovery, and Resource Acceptance
 
-Date: 2026-10-23 (Asia/Shanghai) · Base: `d010dd5` (CN09) · Branch: `codex/corona-nucleus-implementation`
+Date: 2026-10-23 (Asia/Shanghai) · Base: `d010dd5` (CN09) · CN10 implementation commit: `a300151` · Branch: `codex/corona-nucleus-implementation`
 
 Scope: engineering plan [CN10](../plans/2026-10-23-corona-nucleus-engineering-plan.md#cn10). This report records CN10 implementation and executed checks. Overall CORONA-IMPL remains **NOT READY**: the full Python suite has one order-sensitive failure, and Rust/Windows native gates were unavailable here.
 
@@ -36,8 +36,8 @@ The machine-readable [CN10 scenario ledger](2026-10-23-corona-nucleus-cn10-scena
 - Focused Python regressions under an isolated `STELLA_HOME`: **142 passed / 4 warnings / 50.79s**, covering `tests/corona`, `tests/nucleus`, the flow inventory, and affected modules. Warnings cover duplicate FastAPI operation IDs, an existing pytest class-fixture deprecation, and a no-adapter runtime hint.
 - Full Python under an isolated home: **4114 passed / 29 skipped / 1 failed / 3 warnings / 279.00s**. The sole failure was `tests/webui/test_webui_cometa.py::TestApiKeyRoute::test_empty_key_rejected`, which got 401 instead of 400. That exact node passed alone (**1 passed**). The cause remains unknown; earlier phases also saw order-sensitive Cometa/WebUI 401 failures, so the full gate remains NOT GREEN.
 - Dashboard: Vitest **9 files / 110 passed**; `pnpm --dir dashboard build` (including `vue-tsc --noEmit`) and `sync:webui` passed. `dashboard/dist`, `webui/dist`, and `desktop/dashboard-dist` matched. Existing mixed dynamic/static import and large-chunk warnings remain.
-- `.venv/bin/ruff check .` passed; `.venv/bin/python scripts/generate_message_flow.py --check` passed. The manifest reports 58 runtime entries, 144 nodes / 142 source-resolved, 9,640 closure sites, and 15,736 reachable symbols.
-- `.venv/bin/python scripts/check_docs.py`: **119 files / 1,277 local links / 577 migration anchors / 0 errors**; scenario/feature JSON parsing and `git diff --check` passed.
+- `.venv/bin/ruff check .` passed; `.venv/bin/python scripts/generate_message_flow.py --check` passed again after the CN10 implementation commit, with the manifest `source_revision` bound to `a300151`. It reports 58 runtime entries, 144 nodes / 142 source-resolved, 9,640 closure sites, and 15,736 reachable symbols.
+- `.venv/bin/python scripts/check_docs.py`: **119 files / 1,279 local links / 577 migration anchors / 0 errors**; scenario/feature JSON parsing and `git diff --check` passed.
 - Staged GitNexus: serial `detect-changes --scope all` returned **18 files / 41 symbols / 0 affected processes / LOW**; compare against `main` then returned **248 files / 1,501 symbols / 150 affected processes / CRITICAL**. Neither result had a partial/truncated marker. The CLI capped the compare symbol listing, but its counts cover all changes. This risk is cumulative for the branch versus main and is not waived.
 - The planning snapshot verifier `docs/reports/evidence/corona-nucleus-20261023/verify_plan.py` stopped after detecting source drift in `tests/webui/test_webui_mount.py`, a file already changed by CN06/CN07 implementation. That verifier checks the frozen pre-implementation planning snapshot. This work left the frozen inventory, manifest, and verifier unchanged.
 

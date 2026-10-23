@@ -1,6 +1,6 @@
 # Corona / Nucleus 实施 CN10：故障注入、跨进程恢复与资源验收
 
-日期：2026-10-23（Asia/Shanghai） · 基线：`d010dd5`（CN09） · 分支：`codex/corona-nucleus-implementation`
+日期：2026-10-23（Asia/Shanghai） · 基线：`d010dd5`（CN09） · CN10 实现提交：`a300151` · 分支：`codex/corona-nucleus-implementation`
 
 范围：工程计划 [CN10](../plans/2026-10-23-corona-nucleus-engineering-plan.md#cn10)。本报告记录 CN10 实施和已执行验收。整体 CORONA-IMPL 仍为 **NOT READY**；full Python 有一项 suite-order 失败，Rust 与 Windows 原生门禁没有可用工具/主机。
 
@@ -36,8 +36,8 @@
 - 隔离 `STELLA_HOME` 的 CN10 相关 Python 回归：**142 passed / 4 warnings / 50.79s**，覆盖 `tests/corona`、`tests/nucleus`、flow inventory 和本轮受影响测试模块。警告为 FastAPI 重复 operation ID、已有 pytest class fixture deprecation，以及无适配器运行时提示。
 - 全量 Python 在隔离 home 下：**4114 passed / 29 skipped / 1 failed / 3 warnings / 279.00s**。唯一失败为 `tests/webui/test_webui_cometa.py::TestApiKeyRoute::test_empty_key_rejected` 收到 401、期望 400；同一节点单跑为 **1 passed**。原因未确定；历史阶段也出现过顺序敏感的 Cometa/WebUI 401，故全量门禁保持 NOT GREEN。
 - Dashboard：Vitest **9 files / 110 passed**；`pnpm --dir dashboard build`（包含 `vue-tsc --noEmit`）与 `sync:webui` 通过；`dashboard/dist`、`webui/dist`、`desktop/dashboard-dist` 一致。保留既有 mixed dynamic/static import 和大 chunk 警告。
-- `.venv/bin/ruff check .` 通过；`.venv/bin/python scripts/generate_message_flow.py --check` 通过，清单含 58 runtime entries、144 nodes / 142 source-resolved、9,640 closure sites、15,736 reachable symbols。
-- `.venv/bin/python scripts/check_docs.py`：**119 files / 1277 local links / 577 migration anchors / 0 errors**；scenario/feature JSON parsing 与 `git diff --check` 通过。
+- `.venv/bin/ruff check .` 通过；`.venv/bin/python scripts/generate_message_flow.py --check` 在 CN10 实现提交后复验通过，manifest `source_revision` 绑定 `a300151`；清单含 58 runtime entries、144 nodes / 142 source-resolved、9,640 closure sites、15,736 reachable symbols。
+- `.venv/bin/python scripts/check_docs.py`：**119 files / 1279 local links / 577 migration anchors / 0 errors**；scenario/feature JSON parsing 与 `git diff --check` 通过。
 - 暂存 GitNexus：serial `detect-changes --scope all` 为 **18 files / 41 symbols / 0 affected processes / LOW**；随后 compare `main` 为 **248 files / 1501 symbols / 150 affected processes / CRITICAL**。两项均无 partial/truncated 标记；compare 的符号列表被 CLI 截断展示，但统计覆盖全部变更。风险为整个分支相对 main 的累计风险，不豁免。
 - 规划快照 verifier `docs/reports/evidence/corona-nucleus-20261023/verify_plan.py` 在 `tests/webui/test_webui_mount.py` 检出 source drift 后停止。该文件此前已被 CN06/CN07 实施修改；该 verifier 校验的是冻结的实施前规划快照。本轮未修改冻结 inventory、manifest 或 verifier。
 
