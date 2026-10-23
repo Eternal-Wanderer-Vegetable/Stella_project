@@ -31,6 +31,8 @@ _CONTROL_ENV_KEYS = frozenset(
         "STELLA_CONTROLLER_BOOT_ID",
         "STELLA_INTERNAL_HOST",
         "STELLA_INTERNAL_PORT",
+        "STELLA_MANAGED_PROCESS_GROUP",
+        "STELLA_CONTROLLER_WATCH_FD",
     }
 )
 _PYTHON_PROCESS_ENV_KEYS = frozenset(
@@ -63,6 +65,7 @@ class ManagedBootstrap:
     internal_port: int
     stop_sentinel: Path
     database_path: Path
+    controller_watch_fd: int | None
 
 
 def prepare_managed_environment(
@@ -124,6 +127,20 @@ def prepare_managed_environment(
         raise ManagedBootstrapError("Nucleus internal port is invalid") from exc
     if not 1 <= internal_port <= 65535:
         raise ManagedBootstrapError("Nucleus internal port is invalid")
+    process_group_raw = raw.get("STELLA_MANAGED_PROCESS_GROUP", "0").strip()
+    if process_group_raw not in {"0", "1"}:
+        raise ManagedBootstrapError("managed process group marker is invalid")
+    if process_group_raw == "1" and os.name != "nt" and os.getpgrp() != os.getpid():
+        raise ManagedBootstrapError("managed Nucleus must own its POSIX process group")
+    watch_fd: int | None = None
+    if process_group_raw == "1" and os.name != "nt":
+        try:
+            watch_fd = int(raw.get("STELLA_CONTROLLER_WATCH_FD", ""))
+            if watch_fd < 3:
+                raise ValueError("invalid descriptor")
+            os.fstat(watch_fd)
+        except (OSError, ValueError) as exc:
+            raise ManagedBootstrapError("managed Nucleus owner-watch pipe is missing") from exc
 
     home = Path(revision.stella_home).expanduser().resolve()
     process_values = {
@@ -160,6 +177,10 @@ def prepare_managed_environment(
         "HOST": internal_host,
         "PORT": str(internal_port),
     }
+    if process_group_raw == "1":
+        controls["STELLA_MANAGED_PROCESS_GROUP"] = "1"
+    if watch_fd is not None:
+        controls["STELLA_CONTROLLER_WATCH_FD"] = str(watch_fd)
     sanitized = {**process_values, **runtime_values, **controls}
     os.environ.clear()
     os.environ.update(sanitized)
@@ -186,6 +207,7 @@ def prepare_managed_environment(
         internal_port=internal_port,
         stop_sentinel=stop_sentinel,
         database_path=database_path,
+        controller_watch_fd=watch_fd,
     )
 
 

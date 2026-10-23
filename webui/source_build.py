@@ -61,18 +61,24 @@ def _pnpm_prefix(dashboard_dir: Path) -> list[str]:
     )
 
 
-def rebuild_source_dashboard() -> bool:
+def rebuild_source_dashboard(
+    project_root: Path | None = None, serve_dist: bool | None = None
+) -> bool:
     """Build and sync Dashboard for a source checkout; return whether it ran.
 
     Release packages intentionally skip this path. Their assets are built by the
     release pipeline and, for Docker, copied from the dedicated Node build stage.
     """
-    from config.settings import PROJECT_ROOT, WEBUI_SERVE_DIST
+    if project_root is None or serve_dist is None:
+        from config.settings import PROJECT_ROOT, WEBUI_SERVE_DIST
 
-    if not WEBUI_SERVE_DIST:
+        project_root = Path(PROJECT_ROOT) if project_root is None else project_root
+        serve_dist = WEBUI_SERVE_DIST if serve_dist is None else serve_dist
+
+    if not serve_dist:
         return False
 
-    project_root = Path(PROJECT_ROOT)
+    project_root = Path(project_root)
     dashboard_dir = project_root / "dashboard"
     if not (dashboard_dir / "package.json").is_file():
         return False

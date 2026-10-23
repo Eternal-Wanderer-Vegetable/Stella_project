@@ -14,7 +14,6 @@ import time
 
 from fastapi import Request
 
-import config.settings as settings
 from webui import security
 from webui.responses import ApiError
 
@@ -119,4 +118,6 @@ def _is_loopback(host: str | None) -> bool:
 
 
 def rate_limit_capacity() -> int:
+    import config.settings as settings
+
     return int(settings.WEBUI_LOGIN_RATELIMIT_PER_MIN)

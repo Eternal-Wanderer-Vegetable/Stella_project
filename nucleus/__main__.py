@@ -26,6 +26,7 @@ def _make_server(config: Any, lifecycle: NucleusLifecycle) -> Any:
         async def shutdown(self, sockets=None) -> None:
             lifecycle.begin_shutdown()
             await super().shutdown(sockets=sockets)
+            await lifecycle.finish_process_group_shutdown()
 
     return ManagedUvicornServer(config)
 
@@ -54,6 +55,7 @@ def main() -> int:
         launch_token=bootstrap.launch_token,
         internal_host=bootstrap.internal_host,
         internal_port=bootstrap.internal_port,
+        controller_watch_fd=bootstrap.controller_watch_fd,
     )
     set_active_lifecycle(lifecycle)
     result = 1

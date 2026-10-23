@@ -12,7 +12,9 @@ import ipaddress
 import json
 import math
 import os
+import signal
 import stat
+import subprocess
 import sys
 import threading
 import time
@@ -155,6 +157,7 @@ class NucleusLifecycle:
         internal_port: int,
         shutdown_budget_seconds: float = DEFAULT_SHUTDOWN_BUDGET_SECONDS,
         force_exit: Callable[[int], Any] = os._exit,
+        controller_watch_fd: int | None = None,
     ) -> None:
         self.instance_id = instance_id
         self.controller_boot_id = controller_boot_id
@@ -171,6 +174,15 @@ class NucleusLifecycle:
         self._watchdog: threading.Timer | None = None
         self._watchdog_deadline: float | None = None
         self._lock = threading.Lock()
+        self._owner_watch_thread: threading.Thread | None = None
+        if controller_watch_fd is not None:
+            self._owner_watch_thread = threading.Thread(
+                target=self._watch_controller_owner,
+                args=(controller_watch_fd,),
+                name="nucleus-controller-owner-watch",
+                daemon=True,
+            )
+            self._owner_watch_thread.start()
 
     @property
     def phase(self) -> str:
@@ -187,6 +199,25 @@ class NucleusLifecycle:
 
     def attach_server(self, server: Any) -> None:
         self._server = server
+
+    def _watch_controller_owner(self, descriptor: int) -> None:
+        try:
+            while os.read(descriptor, 4096):
+                pass
+        except OSError:
+            pass
+        finally:
+            with contextlib.suppress(OSError):
+                os.close(descriptor)
+        _safe_stderr("[nucleus] Corona owner connection lost; fencing this generation")
+        if self._server is None:
+            if os.name != "nt" and os.environ.get("STELLA_MANAGED_PROCESS_GROUP") == "1":
+                with contextlib.suppress(OSError):
+                    os.killpg(os.getpgrp(), signal.SIGKILL)
+            self._force_exit(124)
+            return
+        self.begin_drain()
+        self.request_stop()
 
     def mark_ready(self) -> None:
         with self._lock:
@@ -295,7 +326,21 @@ class NucleusLifecycle:
 
     def _force_shutdown_exit(self) -> None:
         _safe_stderr("[nucleus] force-exit grace elapsed; terminating this managed generation")
+        if os.environ.get("STELLA_MANAGED_PROCESS_GROUP") == "1" and os.name != "nt":
+            with contextlib.suppress(OSError):
+                os.killpg(os.getpgrp(), signal.SIGKILL)
         self._force_exit(124)
+
+    async def finish_process_group_shutdown(self) -> None:
+        """Fence descendant workers before releasing the business DB lock."""
+        if (
+            os.name == "nt"
+            or os.environ.get("STELLA_MANAGED_PROCESS_GROUP") != "1"
+            or os.getpgrp() != os.getpid()
+        ):
+            return
+        remaining = self.remaining_shutdown_seconds()
+        await asyncio.to_thread(_terminate_group_descendants, os.getpgrp(), remaining)
 
     def cancel_watchdog(self) -> None:
         with self._lock:
@@ -330,6 +375,62 @@ def _safe_stderr(message: str) -> None:
         sys.stderr.flush()
     except Exception:
         pass
+
+
+def _group_members(pgid: int) -> set[int]:
+    members: set[int] = set()
+    proc_root = Path("/proc")
+    if proc_root.is_dir():
+        for entry in proc_root.iterdir():
+            if not entry.name.isdecimal():
+                continue
+            try:
+                stat_line = (entry / "stat").read_text(encoding="ascii")
+                fields = stat_line[stat_line.rfind(")") + 2 :].split()
+                # After comm: state, ppid, pgrp, ...
+                if fields[0] != "Z" and int(fields[2]) == pgid:
+                    members.add(int(entry.name))
+            except (OSError, ValueError, IndexError):
+                continue
+        return members
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,pgid="], capture_output=True, text=True, timeout=1.0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return members
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) == 2:
+            try:
+                if int(fields[1]) == pgid:
+                    members.add(int(fields[0]))
+            except ValueError:
+                continue
+    return members
+
+
+def _terminate_group_descendants(pgid: int, remaining: float) -> None:
+    leader = os.getpid()
+    deadline = time.monotonic() + max(0.0, min(float(remaining), 1.0))
+    members = _group_members(pgid) - {leader}
+    for pid in members:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            _safe_stderr("[nucleus] could not signal a managed process-group member")
+    while time.monotonic() < deadline:
+        members = _group_members(pgid) - {leader}
+        if not members:
+            return
+        time.sleep(0.025)
+    for pid in _group_members(pgid) - {leader}:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            continue
 
 
 class ManagedNucleusASGI:
