@@ -15,7 +15,9 @@
 # deploy start --detach 会注入该变量，这里只兜底「python bot.py」直启形态。
 import os as _os
 
-if not _os.environ.get("STELLA_LAUNCH_TOKEN"):
+_MANAGED_CORE = _os.environ.get("STELLA_MANAGED_CORE") == "1"
+
+if not _os.environ.get("STELLA_LAUNCH_TOKEN") and not _MANAGED_CORE:
     import uuid as _uuid
 
     _os.environ["STELLA_LAUNCH_TOKEN"] = _uuid.uuid4().hex
@@ -30,17 +32,18 @@ setup_json_sink()
 # WebUI「无壳自重启」的接任侧：若本进程由上一任 Bot 派生（webui 重启按钮），
 # 上一任还占着服务端口，必须等它真正退出再继续初始化。必须在任何重活之前；
 # 超时照样继续（端口冲突会留下明确错误，好过无声卡死）。见 core/self_restart.py。
-try:
-    from core.self_restart import wait_for_parent_exit
+if not _MANAGED_CORE:
+    try:
+        from core.self_restart import wait_for_parent_exit
 
-    if wait_for_parent_exit():
-        print("[stella] 接任启动：上一任进程已退出，继续初始化", flush=True)
-except Exception as _e:  # 自重启等待绝不能拦住正常启动
-    print(f"[stella] 接任等待跳过：{_e}", flush=True)
+        if wait_for_parent_exit():
+            print("[stella] 接任启动：上一任进程已退出，继续初始化", flush=True)
+    except Exception as _e:  # 自重启等待绝不能拦住正常启动
+        print(f"[stella] 接任等待跳过：{_e}", flush=True)
 
 # 从源码目录直启时，在接管旧实例前构建并同步 Dashboard，避免服务继续提供
 # 已过期的 webui/dist。发行包通过内嵌版本标记识别，不会在用户运行期安装 Node 依赖。
-if __name__ == "__main__":
+if __name__ == "__main__" and not _MANAGED_CORE:
     import sys as _sys
 
     try:
@@ -63,13 +66,14 @@ if __name__ == "__main__":
 # 证明停掉它，避免 uvicorn 绑定失败（winerror 10048，2026-09-24 实测）。
 # 接任路径刚等上一任退出，这里通常无实例直通。随后自登记 ownership——
 # 直启实例由此获得与 deploy start 启动实例同等的可管理性。
-try:
-    from deploy.process import register_self, replace_running
+if not _MANAGED_CORE:
+    try:
+        from deploy.process import register_self, replace_running
 
-    replace_running()
-    register_self()
-except Exception as _e:  # 接管/登记是增强，失败不拦启动
-    print(f"[stella] 启动接管/自登记跳过：{_e}", flush=True)
+        replace_running()
+        register_self()
+    except Exception as _e:  # 接管/登记是增强，失败不拦启动
+        print(f"[stella] 启动接管/自登记跳过：{_e}", flush=True)
 
 from astrbot_compat import install_shim
 
@@ -91,9 +95,13 @@ with _contextlib.suppress(Exception):
     if _TRANSITION.is_upgrade or _TRANSITION.is_downgrade:
         print(f"[stella] {_TRANSITION.describe()}", flush=True)
 
-nonebot.init()
+if _MANAGED_CORE:
+    from nucleus.framework import install_managed_driver
 
-driver = nonebot.get_driver()
+    driver = install_managed_driver()
+else:
+    nonebot.init()
+    driver = nonebot.get_driver()
 from config.settings import STELLA_ADAPTER_MODULES
 from core.transport.adapter_loader import (
     parse_adapter_modules,

@@ -5398,6 +5398,16 @@ def _find_uvicorn_server():
     """
     import sys
 
+    if os.environ.get("STELLA_MANAGED_CORE") == "1":
+        try:
+            from nucleus.lifecycle import active_lifecycle
+
+            managed_server = active_lifecycle().server
+            if managed_server is not None and hasattr(managed_server, "should_exit"):
+                return managed_server
+        except RuntimeError:
+            pass
+
     for mod_name in ("__main__", "bot"):
         mod = sys.modules.get(mod_name)
         if mod is None:

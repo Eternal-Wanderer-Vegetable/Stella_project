@@ -79,3 +79,12 @@ def test_spawn_successor_refuses_non_bot_entry():
     assert result["spawned"] is False
     assert "bot.py" in (result.get("error") or "")
     assert result.get("pid") is None
+
+
+def test_spawn_successor_refuses_managed_nucleus(monkeypatch):
+    monkeypatch.setenv("STELLA_MANAGED_CORE", "1")
+    result = self_restart.spawn_successor()
+
+    assert result["spawned"] is False
+    assert result["entry"] == "bot.py"
+    assert "由 Corona 管理生命周期" in result["error"]

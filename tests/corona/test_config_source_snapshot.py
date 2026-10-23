@@ -123,7 +123,7 @@ def test_legacy_bootstrap_import_and_source_build_order_is_preserved() -> None:
     source = (ROOT / "bot.py").read_text(encoding="utf-8")
     markers = (
         '_os.environ["STELLA_LAUNCH_TOKEN"]',
-        'if __name__ == "__main__":',
+        'if __name__ == "__main__" and not _MANAGED_CORE:',
         "rebuild_source_dashboard()",
         "raise SystemExit(1) from _e",
         "replace_running()",

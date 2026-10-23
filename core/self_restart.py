@@ -53,6 +53,9 @@ def _running_as_bot_entry() -> bool:
 def spawn_successor() -> dict:
     """派生接任 Bot 进程。返回 ``{spawned, pid?, error?, entry}`` 供接口如实回报。"""
     info: dict = {"spawned": False, "entry": "bot.py"}
+    if os.environ.get("STELLA_MANAGED_CORE") == "1":
+        info["error"] = "受管核心由 Corona 管理生命周期，拒绝自行派生接任进程"
+        return info
     if not _running_as_bot_entry():
         info["error"] = (
             f"当前入口不是 bot.py（{sys.argv[0]}），无法自动派生接任进程，请手动重启"
