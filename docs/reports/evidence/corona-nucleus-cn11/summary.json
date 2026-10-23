@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-23",
+  "branch": "codex/corona-nucleus-implementation",
+  "baseline": "28744fa",
+  "release_package": {
+    "command": "STELLA_HOME=<temporary> .venv/bin/python scripts/build_release_package.py standalone-python --source $PWD --output <temporary>/standalone",
+    "archive": "Stella-Standalone-Python-v6.2.0-windows-amd64.zip",
+    "members": 561,
+    "required_paths": [
+      "corona/__init__.py",
+      "nucleus/__main__.py",
+      "stella_bootstrap/__init__.py",
+      "stella_contracts/__init__.py",
+      "webui/dist/index.html"
+    ],
+    "required_present": 5,
+    "forbidden_runtime_or_secret_matches": 0,
+    "archive_checker": "scripts/check_release_archive.py passed",
+    "artifact_path": "/tmp/stella-cn11-package-iG6hXJ/Stella-Standalone-Python-v6.2.0-windows-amd64.zip"
+  },
+  "installer_staging": {
+    "command": "STELLA_HOME=<temporary> .venv/bin/python scripts/build_release_package.py oneclick-python --source $PWD --output <temporary>/oneclick --stage-resources <temporary>/resources",
+    "required_present": 5,
+    "env_example_present": true,
+    "forbidden_runtime_or_secret_files": 0,
+    "artifact_path": "/tmp/stella-cn11-package-iG6hXJ/resources"
+  },
+  "docker_context": {
+    "scratch_build": "passed with Docker 29.1.3; context used FROM scratch and current root .dockerignore",
+    "synthetic_exclusion_markers": 15,
+    "retained": [
+      ".env.example",
+      "corona/__init__.py",
+      "nucleus/__main__.py"
+    ],
+    "forbidden_hits": 0,
+    "real_application_image": "not built; pulling docker.io/library/node:24-slim failed with TLS handshake timeout",
+    "compose_plugin": "unavailable"
+  },
+  "compose_static": {
+    "parser": "PyYAML 6.0.3",
+    "valid": true,
+    "init": true,
+    "stop_grace_period": "65s"
+  },
+  "dashboard_distribution_parity": {
+    "command": "diff -qr dashboard/dist webui/dist && diff -qr dashboard/dist desktop/dashboard-dist",
+    "result": "identical"
+  },
+  "tests": {
+    "webui_cometa_and_config": "43 passed / 5.59s",
+    "installer_contract_and_release_assets": "60 passed / 1.01s",
+    "full_python": "4115 passed / 29 skipped / 3 warnings / 281.94s; isolated STELLA_HOME",
+    "suite_order_auth_regression": "previous Cometa/WebUI 401 failures disappeared after tests/webui/conftest.py resets Corona auth runtime before and after each test"
+  },
+  "lint": {
+    "command": ".venv/bin/ruff check . && git diff --check",
+    "result": "passed"
+  },
+  "scope": {
+    "business_schema_changed": false,
+    "default_entrypoint_switched": false,
+    "production_data_accessed": false
+  },
+  "limitations": [
+    "Docker Hub TLS timeout prevented a real application image build",
+    "docker compose plugin unavailable; no compose config/up",
+    "Rust toolchain, native Windows/Linux clean VM, live QQ/WebChat/model, final six-product and rollback acceptance not run"
+  ]
+}

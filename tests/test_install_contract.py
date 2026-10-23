@@ -152,13 +152,11 @@ def _source_tree(tmp_path: Path) -> Path:
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in (
-        "astrbot_compat", "capability", "config", "core", "deploy",
-        "extensions", "gravitas", "memory", "system_prompts", "runtime-manager",
-        "stella_bootstrap", "stella_contracts", "stella_project", "knowledge", "skills", "assets", "webui",
-        "desktop",
-    ):
-        path = source / directory / "__init__.py"
+    from scripts.build_release_package import COMMON_DIRS
+
+    for directory in COMMON_DIRS:
+        filename = "__main__.py" if directory == "nucleus" else "__init__.py"
+        path = source / directory / filename
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
     from deploy.profiles import PROFILE_IDS

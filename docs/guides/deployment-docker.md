@@ -111,7 +111,7 @@ docker compose ps
 ## 5. 日常运维
 
 ```bash
-docker compose stop            # 停（SIGTERM → 5 秒优雅停机，在途记忆整合不丢）
+docker compose stop            # 停（最多等待 65 秒，覆盖受管排空与进程树回收预算）
 docker compose start           # 起
 docker compose restart         # 重启
 docker compose logs -f stella  # 跟日志
@@ -189,8 +189,9 @@ llama 服务通过 `/v1/models` healthcheck，并由上层以最小 chat readine
 
 | 症状 | 原因与处理 |
 |---|---|
-| `docker compose ps` 显示 `unhealthy` | 容器内探活 `127.0.0.1:8080/stella/status` 失败。先 `docker compose logs stella` 看启动到哪一步；常见是 `.env` 缺失或模型端点连不上（探活本身不依赖模型，多半是进程没起来） |
-| 宿主机 `curl :8080/stella/status` 得 403 | 预期行为：该端点只接受回环访问，且 403 恰好证明 HTTP 服务活着。外部监控请以「非 000/超时」视为存活，或进容器里探 |
+| `docker compose ps` 显示 `unhealthy` | 容器先探测 Corona loopback liveness `127.0.0.1:8080/_corona/v1/health`，失败后兼容探测 legacy `/stella/status`。检查 `docker compose logs stella` 与启动阶段；缺 `.env`、绑定端口不符或进程未启动都可能导致失败 |
+| Docker 显示 healthy，但核心或 QQ 未就绪 | HEALTHCHECK 只证明 Corona 控制面或 legacy HTTP 服务存活，不代表 Nucleus 业务核心 ready、QQ 已连接或模型可用。Corona 的 `/_corona/v1/health` 会带 `core_phase`；需在管理状态查看核心 readiness，并单独检查平台连接 |
+| 宿主机 `curl :8080/stella/status` 得 403 | legacy 端点只接受回环访问；403 表示请求到达服务，但外部监控不能据此认定业务就绪。容器内可探 legacy `/stella/status` 或 Corona `/_corona/v1/health` |
 | 渲染的卡片中文变方块 | 不会发生——中文字体已烤进镜像。自制精简镜像（去掉 `fonts-noto-cjk`）才会 |
 | 主动搭话时间全错 | 检查 `TZ`（镜像默认 `Asia/Shanghai`，compose 里可改） |
 | `deploy init` 写不进 `/data` | 宿主机目录属主不是 uid 1000：`sudo chown -R 1000:1000 StellaData`，或改用 named volume（见下） |

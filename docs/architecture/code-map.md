@@ -136,6 +136,11 @@ Stella_project/
 │   ├── selector.py                 # 引擎选择（wheel 探测 + 旧 shadow/strict 开关兼容）
 │   └── native/                     # PyO3/maturin 源码（schema.rs 内嵌 SQL）
 │
+├── corona/                         # 独立控制进程：认证、配置恢复、WebUI 代理、Nucleus 监督
+├── nucleus/                        # 受管业务进程入口：Bot、业务路由与有界生命周期
+├── stella_bootstrap/               # 进程共享的 home、身份、环境与配置 revision 解析
+├── stella_contracts/               # Corona/Nucleus 控制、路由目录与本机 IPC 的版本合同
+│
 ├── extensions/                     # 自动加载的扩展（扫描 setup(pipeline)）
 │   ├── __init__.py                 # 扩展加载器
 │   └── link_monitor/               # OneBot 链路监测（心跳 + 主动探活，只告警）

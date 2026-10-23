@@ -25,6 +25,16 @@ import config.settings as settings
 from webui.app import create_webui_app
 
 
+@pytest.fixture(autouse=True)
+def reset_corona_auth_runtime():
+    """Keep Corona's process-global auth override out of legacy WebUI tests."""
+    from webui.security import reset_auth_runtime
+
+    reset_auth_runtime()
+    yield
+    reset_auth_runtime()
+
+
 @pytest.fixture
 def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """把 STELLA_HOME / PROJECT_ROOT / LOG_DIR 全部指到临时目录：

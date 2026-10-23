@@ -59,6 +59,7 @@ def test_release_assets_keep_python_name_and_add_separate_rust_name():
 
     assert "gravitas" in COMMON_DIRS
     assert {"stella_bootstrap", "stella_contracts"} <= set(COMMON_DIRS)
+    assert {"corona", "nucleus"} <= set(COMMON_DIRS)
     assert "build-oneclick-catalog-backend:" in main
     assert "LLAMA_CPP_COMMIT: 4a89937354190cef5a97baf8eeb17336105eb72d" in main
     assert "stella-oneclick-catalog-backend" in main

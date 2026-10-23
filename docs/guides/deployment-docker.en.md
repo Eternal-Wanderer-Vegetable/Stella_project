@@ -122,7 +122,7 @@ Follow-up troubleshooting: `docker compose logs -f stella` (runtime logs), `dock
 ## 5. Day-to-Day Operations
 
 ```bash
-docker compose stop            # stop (SIGTERM → 5s graceful shutdown; in-flight memory consolidation is not lost)
+docker compose stop            # stop (waits up to 65s for managed drain and process-tree reap budgets)
 docker compose start           # start
 docker compose restart         # restart
 docker compose logs -f stella  # follow logs
@@ -207,8 +207,9 @@ OpenAI-compatible endpoint.
 
 | Symptom | Cause and fix |
 |---|---|
-| `docker compose ps` shows `unhealthy` | The in-container probe of `127.0.0.1:8080/stella/status` failed. Check `docker compose logs stella` first to see how far startup got; commonly `.env` is missing or a model endpoint is unreachable (the probe itself does not depend on models, so usually the process failed to start) |
-| `curl :8080/stella/status` on the host returns 403 | Expected: the endpoint only accepts loopback clients, and 403 actually proves the HTTP server is alive. External monitoring should treat "not 000/timeout" as alive, or probe from inside the container |
+| `docker compose ps` shows `unhealthy` | The container probes Corona loopback liveness at `127.0.0.1:8080/_corona/v1/health`, then falls back to legacy `/stella/status`. Check `docker compose logs stella` and startup progress; missing `.env`, a port mismatch, or a process that never started can cause failure |
+| Docker shows healthy, but the core or QQ is not ready | HEALTHCHECK proves only that the Corona control plane or legacy HTTP service is alive. It does not prove Nucleus business readiness, a QQ connection, or model availability. Corona `/_corona/v1/health` includes `core_phase`; check managed status for core readiness and inspect platform connectivity separately |
+| `curl :8080/stella/status` on the host returns 403 | The legacy endpoint accepts loopback clients only; 403 means the request reached the service, but does not prove business readiness. Probe legacy `/stella/status` or Corona `/_corona/v1/health` from inside the container |
 | Chinese characters in rendered cards turn into boxes | Should not happen -- CJK fonts are baked into the image. It only happens with hand-rolled slim images that dropped `fonts-noto-cjk` |
 | Proactive-chat timing is all wrong | Check `TZ` (the image defaults to `Asia/Shanghai`; override in compose) |
 | `deploy init` cannot write to `/data` | The host directory's owner is not uid 1000: `sudo chown -R 1000:1000 StellaData`, or switch to a named volume (see below) |

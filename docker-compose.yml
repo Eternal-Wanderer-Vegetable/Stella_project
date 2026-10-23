@@ -31,8 +31,8 @@ services:
     # 收割 playwright 拉起的 node/chromium 子进程；SIGTERM → uvicorn 优雅停机
     init: true
     restart: unless-stopped
-    # bot.py 里 uvicorn 已设 5s 优雅停机（在途记忆整合不丢），这里给足余量
-    stop_grace_period: 15s
+    # Corona 全局排空 45s + 强停/reap 10s，宿主至少留到 65s；覆盖当前 legacy 与 managed。
+    stop_grace_period: 65s
     environment:
       # 镜像里已有同值默认；显式写出方便按部署地区改
       TZ: Asia/Shanghai

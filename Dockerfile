@@ -33,8 +33,7 @@ LABEL org.opencontainers.image.title="Stella" \
 # tzdata：主动搭话、消息新鲜度判定都依赖本地时间语义（TZ），容器默认 UTC 会错；
 # fonts-noto-cjk：playwright 渲染插件卡片的中文字体——--with-deps 只装浏览器系统库
 #   不装字体，缺了中文渲染成豆腐块；
-# curl：HEALTHCHECK 探活 /stella/status（该端点只接受回环访问，而健康检查在
-#   容器内执行恰好是回环）。
+# curl：HEALTHCHECK 先探 Corona 回环存活端点，迁移期间再兼容 legacy /stella/status。
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata fonts-noto-cjk curl \
     && rm -rf /var/lib/apt/lists/*
@@ -92,7 +91,8 @@ USER stella
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8080/stella/status || exit 1
+    CMD curl -fsS http://127.0.0.1:8080/_corona/v1/health >/dev/null \
+        || curl -fsS http://127.0.0.1:8080/stella/status >/dev/null
 
 # 启动 Bot 前校验 /data/.env 存在（缺失则打印引导并退出），其他命令直接放行。
 # 想绕过 entrypoint 直接执行命令时用 --entrypoint。

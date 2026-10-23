@@ -136,6 +136,11 @@ Stella_project/
 │   ├── selector.py                 # Engine selection (wheel probing + legacy shadow/strict switch compatibility)
 │   └── native/                     # PyO3/maturin sources (schema.rs embeds the SQL)
 │
+├── corona/                         # Independent control process: auth, config recovery, WebUI proxy, Nucleus supervision
+├── nucleus/                        # Managed business-process entry: Bot, business routes, bounded lifecycle
+├── stella_bootstrap/               # Shared home, identity, environment, and configuration-revision parsing
+├── stella_contracts/               # Versioned Corona/Nucleus control, route-catalog, and local IPC contracts
+│
 ├── extensions/                     # Automatically loaded extensions (scan setup(pipeline))
 │   ├── __init__.py                 # Extension loader
 │   └── link_monitor/               # OneBot link monitoring (heartbeat + active probing, alerts only)
