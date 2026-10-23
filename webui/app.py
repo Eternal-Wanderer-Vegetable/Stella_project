@@ -20,8 +20,6 @@ from fastapi.responses import JSONResponse
 import config.settings as settings
 from webui.auth import LoginRateLimiter
 from webui.responses import ApiError, error
-from webui.routers import auth as auth_router_module
-from webui.routers import status as status_router_module
 from webui.static import register_static
 
 # importlib.metadata 查不到（源码直跑）时的回退版本号，与 status_api 同款惯例
@@ -64,7 +62,49 @@ def _project_version() -> str:
         return _FALLBACK_VERSION
 
 
-def create_webui_app() -> FastAPI:
+def webui_route_routers():
+    """Return the ordered API routers shared by legacy and managed assembly."""
+    from webui.routers import auth as auth_router_module
+    from webui.routers import chat as chat_router_module
+    from webui.routers import cometa as cometa_router_module
+    from webui.routers import config as config_router_module
+    from webui.routers import conversations as conversations_router_module
+    from webui.routers import evaluation as evaluation_router_module
+    from webui.routers import logs as logs_router_module
+    from webui.routers import manage as manage_router_module
+    from webui.routers import personal_memory as personal_memory_router_module
+    from webui.routers import platform as platform_router_module
+    from webui.routers import plugins as plugins_router_module
+    from webui.routers import plugins_mg as plugins_mg_router_module
+    from webui.routers import providers as providers_router_module
+    from webui.routers import status as status_router_module
+    from webui.routers import trace as trace_router_module
+    from webui.routers import usage as usage_router_module
+
+    return (
+        auth_router_module.router,
+        status_router_module.router,
+        usage_router_module.router,
+        providers_router_module.router,
+        platform_router_module.router,
+        plugins_router_module.router,
+        conversations_router_module.router,
+        trace_router_module.router,
+        logs_router_module.router,
+        config_router_module.router,
+        manage_router_module.mcp_router,
+        manage_router_module.skills_router,
+        manage_router_module.kb_router,
+        manage_router_module.sched_router,
+        plugins_mg_router_module.router,
+        personal_memory_router_module.router,
+        cometa_router_module.router,
+        chat_router_module.router,
+        evaluation_router_module.router,
+    )
+
+
+def create_webui_app(*, include_static: bool = True) -> FastAPI:
     app = FastAPI(
         title="Stella WebUI API",
         version=_project_version(),
@@ -75,50 +115,8 @@ def create_webui_app() -> FastAPI:
     app.state.rate_limiter = LoginRateLimiter(
         int(settings.WEBUI_LOGIN_RATELIMIT_PER_MIN)
     )
-    app.include_router(auth_router_module.router)
-    app.include_router(status_router_module.router)
-    # M1 只读面板（usage / providers / platform / plugins / conversations / trace / logs）
-    from webui.routers import chat as chat_router_module
-    from webui.routers import config as config_router_module
-    from webui.routers import conversations as conversations_router_module
-    from webui.routers import logs as logs_router_module
-    from webui.routers import manage as manage_router_module
-    from webui.routers import personal_memory as personal_memory_router_module
-    from webui.routers import platform as platform_router_module
-    from webui.routers import plugins as plugins_router_module
-    from webui.routers import plugins_mg as plugins_mg_router_module
-    from webui.routers import providers as providers_router_module
-    from webui.routers import trace as trace_router_module
-    from webui.routers import usage as usage_router_module
-
-    app.include_router(usage_router_module.router)
-    app.include_router(providers_router_module.router)
-    app.include_router(platform_router_module.router)
-    app.include_router(plugins_router_module.router)
-    app.include_router(conversations_router_module.router)
-    app.include_router(trace_router_module.router)
-    app.include_router(logs_router_module.router)
-    # M2 写入面（config/providers/platform/spaces/groups/system 一体的 config router）
-    app.include_router(config_router_module.router)
-    # M3 子系统管理（plugins 写侧 / mcp / skills / knowledge / scheduling）
-    app.include_router(manage_router_module.mcp_router)
-    app.include_router(manage_router_module.skills_router)
-    app.include_router(manage_router_module.kb_router)
-    app.include_router(manage_router_module.sched_router)
-    app.include_router(plugins_mg_router_module.router)
-    # 个人记忆管理（计划 §6.9）：owner/audience 审计/删除/导出（管理员）
-    app.include_router(personal_memory_router_module.router)
-    # cometa 外部 Agent 任务（design_docs/Cometa 外部 Agent 任务运行层实施方案 §6.14；
-    # 未启用时端点返回 503 envelope，前端隐藏入口）
-    from webui.routers import cometa as cometa_router_module
-
-    app.include_router(cometa_router_module.router)
-    # M4 WebChat（虚拟群 ingress，方案 §13）
-    app.include_router(chat_router_module.router)
-    # M5 隔离验证执行器（计划 §6.7）：固定 CLI/参数 schema，实验并发上限 1
-    from webui.routers import evaluation as evaluation_router_module
-
-    app.include_router(evaluation_router_module.router)
+    for router in webui_route_routers():
+        app.include_router(router)
 
     @app.exception_handler(ApiError)
     async def _api_error_handler(_request: Request, exc: ApiError):
@@ -128,17 +126,13 @@ def create_webui_app() -> FastAPI:
     async def _validation_error_handler(_request: Request, exc: RequestValidationError):
         # FastAPI 默认 422 是 {detail:[...]} 原生形状，前端 envelope 约定读不到
         # message——统一翻成 error envelope（契约见 openspec/openapi-v1.yaml）。
-        return JSONResponse(
-            error(_validation_message(exc.errors())), status_code=422
-        )
+        return JSONResponse(error(_validation_message(exc.errors())), status_code=422)
 
     @app.exception_handler(Exception)
     async def _unhandled_handler(_request: Request, exc: Exception):
         # 兜底 500：内部细节（路径、库版本）不进响应体，只进进程日志
-        return JSONResponse(
-            error("服务器内部错误"), status_code=500
-        )
+        return JSONResponse(error("服务器内部错误"), status_code=500)
 
-    if settings.WEBUI_SERVE_DIST:
+    if include_static and settings.WEBUI_SERVE_DIST:
         register_static(app)
     return app

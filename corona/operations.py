@@ -70,6 +70,7 @@ class OperationManager:
         target_revision: str | None = None,
         idempotency_key: str | None = None,
         actor: Mapping[str, str] | None = None,
+        group_binding_operation_id: str | None = None,
     ) -> dict[str, Any]:
         if kind not in {"apply", "restart", "core_start", "core_stop"}:
             raise OperationError("operation_kind_invalid")
@@ -135,6 +136,33 @@ class OperationManager:
                     raise OperationError(
                         "operation_in_progress", active_operation=active[0]
                     )
+                saga_table = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='group_binding_sagas'"
+                ).fetchone()
+                if saga_table is not None:
+                    pending_sagas = conn.execute(
+                        "SELECT operation_id,phase FROM group_binding_sagas WHERE phase NOT IN ('succeeded','rolled_back','failed') ORDER BY created_at"
+                    ).fetchall()
+                    if (
+                        any(
+                            phase == "needs_reconcile"
+                            for _op_id, phase in pending_sagas
+                        )
+                        and kind == "apply"
+                    ):
+                        conn.rollback()
+                        raise OperationError("group_bindings_needs_reconcile")
+                    for saga_id, phase in pending_sagas:
+                        if (
+                            kind != "apply"
+                            or group_binding_operation_id != saga_id
+                            or phase == "needs_reconcile"
+                        ):
+                            conn.rollback()
+                            raise OperationError(
+                                "group_bindings_in_progress",
+                                active_operation=saga_id,
+                            )
                 operation_id = secrets.token_urlsafe(24)
                 now = _now()
                 conn.execute(

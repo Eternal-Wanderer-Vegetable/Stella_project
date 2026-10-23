@@ -63,6 +63,7 @@ class InternalRequestGuard:
         state = dict(scope.get("state") or {})
         assert actor is not None
         state["stella_actor"] = actor.to_dict()
+        state["stella_internal_authenticated"] = True
         state["stella_request_id"] = _single_header(
             scope.get("headers", ()), HEADER_REQUEST_ID.encode("ascii")
         )
@@ -88,7 +89,9 @@ class InternalRequestGuard:
             return 401, "unauthorized", None
         capability = values.get(HEADER_CAPABILITY)
         expected_capability = self.lifecycle.launch_token.encode("ascii")
-        if capability is None or not hmac.compare_digest(capability, expected_capability):
+        if capability is None or not hmac.compare_digest(
+            capability, expected_capability
+        ):
             return 401, "unauthorized", None
 
         if values.get(HEADER_PROTOCOL) != str(CONTROL_PROTOCOL_VERSION).encode("ascii"):

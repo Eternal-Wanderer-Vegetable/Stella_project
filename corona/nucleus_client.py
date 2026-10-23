@@ -20,6 +20,7 @@ from stella_contracts.control import (
     TrustedActor,
     internal_headers,
     lifecycle_payload,
+    new_request_id,
     validate_health_payload,
     validate_lifecycle_ack,
 )
@@ -136,14 +137,34 @@ class NucleusClient:
         request_id: str | None = None,
     ) -> dict[str, str]:
         """Strip caller control/auth headers, then mint this generation's headers."""
-        pairs = incoming.items() if isinstance(incoming, Mapping) else incoming
-        forwarded: dict[str, str] = {}
+        return dict(
+            self.forward_header_pairs(incoming, actor=actor, request_id=request_id)
+        )
+
+    def forward_header_pairs(
+        self,
+        incoming: Mapping[str, str] | list[tuple[str, str]],
+        *,
+        actor: TrustedActor,
+        request_id: str | None = None,
+    ) -> list[tuple[str, str]]:
+        """Preserve repeatable application headers while replacing trust headers."""
+        pairs = list(incoming.items() if isinstance(incoming, Mapping) else incoming)
+        connection_tokens = {
+            token.strip().lower()
+            for raw_name, raw_value in pairs
+            if str(raw_name).lower().strip() == "connection"
+            for token in str(raw_value).split(",")
+            if token.strip()
+        }
+        excluded = _HOP_BY_HOP | connection_tokens
+        forwarded: list[tuple[str, str]] = []
         for raw_name, raw_value in pairs:
             name = str(raw_name).lower().strip()
             if (
                 not name
                 or name.startswith("x-stella-")
-                or name in _HOP_BY_HOP
+                or name in excluded
                 or (name == "authorization" and actor.kind != "adapter")
                 or "\r" in name
                 or "\n" in name
@@ -152,14 +173,14 @@ class NucleusClient:
             value = str(raw_value)
             if "\r" in value or "\n" in value:
                 continue
-            forwarded[name] = value
-        forwarded.update(
+            forwarded.append((name, value))
+        forwarded.extend(
             internal_headers(
                 identity=self.identity,
                 capability=self.capability,
                 actor=actor,
                 request_id=request_id,
-            )
+            ).items()
         )
         return forwarded
 
@@ -174,6 +195,115 @@ class NucleusClient:
         if incoming is None:
             incoming = request.headers
         return self.forward_headers(incoming, actor=actor, request_id=request_id)
+
+    async def proxy_http(self, request: Any, actor: TrustedActor) -> Any:
+        """Stream one already-authorized API request to this exact generation."""
+        import httpx
+
+        from corona.proxy import ProxyResponse, response_headers
+
+        raw_path = request.scope.get("raw_path")
+        if not isinstance(raw_path, bytes) or not raw_path.startswith(b"/"):
+            raw_path = request.url.path.encode("ascii", errors="strict")
+        if b"%2f" in raw_path.lower() or b"%5c" in raw_path.lower():
+            raise NucleusProtocolError("unsafe_encoded_path")
+        query = request.scope.get("query_string", b"")
+        target = raw_path + (b"?" + query if query else b"")
+        url = httpx.URL(scheme="http", host=self.host, port=self.port, raw_path=target)
+        incoming = [
+            (bytes(name).decode("latin-1"), bytes(value).decode("latin-1"))
+            for name, value in request.scope.get("headers", ())
+        ]
+        headers = self.forward_header_pairs(incoming, actor=actor)
+
+        async def request_body():
+            async for chunk in request.stream():
+                if chunk:
+                    yield chunk
+
+        client = httpx.AsyncClient(
+            follow_redirects=False,
+            trust_env=False,
+            timeout=httpx.Timeout(None, connect=self.timeout),
+        )
+        try:
+            outgoing = client.build_request(
+                request.method,
+                url,
+                headers=headers,
+                content=request_body(),
+            )
+            response = await client.send(outgoing, stream=True)
+        except (httpx.RequestError, OSError, TimeoutError) as exc:
+            await client.aclose()
+            raise NucleusProtocolError("core_unavailable") from exc
+        except BaseException:
+            await client.aclose()
+            raise
+
+        async def close() -> None:
+            await response.aclose()
+            await client.aclose()
+
+        return ProxyResponse(
+            status_code=response.status_code,
+            headers=response_headers(response.headers.raw),
+            body=response.aiter_raw(),
+            close=close,
+        )
+
+    def group_bindings(
+        self, action: str, payload: dict[str, object], *, actor: TrustedActor
+    ) -> dict[str, Any]:
+        """Call one private, actor-bound group binding operation."""
+        paths = {
+            "validate": "/_nucleus/v1/private/groups/bindings/validate",
+            "apply": "/_nucleus/v1/private/groups/bindings/apply",
+            "rollback": "/_nucleus/v1/private/groups/bindings/rollback",
+        }
+        path = paths.get(action)
+        if path is None:
+            raise NucleusProtocolError("unknown_group_bindings_operation")
+        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers = self.forward_headers(
+            {"Content-Type": "application/json"},
+            actor=actor,
+            request_id=new_request_id(),
+        )
+        request = urllib.request.Request(
+            f"http://{self.host}:{self.port}{path}",
+            data=encoded,
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with self._opener.open(request, timeout=self.timeout) as response:
+                status = response.status
+                body = response.read(1024 * 1024 + 1)
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+            body = exc.read(1024 * 1024 + 1)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise NucleusProtocolError("core_unavailable") from exc
+        if len(body) > 1024 * 1024:
+            raise NucleusProtocolError("response_too_large")
+        try:
+            response = json.loads(body)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise NucleusProtocolError("invalid_response") from exc
+        if not isinstance(response, dict):
+            raise NucleusProtocolError("invalid_response")
+        if status < 200 or status >= 300 or response.get("status") != "ok":
+            data = response.get("data")
+            code = data.get("code") if isinstance(data, dict) else None
+            message = response.get("message")
+            raise NucleusProtocolError(
+                str(code or message or f"group_bindings_http_{status}")
+            )
+        data = response.get("data")
+        if not isinstance(data, dict):
+            raise NucleusProtocolError("invalid_response")
+        return data
 
     def _request(
         self, method: str, path: str, payload: dict[str, object] | None = None

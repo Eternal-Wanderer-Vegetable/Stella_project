@@ -168,6 +168,21 @@ class CoreSupervisor:
             return False
         return status == 200 and payload.get("ready") is True
 
+    def business_client(self) -> NucleusClient | None:
+        """Return an identity-bound client only while this exact core is ready."""
+        tree = self._tree
+        if (
+            tree is None
+            or tree.poll() is not None
+            or self._snapshot.phase != "ready"
+            or not self._identity
+            or not self._token
+            or self._snapshot.generation_id != self._identity.get("generation_id")
+            or self._snapshot.revision_id != self._identity.get("revision_id")
+        ):
+            return None
+        return self._nucleus_client(dict(self._identity), self._token)
+
     async def stop(self, operation_id: str | None = None, *, already_drained: bool = False) -> None:
         self._desired = False
         tree = self._tree

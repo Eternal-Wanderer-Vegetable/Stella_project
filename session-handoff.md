@@ -2,9 +2,9 @@
 
 ## Current Session — Corona / Nucleus implementation
 
-**Current Objective:** CORONA-IMPL, execute CN00–CN11 sequentially with a commit per completed package. Branch `codex/corona-nucleus-implementation`. Plan/evidence baseline `864c08f`; CN00 `f9d6920`, CN01 `336dc78`, CN02 `73d7c60`, CN03 `38ceb89`, CN04 `ff9d1bc`. CN05 implementation/evidence is complete and awaits its final staged graph gate/package commit; CN06 is next. Overall implementation remains in progress / NOT READY.
+**Current Objective:** CORONA-IMPL, execute CN00–CN11 sequentially with a commit per completed package. Branch `codex/corona-nucleus-implementation`. Plan/evidence baseline `864c08f`; CN00 `f9d6920`, CN01 `336dc78`, CN02 `73d7c60`, CN03 `38ceb89`, CN04 `ff9d1bc`, CN05 `5ae639b`. CN06 implementation and evidence are ready; its staged graph gate and package commit are in progress, then CN07. Overall implementation remains in progress / NOT READY.
 
-**Files:** [Engineering plan](docs/plans/2026-10-23-corona-nucleus-engineering-plan.md), [machine inventory](docs/plans/2026-10-23-corona-nucleus-inventory.json), CN00–CN04 reports, [CN05 Chinese report](docs/reports/2026-10-23-corona-nucleus-cn05.md) and [English report](docs/reports/2026-10-23-corona-nucleus-cn05.en.md), [planning evidence and verifier](docs/reports/evidence/corona-nucleus-20261023/README.md), `stella_bootstrap/`, `stella_contracts/`, `corona/`, `nucleus/`, and the task-state files.
+**Files:** [Engineering plan](docs/plans/2026-10-23-corona-nucleus-engineering-plan.md), [machine inventory](docs/plans/2026-10-23-corona-nucleus-inventory.json), [CN06 Chinese report](docs/reports/2026-10-23-corona-nucleus-cn06.md) and [English report](docs/reports/2026-10-23-corona-nucleus-cn06.en.md), CN00–CN05 reports, [planning evidence and verifier](docs/reports/evidence/corona-nucleus-20261023/README.md), `stella_bootstrap/`, `stella_contracts/`, `corona/`, `nucleus/`, and the task-state files.
 
 **CN00 Done:** Re-ran the eight-file existing lifecycle/deploy/WebUI baseline in a temporary `STELLA_HOME` (83 passed / 35.75s), added config source ordering / legacy entry order / NoneBot snapshot Driver tests (3 passed / 0.86s), and Ruff passed. The plan verifier reconfirmed 199 source fingerprints, 133 routes, 426 keys, 34 scenarios and 77 hashes; docs passed (119/1266/577/0). Pre-commit GitNexus all: 9 files / 27 symbols / LOW; compare main: 112 files / 141 symbols / LOW. A parallel compare was PARTIAL, discarded, and rerun alone successfully. The real NoneBot 2.5.0 FastAPI Driver was initialized in a synthetic project cwd with explicit no-file `Env/Config`; `nonebot.init(None)`'s dotenv read was reproduced. No real Bot, server, model, platform or production DB was used.
 
@@ -22,18 +22,20 @@
 
 **CN05 Done (implementation):** Added revision CAS and crash-recoverable `.env` journaling, external-edit-safe conditional rollback, single-active idempotent lifecycle operations, exact-revision target readiness, startup recovery, authenticated configuration/operation APIs, and resumable operation SSE. The old launcher remains default. Focused Corona/Nucleus regressions: 40 passed / 6.43s; Ruff, compileall, flow and docs passed. Latest full Python: 4072 passed / 29 skipped / 4 failed / 1 warning / 251.38s; all four exact failures passed alone (4 passed / 6.03s), but full-run order/shared-state cause is unknown and this gate remains NOT GREEN. Isolated `/tmp` / pytest data only, no user database or live service. Staged GitNexus all: 17/17/13/HIGH; compare main: 182/720/88/CRITICAL cumulative, serial with no partial/truncated output. See bilingual [CN05 report](docs/reports/2026-10-23-corona-nucleus-cn05.md).
 
-**Blockers / Acceptance Boundary:** CN06–CN11 remain unimplemented. Business API forwarding, live model/QQ/WebChat, Windows/macOS/BSD clean VM, Docker and final release acceptance are NOT READY. Full Python has unresolved suite-order failures despite isolated node reruns. Existing WEBUI-STARTUP-BUILD evidence/status remains preserved; PR #118 was not rechecked.
+**CN06 Done (implementation; package commit pending):** On base `5ae639b`, added the frozen 21 Corona / 111 Nucleus / 1 mixed route ownership contract, filtered Nucleus route assembly, generation-bound HTTP business proxy, signed managed-admin context, and persistent cross-process group-binding saga with a separate Nucleus space-file journal, idempotent apply, external-edit-safe recovery, conditional compensation, and apply blocking while unresolved. Legacy remains the default. Focused tests: **25 passed / 12.42s**; Corona/WebUI/personal-memory: **192 passed / 29.24s**; Ruff, compileall, and message-flow passed. Full Python: **4087 passed / 29 skipped / 1 failed / 3 warnings / 256.16s**. `test_command_full_text_via_receipt_path` failed only in full suite; exact node passed alone (1/0.59s) and its containing module passed (24/2.90s). Cause unknown; full suite remains NOT GREEN. Validation used explicit isolated `/tmp` homes and pytest temporary paths. Precommit serial staged graph gates and docs check remain to be recorded in [CN06 report](docs/reports/2026-10-23-corona-nucleus-cn06.md).
+
+**Blockers / Acceptance Boundary:** CN07–CN11 remain unimplemented. CN06 business `/api/v1/` HTTP forwarding does not yet implement stable platform HTTP/SSE/WS adapter routing or `/stella/status` original-peer protection. Live model/QQ/WebChat, Windows/macOS/BSD clean VM, Docker and final release acceptance remain NOT READY. Full Python has unresolved suite-order failures despite isolated node reruns. Existing WEBUI-STARTUP-BUILD evidence/status remains preserved; PR #118 was not rechecked.
 
 **GitNexus CN02 commit gates:** Serial staged detect-changes all: 16 files / 9 symbols / 1 process / MEDIUM. Compare main: 146 files / 291 symbols / 58 processes / CRITICAL cumulative; neither output indicated partial/truncated. Details are in the CN02 report. CN03 final staged gates are 24 files / 36 symbols / 7 processes / HIGH for all and 163 / 423 / 65 / CRITICAL cumulative for compare main; serial post-evidence rerun matched, with no partial/truncated marker.
 
-**Recommended Next Step:** Commit CN05 as one package after final serial staged GitNexus checks, then start CN06 from the new HEAD. Keep default launch on legacy until CN11.
+**Recommended Next Step:** Rerun docs and serial staged GitNexus after the recorded metrics/state update, commit CN06 as one package, and start CN07 from the resulting HEAD. Final staged all: 21 files / 51 symbols / 745 processes / CRITICAL; compare main: 193 / 442 / 745 / CRITICAL cumulative, no partial/truncated markers. Keep default launch on legacy until CN11.
 
 Minimal resume commands:
 
 ```bash
 git status --short
 node .gitnexus/run.cjs status
-.venv/bin/python -m pytest tests/corona/test_config_source_snapshot.py tests/nucleus/test_snapshot_driver.py -q
+.venv/bin/python -m pytest tests/corona/test_group_bindings.py tests/corona/test_nucleus_client.py tests/webui/test_webui_mount.py -q
 ```
 
 ## Inherited Session — Source Dashboard startup rebuild and release audit

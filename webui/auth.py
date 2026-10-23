@@ -72,6 +72,22 @@ def require_auth(request: Request) -> AuthContext:
     desktop-session 换发的 token 与普通 token 形状一致，这里不区分——
     区分只在签发时刻记审计。
     """
+    state = request.scope.get("state") or {}
+    if state.get("stella_internal_authenticated") is True:
+        actor = state.get("stella_actor")
+        if (
+            not isinstance(actor, dict)
+            or actor.get("kind") != "admin"
+            or actor.get("authentication") != "jwt"
+            or not isinstance(actor.get("actor_id"), str)
+            or not actor["actor_id"].strip()
+        ):
+            raise ApiError("未授权", status_code=401)
+        return AuthContext(
+            username=actor["actor_id"],
+            via="managed-jwt",
+        )
+
     token = ""
     auth_header = request.headers.get("Authorization", "").strip()
     if auth_header.startswith("Bearer "):
@@ -93,9 +109,7 @@ def verify_desktop_session(request: Request) -> None:
         raise ApiError("桌面免登录未启用", status_code=401)
     import hmac as _hmac
 
-    if not _hmac.compare_digest(
-        provided.encode("utf-8"), expected.encode("utf-8")
-    ):
+    if not _hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8")):
         raise ApiError("桌面免登录凭证无效", status_code=401)
     host = client_host(request)
     if not _is_loopback(host):

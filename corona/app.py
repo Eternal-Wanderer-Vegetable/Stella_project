@@ -16,8 +16,10 @@ from corona.auth import router as auth_router
 from corona.bootstrap import CoronaBootstrap
 from corona.config_api import router as config_api_router
 from corona.config_store import ConfigStore
+from corona.group_bindings import GroupBindingsCoordinator, install_group_bindings
 from corona.local_control import create_local_control_app, create_local_control_record
 from corona.operations import OperationManager
+from corona.routes import install_business_proxy
 from corona.supervisor import CoreSupervisor
 from stella_contracts.control import CONTROL_PROTOCOL_VERSION
 from webui.responses import ApiError, error, ok
@@ -82,6 +84,7 @@ def create_corona_app(
     app.state.supervisor = supervisor
     app.state.config_store = config_store
     app.state.operation_manager = operation_manager
+    app.state.group_bindings_coordinator = None
     app.state.startup_decision = startup_decision
     app.state.auth_audit_path = bootstrap.log_dir / "corona_auth_audit.jsonl"
     app.state.local_control_record = local_control_record
@@ -105,11 +108,18 @@ def create_corona_app(
         app.include_router(auth_router)
         if config_store is not None and operation_manager is not None:
             app.include_router(config_api_router)
+            coordinator = GroupBindingsCoordinator(
+                config_store, operation_manager, supervisor
+            )
+            app.state.group_bindings_coordinator = coordinator
+            install_group_bindings(app, coordinator)
 
         @app.get("/api/v1/system/core")
         async def core_status(request: Request):
             _require_admin(request)
             return ok(supervisor.snapshot.public())
+
+        install_business_proxy(app, supervisor)
 
         if bootstrap.serve_dist:
             from webui.static import register_static_from_directory

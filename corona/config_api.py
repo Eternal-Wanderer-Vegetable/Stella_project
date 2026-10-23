@@ -705,7 +705,13 @@ def _actor(auth: AuthContext) -> dict[str, str]:
 
 
 def _operation_api_error(exc: OperationError) -> ApiError:
-    conflicts = {"revision_conflict", "operation_in_progress", "idempotency_conflict"}
+    conflicts = {
+        "revision_conflict",
+        "operation_in_progress",
+        "idempotency_conflict",
+        "group_bindings_in_progress",
+        "group_bindings_needs_reconcile",
+    }
     return ApiError(
         exc.code,
         status_code=409 if exc.code in conflicts else 400,

@@ -15,6 +15,8 @@ OneBot WS（不被吞）→ /stella/status（行为不变）→ /api/v1/*（本�
 
 from __future__ import annotations
 
+import os
+
 import config.settings as settings
 
 
@@ -40,7 +42,12 @@ async def _mount_hook() -> None:
     try:
         from nonebot import get_app, get_driver, logger
 
-        mount_webui(get_app())
+        if os.environ.get("STELLA_MANAGED_CORE") == "1":
+            from nucleus.routes import mount_nucleus_business_routes
+
+            mount_nucleus_business_routes(get_app())
+        else:
+            mount_webui(get_app())
         # 日志里的端口取真实值：字面量 "<PORT>" 会被 loguru 色彩解析器当成
         # 颜色标签（<> 是它的标记语法），控制台 handler 直接抛 ValueError
         # （2026-09-23 热测踩过）。
