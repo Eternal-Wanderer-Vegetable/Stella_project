@@ -1,0 +1,325 @@
+{
+  "source_url": "https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5",
+  "updated_at": "2026-10-22",
+  "adapters": [
+    {
+      "name": "OneBot V11",
+      "module": "nonebot.adapters.onebot.v11",
+      "package": "nonebot-adapter-onebot",
+      "description": "OneBot V11 协议",
+      "homepage": "https://onebot.adapters.nonebot.dev/",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "钉钉",
+      "module": "nonebot.adapters.ding",
+      "package": "nonebot-adapter-ding",
+      "description": "钉钉协议",
+      "homepage": "https://github.com/nonebot/adapter-ding",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "飞书",
+      "module": "nonebot.adapters.feishu",
+      "package": "nonebot-adapter-feishu",
+      "description": "飞书协议",
+      "homepage": "https://github.com/nonebot/adapter-feishu",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "Telegram",
+      "module": "nonebot.adapters.telegram",
+      "package": "nonebot-adapter-telegram",
+      "description": "Telegram 协议",
+      "homepage": "https://github.com/nonebot/adapter-telegram",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "QQ",
+      "module": "nonebot.adapters.qq",
+      "package": "nonebot-adapter-qq",
+      "description": "QQ 官方机器人",
+      "homepage": "https://github.com/nonebot/adapter-qq",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "开黑啦",
+      "module": "nonebot.adapters.kaiheila",
+      "package": "nonebot-adapter-kaiheila",
+      "description": "开黑啦协议适配",
+      "homepage": "https://github.com/Tian-que/nonebot-adapter-kaiheila",
+      "official": false,
+      "tags": []
+    },
+    {
+      "name": "Mirai",
+      "module": "nonebot.adapters.mirai",
+      "package": "nonebot-adapter-mirai",
+      "description": "mirai-api-http v2 协议适配",
+      "homepage": "https://github.com/nonebot/adapter-mirai",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "OneBot V12",
+      "module": "nonebot.adapters.onebot.v12",
+      "package": "nonebot-adapter-onebot",
+      "description": "OneBot V12 协议",
+      "homepage": "https://onebot.adapters.nonebot.dev/",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "Console",
+      "module": "nonebot.adapters.console",
+      "package": "nonebot-adapter-console",
+      "description": "基于终端的交互式适配器",
+      "homepage": "https://github.com/nonebot/adapter-console",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "GitHub",
+      "module": "nonebot.adapters.github",
+      "package": "nonebot-adapter-github",
+      "description": "GitHub APP & OAuth APP integration",
+      "homepage": "https://github.com/nonebot/adapter-github",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "Ntchat",
+      "module": "nonebot.adapters.ntchat",
+      "package": "nonebot-adapter-ntchat",
+      "description": "pc hook的微信客户端适配",
+      "homepage": "https://github.com/JustUndertaker/adapter-ntchat",
+      "official": false,
+      "available": false,
+      "unavailable_reason": "ntchat",
+      "tags": [
+        "微信"
+      ]
+    },
+    {
+      "name": "Minecraft",
+      "module": "nonebot.adapters.minecraft",
+      "package": "nonebot-adapter-minecraft",
+      "description": "MineCraft通信适配，支持Rcon",
+      "homepage": "https://github.com/17TheWord/nonebot-adapter-minecraft",
+      "official": false,
+      "tags": [
+        "Minecraft"
+      ]
+    },
+    {
+      "name": "BilibiliLive",
+      "module": "nonebot.adapters.bilibili",
+      "package": "nonebot-adapter-bilibili",
+      "description": "b站直播间ws协议",
+      "homepage": "https://github.com/wwweww/adapter-bilibili",
+      "official": false,
+      "tags": []
+    },
+    {
+      "name": "Walle-Q",
+      "module": "nonebot_adapter_walleq",
+      "package": "nonebot-adapter-walleq",
+      "description": "内置 QQ 协议实现",
+      "homepage": "https://github.com/onebot-walle/nonebot_adapter_walleq",
+      "official": false,
+      "available": false,
+      "unavailable_reason": "walleQ",
+      "tags": [
+        "QQ"
+      ]
+    },
+    {
+      "name": "大别野",
+      "module": "nonebot.adapters.villa",
+      "package": "nonebot-adapter-villa",
+      "description": "米游社大别野官方Bot适配",
+      "homepage": "https://github.com/CMHopeSunshine/nonebot-adapter-villa",
+      "official": false,
+      "tags": [
+        "米哈游"
+      ]
+    },
+    {
+      "name": "RedProtocol",
+      "module": "nonebot.adapters.red",
+      "package": "nonebot-adapter-red",
+      "description": "QQNT RedProtocol 适配",
+      "homepage": "https://github.com/nonebot/adapter-red",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "Discord",
+      "module": "nonebot.adapters.discord",
+      "package": "nonebot-adapter-discord",
+      "description": "Discord 官方 Bot 协议适配",
+      "homepage": "https://github.com/nonebot/adapter-discord",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "Satori",
+      "module": "nonebot.adapters.satori",
+      "package": "nonebot-adapter-satori",
+      "description": "Satori 协议适配器",
+      "homepage": "https://github.com/nonebot/adapter-satori",
+      "official": true,
+      "tags": [
+        "跨平台"
+      ]
+    },
+    {
+      "name": "DoDo",
+      "module": "nonebot.adapters.dodo",
+      "package": "nonebot-adapter-dodo",
+      "description": "DoDo Bot 协议适配器",
+      "homepage": "https://github.com/nonebot/adapter-dodo",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "RocketChat",
+      "module": "nonebot.adapters.rocketchat",
+      "package": "nonebot-adapter-rocketchat",
+      "description": "RocketChat adapter for nonebot2",
+      "homepage": "https://github.com/IUnlimit/nonebot-adapter-rocketchat",
+      "official": false,
+      "tags": []
+    },
+    {
+      "name": "Kritor",
+      "module": "nonebot.adapters.kritor",
+      "package": "nonebot-adapter-kritor",
+      "description": "Kritor 协议适配",
+      "homepage": "https://github.com/nonebot/adapter-kritor",
+      "official": true,
+      "tags": [
+        "QQNT"
+      ]
+    },
+    {
+      "name": "Tailchat",
+      "module": "nonebot_adapter_tailchat",
+      "package": "nonebot-adapter-tailchat",
+      "description": "Tailchat 适配器",
+      "homepage": "https://github.com/eya46/nonebot-adapter-tailchat",
+      "official": false,
+      "tags": []
+    },
+    {
+      "name": "Mail",
+      "module": "nonebot.adapters.mail",
+      "package": "nonebot-adapter-mail",
+      "description": "邮件收发协议",
+      "homepage": "https://github.com/mobyw/nonebot-adapter-mail",
+      "official": false,
+      "unavailable_reason": "mailSecurityCompatibility",
+      "tags": []
+    },
+    {
+      "name": "黑盒语音",
+      "module": "nonebot.adapters.heybox",
+      "package": "nonebot-adapter-heybox",
+      "description": "黑盒语音机器人适配",
+      "homepage": "https://github.com/lclbm/adapter-heybox",
+      "official": false,
+      "requires_python": ">=3.11",
+      "tags": []
+    },
+    {
+      "name": "WXMP",
+      "module": "nonebot.adapters.wxmp",
+      "package": "nonebot-adapter-wxmp",
+      "description": "微信公众平台 客服适配器",
+      "homepage": "https://github.com/YangRucheng/nonebot-adapter-wxmp",
+      "official": false,
+      "tags": [
+        "微信公众平台"
+      ]
+    },
+    {
+      "name": "nonebot-adapter-milky",
+      "module": "nonebot.adapters.milky",
+      "package": "nonebot-adapter-milky",
+      "description": "Milky 协议适配器",
+      "homepage": "https://github.com/nonebot/adapter-milky",
+      "official": true,
+      "tags": []
+    },
+    {
+      "name": "nonebot-adapter-efchat",
+      "module": "nonebot.adapters.efchat",
+      "package": "nonebot-adapter-efchat",
+      "description": "适用于EFChat(恒五聊)聊天室的nonebot适配器",
+      "homepage": "https://github.com/molanp/nonebot_adapter_efchat",
+      "official": false,
+      "tags": [
+        "EFChat",
+        "恒五聊"
+      ]
+    },
+    {
+      "name": "nonebot-adapter-vocechat",
+      "module": "nonebot.adapters.vocechat",
+      "package": "nonebot-adapter-vocechat",
+      "description": "Vocechat 协议适配器",
+      "homepage": "https://github.com/5656565566/nonebot-adapter-vocechat",
+      "official": false,
+      "tags": []
+    },
+    {
+      "name": "B站直播间",
+      "module": "nonebot.adapters.bilibili_live",
+      "package": "nonebot-adapter-bilibili-live",
+      "description": "B 站直播间协议（Web API/开放平台）支持",
+      "homepage": "https://github.com/MingxuanGame/nonebot-adapter-bilibili-live",
+      "official": false,
+      "tags": [
+        "bilibili"
+      ]
+    },
+    {
+      "name": "云湖适配器",
+      "module": "nonebot.adapters.yunhu",
+      "package": "nonebot-adapter-yunhu",
+      "description": "云湖的NoneBot适配器",
+      "homepage": "https://github.com/molanp/nonebot-adapter-yunhu",
+      "official": false,
+      "tags": [
+        "云湖"
+      ]
+    },
+    {
+      "name": "WxClaw",
+      "module": "nonebot.adapters.wxclaw",
+      "package": "nonebot-adapter-wxclaw",
+      "description": "基于 openclaw-weixin 协议的 NoneBot2 微信智能体适配器",
+      "homepage": "https://github.com/shoucandanghehe/nonebot-adapter-wxclaw",
+      "official": false,
+      "tags": [
+        "微信"
+      ]
+    },
+    {
+      "name": "Matrix",
+      "module": "nonebot.adapters.matrix",
+      "package": "nonebot-adapter-matrix",
+      "description": "Matrix 协议适配",
+      "homepage": "https://github.com/elysia-best/adapter-matrix",
+      "official": false,
+      "tags": [
+        "matrix"
+      ]
+    }
+  ]
+}

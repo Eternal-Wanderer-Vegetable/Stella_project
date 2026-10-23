@@ -141,6 +141,12 @@ SUPERSEDED: dict[str, str] = {
 SENSITIVE: frozenset[str] = frozenset(
     {
         "ONEBOT_ACCESS_TOKEN",
+        "QQ_BOTS",
+        "TELEGRAM_BOTS",
+        "TELEGRAM_PROXY",
+        "TELEGRAM_WEBHOOK_URL",
+        "DISCORD_BOTS",
+        "DISCORD_PROXY",
         "NAPCAT_QQ_PASSWORD",
         "NAPCAT_QQ_PASSWORD_MD5",
         "LM_STUDIO_API_KEY",

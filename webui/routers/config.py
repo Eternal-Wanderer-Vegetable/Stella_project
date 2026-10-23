@@ -134,7 +134,13 @@ async def platform_adapters_put(
     auth: Annotated[AuthContext, Depends(require_auth)],
 ) -> Any:
     result = platformcfg_service.update_adapters(payload)
-    _audited(request, auth, "platform.adapters", modules=result["modules"])
+    _audited(
+        request,
+        auth,
+        "platform.adapters",
+        modules=result["modules"],
+        configured_connections=sorted((payload.get("connections") or {}).keys()),
+    )
     return ok(result)
 
 

@@ -1,6 +1,74 @@
 # Session Handoff
 
-## Current Session — Source Dashboard startup rebuild and release audit
+## Current Session — PR #119 CI repair (complete)
+
+- Objective: diagnose and repair the failed checks for [PR #119](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/119), branch `codex/frontend-ui-polish`; initial head `b61b4a17047335858eed3957b757a79bd08333bd`.
+- Hosted failure evidence: run `39932294138` failed `lint` (Ruff I001 at `core/transport/adapter_policy.py:6`) and `security` (`pip-audit` found cryptography 48.0.1 and aiosmtplib 3.0.2 advisories); Docker Publish run `39932294215` failed `pnpm build` with TS2307 because `PlatformsPage.vue` imports `webui/services/nonebot_adapter_catalog.json`, which the Dashboard build stage did not copy.
+- Fixes in the worktree: removed the extra Ruff blank line; copied the catalog into `/webui/services/` before Docker Dashboard build; blocked Mail in catalog/runtime/UI and removed it from `requirements.txt`, `pyproject.toml`, and the regenerated platform lock because its only release requires `aiosmtplib~=3.0` while the security fix requires 5.1.2+. QQ upstream still caps cryptography `<49`; the workflow ignores only `PYSEC-2026-3552`, `3553`, and `3554`, with that exception and removal condition documented in both CI guides.
+- Reproduction/validation so far: exact merge worktree `95e1e8fe3e7fcf9150508eca904bb3068ef151f0`; Ruff 0.17.2 `ruff check .` passed; clean temporary dashboard stage failed before the catalog copy with the same TS2307 and passed `pnpm build` after the copy; `uv pip compile --universal --python-version 3.10 -o requirements-platform.lock requirements-platform.in` resolved 167 packages; exact `pip-audit` command exited 0 with no known vulnerabilities and 6 findings ignored by the three specified PYSEC IDs; docs check (121 files / 1262 links / 577 anchors / 0 errors), JSON parse, and `git diff --check` passed. Local Docker daemon is unavailable.
+- GitNexus: index `Stella_project` (`E:\\stella\\stella_project`) at `b61b4a1`; `unavailable_adapter_reasons` upstream impact HIGH (3 direct callers, 2 platform processes); `BLOCKED_ADAPTERS` UNKNOWN/0 supplemented by source references. `detect-changes --scope all`: 18 files / 18 symbols / 0 processes / LOW. `--scope compare --base-ref main`: 37 files / 369 symbols / 20 processes / CRITICAL from the cumulative branch; neither result had partial/truncated flags.
+- Follow-up CI result on commit `2c8c8e34e65eb6e1b5d6f85ea40a33ba7b93b3cb`: Dashboard CI run `39935046449` and Docker Publish `39935046467` passed; main CI `39935046437` passed lint, security, documentation, CLI, flow-manifest, flow-closure, public memory benchmark, and Windows native matrix. Its Python 3.10 / 3.11 / 3.12 tests all failed with the same `ModuleNotFoundError: No module named 'tests.*'` (9–10 failures, 17 collection errors). Source inspection confirms many absolute `from tests...` references, while the repository had no `tests/__init__.py`; pytest therefore did not establish the repository root as the `tests` package root.
+- Follow-up fix in worktree: add `tests/__init__.py`. A Python 3.10 import-resolution check now resolves `tests` to the repository and finds `tests.astrbot_compat.conftest`, `tests.cometa_helpers`, `tests.capability.providers.conftest`, `tests.test_migrations`, and `tests.test_proactive_target`. Isolated pytest collection reaches the actual `astrbot_compat` import (it then stops because the temporary probe intentionally lacks `nonebot`); hosted matrix rerun is still needed.
+- CI run `39936164733`, Docker Publish `39936164720`, and Dashboard CI `39936164749` on commit `ef85ca56f17da034b733b77552b1f861b747cd5f`: Docker and Dashboard passed. The CI workflow passed every job except `test (3.12)`; the package marker made `test (3.10)` and `test (3.11)` pass. The remaining failure was `tests/webui/test_webui_readonly.py::test_query_daily_reads_temp_db`, which expected one row but received six. `query_daily()` calls `flush()` before reading, so pending process-global usage rows from other tests were flushed into the test's monkeypatched temporary DB. GitNexus file impact is UNKNOWN / 0 (test files not represented as caller symbols); source search confirms the `query_daily()` call and `flush()` behavior.
+- Follow-up fix: commit `019824d2d23995ac23b91ddd8795d1e31fe96958` adds a `clean_usage_store` fixture in `tests/webui/conftest.py` that resets the global store before and after the isolated database test. The targeted Python 3.12 test passed normally and with a probe that seeds `usage_store._pending` before fixture setup. No Bot or platform was started.
+- Final hosted result on head `019824d2d23995ac23b91ddd8795d1e31fe96958`: CI run `39937656864` completed successfully with 12/12 jobs, including the Python 3.10, 3.11 and 3.12 matrix; Docker Publish `39937656868` and Dashboard CI `39937656943` also completed successfully. CI repair is complete for PR #119; the product/browser and real-platform acceptance gaps listed below remain separate.
+
+## Current Session — Settings page, advanced configuration and doctor results
+
+用户要求提交上一批工作后，移除设置页内与顶栏重复的外观设置，并把“配置”界面融合为设置页中的“高级设置”。前一批改动已提交到当前分支 `codex/frontend-ui-polish`，提交 `a799ac8`；本轮设置页整合、自检结果保留和高级设置常驻显示已提交到同一分支。
+
+- Implementation：已将配置页表单逻辑抽到 `dashboard/src/components/AdvancedConfigSettings.vue`，并作为始终可见的“高级设置”区块放在设置页。删除“外观”卡，保留顶栏主题控制；删除侧栏单独“配置”入口。旧 `/config` 地址重定向到 `/settings?section=advanced`，目标页直接展示高级设置内容。配置搜索、恢复默认、JSON 编辑、脏值提示、保存和按需重启行为沿用。另将 doctor 结果与 loading 状态提升到 Pinia `doctor` store，以便应用内离开设置页再返回时保留最近一次结果。
+- API boundary：仅迁移前端组件；`AdvancedConfigSettings.vue` 继续调用 `/config` 与 `/system/restart`。没有修改配置、密码、后端路由、生产数据或重启服务。
+- GitNexus：编辑前 `SettingsPage.vue`、`ConfigPage.vue` upstream impact 均 UNKNOWN / 0；源码引用确认旧页面仅由路由引用、侧栏另有静态菜单注册。`settingsPanels` impact UNKNOWN / 0；源码确认模板 v-model 曾控制折叠，随后改为常驻区块并移除状态。共享 `ConfigForm.vue` upstream LOW / 2（ConfigPage 与 ExtensionPage），表单组件未修改。doctor follow-up 中 `runDoctor` 图查询 UNKNOWN / 0，模板确认按钮调用；SettingsPage 文件查询存在同名非 Dashboard 候选。索引 status up-to-date（1842 covered files）；UI 源码变更 `scope=all` 为 9 files / 5 symbols / 0 affected processes / LOW。后续仅更新提交状态文档时 `scope=all` 为 CRITICAL (status-doc Markdown section fanout)，受progress.md 中通用 Markdown section 扇出，该 diff 不含应用源码。`scope=compare base_ref=main` 为分支累计 CRITICAL cumulative (flow summaries include BLOCKED_ADAPTERS)，输出反复关联设置源码未改的 `BLOCKED_ADAPTERS`；流程图仍遗漏 2924/3124 候选入口且 FTS disabled。
+- Validation：Dashboard `vue-tsc` 与 Vite production build 通过，保留既有 mixed import 与 >500KB chunk warnings；`sync:webui` 已同步到 `webui/dist` 与 `desktop/dashboard-dist`。`python scripts/check_docs.py` 为 121 files / 1262 local links / 577 migration anchors / 0 errors；feature/locale JSON 与 `git diff --check` 通过。GitNexus status up-to-date（1842 covered files），detect changes scope=all 当前为 CRITICAL (status-doc Markdown section fanout)（仅状态文档，通用章节扇出）；UI 源码变更为 9 files / 5 symbols / 0 affected processes / LOW；scope=compare main 的 CRITICAL 是分支累计且关联未改动的 `BLOCKED_ADAPTERS`；流程图候选入口截断 2924/3124、FTS disabled，all 风险仅适用于当前覆盖范围。未运行自动化测试、浏览器路由往返或配置 API save/readback。
+- Files：`dashboard/src/views/SettingsPage.vue`、新增 `dashboard/src/stores/doctor.ts`、删除 `dashboard/src/views/ConfigPage.vue`、新增 `dashboard/src/components/AdvancedConfigSettings.vue`、`dashboard/src/router/index.ts`、`dashboard/src/layouts/FullLayout.vue`、中英文 locale，以及 `feature_list.json`、`progress.md`、`session-handoff.md`。
+- Next：在浏览器检查设置页布局、始终可见的高级设置区块、自检后切换到其他路由再返回时结果仍显示，以及旧 `/config` 跳转；用非生产凭据环境验证配置 API 保存/回读和需要重启时的流程。
+
+## Previous Session — Group tag inputs and space group selector
+
+群号白名单改为逐项 tag 编辑，空间绑定改为已有群号选择器；按旧 `.env` 格式读写，空间 API 合同不变。该批改动已随 `a799ac8` 提交。源码构建通过，浏览器/API 保存验收仍待做。
+
+## Previous Session — Groups and persona interface consolidation
+
+用户要求将“群组”和“人格”界面融合。PersonaPage 同时呈现群组表、空间人格卡片、`ALLOWED_GROUPS` 入口和“空间设置”弹窗；`GroupsPage.vue` 已移除，侧栏保留一个入口，旧 `/groups` 重定向到 `/persona`。API 和验证边界见下方记录。
+
+## Previous Session — WebChat settings moved to Chat
+
+WebChat prompt 设置入口已从空间管理移至 ChatPage；PersonaPage 隐藏 WebChat 专属空间，并阻止在普通空间管理页创建/删除。实现复用了现有 WebChat prompt API；聊天身份流程未改。群组/人格合并后的 Dashboard 构建和资源同步覆盖这部分源码。认证态保存/回读和浏览器交互尚未验证。
+
+## Previous Session — Persona and space interface
+
+用户提出四项人格与空间页调整：从该页编辑 `ALLOWED_GROUPS`、移除出厂默认人格展示、把人格和群绑定编辑统一为“空间设置”、卡片不再展示人格正文。当前分支 `codex/frontend-ui-polish`，起始提交 `659a214`（刚完成并提交侧栏工作）。本轮改动目前未提交。
+
+- Implementation：`dashboard/src/views/PersonaPage.vue` 增加独立的 `ALLOWED_GROUPS` 表单，通过已有 `/config` API 读写，按配置页约定保存后请求重启。每张空间卡片仅显示空间名和群绑定；一键“空间设置”弹窗内编辑人格提示词与绑定群，并用现有两条 API 保存。移除默认人格 GET 与只读展示卡片。WebChat 的虚拟群号 `-1` 可继续保存在空间绑定里，但白名单输入只接受正 QQ 群号。
+- GitNexus：Docker GitNexus 因本机 Docker 引擎不可用，改用本机已核验的 GitNexus 1.6.12 runner；全量刷新后 runner identity current，索引 commit `659a214`，status current（1842 covered files）、`incompleteReasons=[]`。`load` upstream LOW（同页 4 直接调用），`parseGroupIds` LOW（1 直接调用）。PersonaPage 文件级查询、模板事件处理函数及跨 Vue/Python HTTP API 结果为 UNKNOWN/0；已用 router 注册、模板引用和 `/config`、`/spaces/{name}/prompt`、`/bindings` 源码补证。全仓流程目录有候选截断，FTS build 失败；不以缺失流程当作无影响证明。此前增量检测曾把 `qq_groups` 同名字段扇出成 CRITICAL / 803–808 processes，但全量 `analyze --index-only --pdg` 后最终 `detect-changes --scope all` 为 exit 0、4 files / 19–25 symbols / 0 affected processes / LOW；源码审查也无法将先前列出的 Status、Execute_operation、Get_config 和 Get_status 扇出映射到此页面。保留增量图异常记录；当前 LOW 仅对索引覆盖范围有效，流程抽取仍因入口、深度和分支预算不完整。
+- Verification：Dashboard build 与 `sync:webui` 已通过，并同步 `webui/dist` / `desktop/dashboard-dist`。浏览器检查 `/persona` 卡片、空间设置弹窗、允许群组弹窗和 WebChat `-1` 绑定；没有提交任一表单，因此配置文件未更改，也未请求重启。`python scripts/check_docs.py`、feature JSON parse、`git diff --check` 通过；自动化测试未运行。
+- Next：下一项界面需求可继续；另需单独验证认证态 API 保存 / 读回，确认 `/config` 写入和重启行为以及空间 prompt / bindings 的双端结果。GitNexus 对 `qq_groups` 的 CRITICAL 扇出仍待图索引层面解释，不能视为风险关闭。
+
+## Completed Session — NoneBot platform configuration and responsive sidebar
+
+用户要求平台页支持全部 NoneBot 适配器，按需添加，并将可用适配器作为依赖随安装包预装；后续要求按各适配器项目文档预设运行时配置表单。用户决定：Walle-Q 与 NTChat 已缺乏维护，直接屏蔽并记录原因。当前分支 `codex/frontend-ui-polish` 从同步后的 `main@9de22e696f60a14fefa91f17024dd45bdef21cde` 创建。同步前的旧本地改动留在 `stash@{0}`，本任务未触碰。`PLATFORM-ADAPTER-PREINSTALL` 和 `PLATFORM-ADAPTER-FORM-PRESETS` 均完成各自记录的源码/本地验证范围。
+
+- UI follow-up：主视图只显示已选平台，32 条适配器目录移入可搜索添加对话框；已选项可移除，选中后显示对应专用表单。移除后不会立即保存；只有点保存才会持久化选择。
+- Picker UX：选择窗口只展示 30 个可用项，Walle-Q / NTChat 等 unavailable 项不显示且计数不包含它们；卡片不再给出 `nb adapter install ...` 指令。自定义 Python 模块在同一选择窗口逐个添加，主页面的自定义模块 textarea 已移除；若输入目录里已有的可用模块会直接选择，屏蔽模块不能通过该入口绕过策略。
+- Visual polish：选择器隐藏目录来源和日期，搜索框占满可用宽度；目录网格末尾增加“+ 添加自定义适配器”卡片，点击后打开模块路径对话框；平台页和 picker 适配器卡片共享 `156px` 最小高度。标题不再保留空白第二行导致模块路径下沉，项目主页/文档入口在卡片和预设说明中改为外链图标，悬浮显示 tooltip。
+- 已有实现：`PlatformsPage.vue` 保留 OneBot V11、QQ 官方、Telegram、Discord 专用表单，并从 `webui/services/nonebot_adapter_catalog.json` 提供 32 条目录记录（31 个唯一包名）。目录外的自定义模块仍可启用。适配器卡显示官方/社区维护标记、本机包状态与项目链接；选择对话框不显示包安装命令。
+- 通用配置：平台页可为任意适配器录入环境变量键值；`STELLA_ADAPTER_ENV_KEYS` 追踪这些值。后端保护 Stella/NoneBot 核心字段，密钥不从 GET 返回；保存空白密钥会保留旧值，删除变量会移除其 dotenv 项。
+- 专用连接配置：OneBot WS、QQ Bot、Telegram polling/webhook、Discord intents 与代理/命令配置写入本机 `.env`，GET 仅返回脱敏状态；多 Bot 配置保留其余 bot。配置使用专属原子 dotenv writer。审计事件只记连接平台名称，不记表单值。
+- 文档预设：新增 `dashboard/src/data/nonebotAdapterPresets.ts`，与 30 个可选目录模块逐项一致；多 Bot JSON 列表用结构化字段编辑，未列入专用表单的变量仍在高级字段中。Villa 的 `pub_key`、每 Bot 连接方式与 callback path 修正为文档结构；Matrix 的登录/OAuth 字段、sync/invitation/E2EE 选项和 WxClaw 账号/全局默认项按项目文档预填。研究记录为 [2026-10-23-nonebot-adapter-config-research.md](docs/reports/2026-10-23-nonebot-adapter-config-research.md)。
+- JSON 密钥保护：后端递归隐藏嵌套 token、secret、password、key、ticket、cookie 等凭据，并按 `account_id` 等标识恢复提交中的空白密钥；Matrix token 过期时间与状态文件路径不会因名字含 `token` 而误隐藏。此逻辑位于适配器配置服务，不修改共享 dotenv writer。
+- 官方资料：[NoneBot Adapter 文档](https://nonebot.dev/docs/advanced/adapter)、[NoneBot Store 文档](https://nonebot.dev/docs/tutorial/store)、[官方适配器目录 JSON5](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5)、[NoneBot 配置文档](https://nonebot.dev/docs/appendices/config)；AstrBot Discord WebUI 指南曾用于专用字段参考。
+- 依赖决策及状态：Walle-Q 0.2.0 要求 `nonebot-adapter-onebot~=2.2.2`，与 Stella `>=2.4.6` 冲突；NTChat 0.3.5 固定 `httpx==0.23.0`，与 Stella `>=0.24.0` 冲突。用户决定按维护状态直接屏蔽。两者不进依赖，picker/API/运行时均拒绝新启用或注册，并保留旧配置以便移除。其余 30 个目录记录对应 29 个唯一发行包，进入 `requirements.txt`、`pyproject.toml` 和安装包通用 requirements 链；Heybox 通过 Python >=3.11 marker，Python 3.10 跳过。
+- GitNexus：针对 `update_adapters`、`parse_adapter_modules`、`register_enabled_adapters` 的 upstream impact 为 LOW；适配器预装阶段 all/compare 为 20 files / 94 symbols / 15 flows / HIGH。添加表单和状态记录后最终 all 与 compare/main 均为 20 files / 96 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated。主要流程包括适配器读写、校验、模块解析及 dotenv 持久化；共享 env writer 未修改。
+- 最新表单验证：`pnpm --dir dashboard build`（含 `vue-tsc`）与 `pnpm --dir dashboard sync:webui` 通过；30/30 目录模块都有预设，Python compileall、Ruff、双语 docs 门禁、feature/locale JSON 和 `git diff --check` 通过。Vite 保留既有 mixed import 和大 chunk 警告。未运行测试，也未在浏览器中完成表单保存/readback。
+- 最新 picker 验证：Dashboard build 和资源同步成功；dashboard / webui / desktop 的入口 HTML SHA-256 一致；文档 121 files / 1262 links / 577 anchors / 0 errors；双语 locale 和 feature JSON parse、diff check 通过。`saveAdapters` upstream UNKNOWN / 0；最终 detect all 与 compare/main 均为 20 files / 98 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated（包含此前平台改动）。未运行测试，也未在浏览器里交互检查加号卡片、tooltip 或保存/readback。
+- 最新 UI follow-up：目录选择卡片勾选框移到右上角，标题与主页适配器卡片左对齐；NoneBot 全局 `DRIVER`、共享范围提示、进程环境覆盖提示和远程平台建议放入每个已选适配器的运行时配置弹窗。Driver 仍通过原有 `/platform/adapters` 保存字段提交，页面底部保留统一保存按钮。中英文指南已说明 `DRIVER` 是全局设置。当前源码构建、资源同步、文档和 locale/feature JSON 检查通过；最终 GitNexus all / compare main 结果见 progress.md。未运行测试或浏览器交互验收，也未保存配置或连接真实平台。
+- 最新首页调整：删除平台首页顶部安装包说明与“当前进程生效”行；保存/重启提示以完整草稿快照比较，仅在配置发生变化时显示，保存后重读基线，恢复原配置时自动隐藏。连接状态入口收进“已添加的平台”卡片标题旁的单一图标，点击打开连接详情表；表格按运行中的适配器连接记录展示，健康度保留 OneBot 心跳/探活差异，其他适配器仍显示未知。“连接引用”使用表格正文的统一字体，并已在浏览器中目视确认。Dashboard 构建、`sync:webui`、文档与 locale JSON 检查通过；GitNexus 最终结果记入 progress.md。浏览器确认首页布局并打开连接状态弹窗；当前旧后端 API 不兼容，页面禁用保存，因此未验证新后端保存/回读，亦未连接真实平台；测试未运行。
+- 最新侧栏修正：基线浏览器测得 Agent 标题 scrollHeight 18px、clientHeight/line-height 16px；修为 20px 标题行框，并保留高于 comfortable 的 default 行密度。72px rail 图标现居中于 x=36px。菜单按钮在所有宽度都可用；>1280px 默认展开，≤1280px 默认折叠，窄屏展开以 256px 临时抽屉覆盖主界面，保留 72px rail 的主内容占位；点页面遮罩回到 rail。Dashboard build/sync、docs、JSON、diff 通过；1600px、1200px、850px、390px 浏览器检查通过；850px/390px 无横向溢出。没有运行测试套件，改动尚未提交。
+- 当前运行边界：浏览器显示 32 项、30 可选和 2 个屏蔽项，但 `127.0.0.1:8080` 服务仍是旧后端，所以 UI 警告 API 不兼容并禁用保存。未保存任何配置、未重启服务、未输入凭据、未尝试真实连接；也没有构建最终安装器工件。源码与依赖变更已完成，当前 backend save/readback、实际 release installer 与平台 live 验收仍未确认。
+- 下一步：如要做 UI 运行验收，在新版 WebUI backend 和 Dashboard 一起运行时检查 picker 交互与 API save/readback；如要宣称发布安装器验收，则需实际构建并检查安装器/离线 wheelhouse。不要将依赖 dry-run 等同于构建工件或真实平台兼容性。
+
+## Previous Session — Source Dashboard startup rebuild and release audit
 
 The blank test UI came from a stale `webui/dist`. This branch now rebuilds the Dashboard when `bot.py` is run from a source checkout or source archive, before serving requests; a failed build stops the new process rather than serving stale assets. Release products with a version-marked frontend skip this runtime path.
 

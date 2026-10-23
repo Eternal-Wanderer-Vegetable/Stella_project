@@ -18,12 +18,15 @@
 
 「平台」页（`/#/platforms`）可配置 Bot 适配器模块列表，并查看当前生效列表与
 进程环境变量覆盖状态。保存写入 `STELLA_HOME/.env`，需重启 Bot；适配器依赖由
-部署者自行安装，Stella 不会下载或执行未审核的第三方包。OneBot V11 仍可配置多条
-正向 WS 地址；读取时只返回 token 是否已设置，不返回 token 明文。其他适配器的
+标准安装包预装目录中可用的适配器依赖，但不会自动启用平台；Walle-Q、NTChat 和 Mail
+因上游维护停滞、依赖冲突或未修复的安全依赖被屏蔽。OneBot V11 仍可配置多条正向 WS 地址；读取时只返回
+token 是否已设置，不返回 token 明文。其他适配器的
 连接健康度在当前探针不支持时显示为未知。相关 API 为
 `GET/PUT /api/v1/platform/adapters`、`GET/PUT /api/v1/platform/onebot` 与
 `GET /api/v1/platform/link`，均受管理鉴权保护；写操作记入审计。API 路由先于 SPA
 静态回退注册，因此 `/api/v1/*` 不会被前端页面接管。
+
+适配器目录、配置步骤和屏蔽原因见 [NoneBot 平台适配器指南](platforms.md)。
 
 忘记密码 / 想重新初始化：
 

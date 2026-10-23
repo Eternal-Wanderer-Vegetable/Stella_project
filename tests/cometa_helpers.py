@@ -6,8 +6,8 @@
 刻意放在 tests/ 根并通过 ``from tests.cometa_helpers import ...`` 导入：
 tests/<dir>/conftest.py 在 pytest prepend 模式下都以顶层名 ``conftest``
 共存，互相 ``from conftest import`` 会撞到先加载的那个模块（实测）。
-tests/ 自身无 __init__.py，作为 PEP 420 命名空间包被 pythonpath=["."]
-覆盖，跨目录导入安全。
+显式的 tests/__init__.py 将 tests 固定为本仓库的包，避免托管环境中同名
+site-packages 包遮蔽本地命名空间包；pythonpath=["."] 保持跨目录导入可用。
 """
 
 from __future__ import annotations
