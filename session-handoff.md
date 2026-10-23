@@ -1,15 +1,19 @@
 # Session Handoff
 
-## Current Session — Group tag inputs and space group selector
+## Current Session — Settings page, advanced configuration and doctor results
 
-用户要求 `ALLOWED_GROUPS` 改为逐项输入群号标签，并让空间设置从已有群号中选择绑定。当前分支 `codex/frontend-ui-polish`；保留此前群组/人格合并和 WebChat 设置迁移的未提交工作。
+用户要求提交上一批工作后，移除设置页内与顶栏重复的外观设置，并把“配置”界面融合为设置页中的“高级设置”。前一批改动已提交到当前分支 `codex/frontend-ui-polish`，提交 `a799ac8`；本轮设置页整合、自检结果保留和高级设置常驻显示已提交到同一分支。
 
-- Implementation：`PersonaPage.vue` 的 ALLOWED_GROUPS 弹窗以 tag 显示既有群号，单个正整数按 Enter/加号加入、逐项移除；仍把列表序列化为既有逗号分隔 `.env` 字符串。空间绑定改用多选列表，候选为当前 `/groups` 返回群号加当前空间已有绑定；没有自由输入，旧绑定可保留或取消。
-- API boundary：只改 Dashboard 表单，复用 `/config`、`/groups`、`/spaces/{name}/bindings`。保存 ALLOWED_GROUPS 后按既有流程请求重启；空间 API 的单群单空间语义不变。没有写本机配置、空间绑定或重启服务。
-- GitNexus：编辑前 `saveAllowedGroups`、`saveSpaceSettings` 与 PersonaPage.vue upstream impact 均 UNKNOWN / 0；Vue 模板 callback 未建边。源码确认模板触发处理函数，并核对配置、群组、空间绑定 route/service。索引刷新至 HEAD `659a214`、1841 covered files、FTS disabled；流程提取未排名 2924/3124 个候选。`detect-changes --scope all` 复跑范围为 11 files / 44–45 symbols / 805–816 affected processes / CRITICAL；flow 展示以通用 `name` 属性关联无关路径，重复计数不一致。将其作为未解决的图聚合异常记录，不视为通过或确证本页面有 800 个调用流程。
-- Validation：Dashboard `vue-tsc` 与 Vite production build 通过，存在既有 mixed static/dynamic import 与 >500KB chunk warnings；`sync:webui` 同步到 `webui/dist`、`desktop/dashboard-dist`。`check_docs.py`：121 files / 1262 local links / 577 migration anchors / 0 errors；feature / locale JSON parse 和 `git diff --check` 通过。未运行自动化测试、浏览器交互或认证态 API save/readback。
-- Files：`dashboard/src/views/PersonaPage.vue`、Dashboard 构建产物（`dashboard/dist/`、`webui/dist/`、`desktop/dashboard-dist/`）、`feature_list.json`、`progress.md`、`session-handoff.md`。
-- Next：在无需改配置的浏览器联调中确认 tag 添加/删除、Enter/加号、选择器候选与历史绑定呈现；再用授权配置环境验证 `/config` 和空间绑定 API 保存/回读及重启行为。
+- Implementation：已将配置页表单逻辑抽到 `dashboard/src/components/AdvancedConfigSettings.vue`，并作为始终可见的“高级设置”区块放在设置页。删除“外观”卡，保留顶栏主题控制；删除侧栏单独“配置”入口。旧 `/config` 地址重定向到 `/settings?section=advanced`，目标页直接展示高级设置内容。配置搜索、恢复默认、JSON 编辑、脏值提示、保存和按需重启行为沿用。另将 doctor 结果与 loading 状态提升到 Pinia `doctor` store，以便应用内离开设置页再返回时保留最近一次结果。
+- API boundary：仅迁移前端组件；`AdvancedConfigSettings.vue` 继续调用 `/config` 与 `/system/restart`。没有修改配置、密码、后端路由、生产数据或重启服务。
+- GitNexus：编辑前 `SettingsPage.vue`、`ConfigPage.vue` upstream impact 均 UNKNOWN / 0；源码引用确认旧页面仅由路由引用、侧栏另有静态菜单注册。`settingsPanels` impact UNKNOWN / 0；源码确认模板 v-model 曾控制折叠，随后改为常驻区块并移除状态。共享 `ConfigForm.vue` upstream LOW / 2（ConfigPage 与 ExtensionPage），表单组件未修改。doctor follow-up 中 `runDoctor` 图查询 UNKNOWN / 0，模板确认按钮调用；SettingsPage 文件查询存在同名非 Dashboard 候选。索引 status up-to-date（1842 covered files）；UI 源码变更 `scope=all` 为 9 files / 5 symbols / 0 affected processes / LOW。后续仅更新提交状态文档时 `scope=all` 为 CRITICAL (status-doc Markdown section fanout)，受progress.md 中通用 Markdown section 扇出，该 diff 不含应用源码。`scope=compare base_ref=main` 为分支累计 CRITICAL cumulative (flow summaries include BLOCKED_ADAPTERS)，输出反复关联设置源码未改的 `BLOCKED_ADAPTERS`；流程图仍遗漏 2924/3124 候选入口且 FTS disabled。
+- Validation：Dashboard `vue-tsc` 与 Vite production build 通过，保留既有 mixed import 与 >500KB chunk warnings；`sync:webui` 已同步到 `webui/dist` 与 `desktop/dashboard-dist`。`python scripts/check_docs.py` 为 121 files / 1262 local links / 577 migration anchors / 0 errors；feature/locale JSON 与 `git diff --check` 通过。GitNexus status up-to-date（1842 covered files），detect changes scope=all 当前为 CRITICAL (status-doc Markdown section fanout)（仅状态文档，通用章节扇出）；UI 源码变更为 9 files / 5 symbols / 0 affected processes / LOW；scope=compare main 的 CRITICAL 是分支累计且关联未改动的 `BLOCKED_ADAPTERS`；流程图候选入口截断 2924/3124、FTS disabled，all 风险仅适用于当前覆盖范围。未运行自动化测试、浏览器路由往返或配置 API save/readback。
+- Files：`dashboard/src/views/SettingsPage.vue`、新增 `dashboard/src/stores/doctor.ts`、删除 `dashboard/src/views/ConfigPage.vue`、新增 `dashboard/src/components/AdvancedConfigSettings.vue`、`dashboard/src/router/index.ts`、`dashboard/src/layouts/FullLayout.vue`、中英文 locale，以及 `feature_list.json`、`progress.md`、`session-handoff.md`。
+- Next：在浏览器检查设置页布局、始终可见的高级设置区块、自检后切换到其他路由再返回时结果仍显示，以及旧 `/config` 跳转；用非生产凭据环境验证配置 API 保存/回读和需要重启时的流程。
+
+## Previous Session — Group tag inputs and space group selector
+
+群号白名单改为逐项 tag 编辑，空间绑定改为已有群号选择器；按旧 `.env` 格式读写，空间 API 合同不变。该批改动已随 `a799ac8` 提交。源码构建通过，浏览器/API 保存验收仍待做。
 
 ## Previous Session — Groups and persona interface consolidation
 

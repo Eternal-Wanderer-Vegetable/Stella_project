@@ -5,8 +5,7 @@ import { api, unwrap } from '@/api/http';
 import { toastApiError, useToast } from '@/stores/toast';
 import ConfigForm, { type FormField } from '@/components/ConfigForm.vue';
 
-// 配置页（方案 §6.6）：schema 驱动 + 前缀分组折叠 + 搜索 + 未保存守卫 +
-// JSON 源码视图 + 保存→重启提示。settings import 期冻结：保存后必须重启。
+// 设置页中的高级配置：schema 驱动表单、字段分组、搜索、JSON 源码视图与按需重启。
 interface EnvField {
   key: string;
   type: string | null;
@@ -181,9 +180,8 @@ onMounted(load);
 </script>
 
 <template>
-  <v-container fluid class="pa-6">
+  <div class="advanced-config-settings">
     <div class="d-flex align-center ga-3 mb-4 flex-wrap">
-      <h1 class="text-h5 font-weight-bold">配置</h1>
       <v-spacer />
       <v-text-field
         v-model="search"
@@ -201,6 +199,10 @@ onMounted(load);
       </v-btn>
       <v-btn color="primary" :loading="busy" :disabled="!dirty" @click="save">保存</v-btn>
     </div>
+
+    <p class="text-body-2 text-medium-emphasis mb-4">
+      环境变量高级配置。敏感字段留空表示保持原值；需要重启的修改会自动请求重启。
+    </p>
 
     <div v-if="dirty" class="unsaved-pill mb-3">
       有未保存的修改
@@ -234,7 +236,7 @@ onMounted(load);
         </v-card-actions>
       </v-card>
     </v-dialog>
-  </v-container>
+  </div>
 </template>
 
 <style scoped>

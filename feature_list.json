@@ -1497,6 +1497,93 @@
       ],
       "acceptance": "群号输入与空间选择界面已实现并通过构建、资源同步；浏览器交互和认证态 API 保存/回读仍未验收。",
       "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "SETTINGS-ADVANCED-CONFIG",
+      "name": "设置页整合高级配置",
+      "description": "移除设置页重复的外观控制，并将原配置页纳入设置页的高级设置区域。",
+      "status": "done",
+      "dependencies": [
+        "GROUP-TAG-SELECTORS"
+      ],
+      "scope": [
+        "dashboard/src/views/SettingsPage.vue",
+        "dashboard/src/views/ConfigPage.vue",
+        "dashboard/src/components/AdvancedConfigSettings.vue",
+        "dashboard/src/router/index.ts",
+        "dashboard/src/layouts/FullLayout.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "设置页移除与顶栏重复的外观选项，顶栏主题切换保留。",
+        "原配置表单在设置页的高级设置区始终可见，搜索、恢复默认、JSON 编辑、未保存提示、保存和按需重启行为保留。",
+        "侧栏不再显示独立配置入口；旧 /config 地址重定向到设置页并展开高级设置。",
+        "Dashboard 类型检查、生产构建、静态资源同步、文档、JSON 与 diff 检查通过。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus upstream impact + source reference audit",
+          "result": "SettingsPage.vue 与 ConfigPage.vue 文件级 impact 为 UNKNOWN / 0，源码确认配置页只由旧路由与侧栏引用。settingsPanels impact 为 UNKNOWN / 0；源码确认它由模板 v-model 控制折叠，后改为常驻高级设置区块并移除状态。共享 ConfigForm impact 为 LOW / 2 callers（原配置页、插件页），保留 ConfigForm，迁移配置表单到 AdvancedConfigSettings.vue。"
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "最终 Settings 页面（高级设置常驻显示、doctor Pinia 状态）经 vue-tsc 与 Vite production build 通过，保留既有 mixed import 与大 chunk 警告；sync:webui 同步至 webui/dist 和 desktop/dashboard-dist。"
+        },
+        {
+          "command": "python scripts/check_docs.py; locale and feature JSON parse; git diff --check; GitNexus detect-changes --scope all",
+          "result": "文档检查 121 files / 1262 local links / 577 migration anchors / 0 errors；feature 与中英文 locale JSON 解析通过，git diff --check 通过。GitNexus 全量刷新后 status up-to-date（1842 covered files）。UI 源码变更的 scope=all 为 9 files / 5 symbols / 0 affected processes / LOW；随后仅更新提交状态文档时，scope=all 为 CRITICAL (status-doc Markdown section fanout)，均从progress.md 中通用 Markdown section 扇出，该次 diff 不含应用源码。scope=compare base_ref=main 为分支累计 CRITICAL，所示流程重复扇出自 BLOCKED_ADAPTERS，当前设置源码未改该符号。流程图仍遗漏 2924/3124 个候选入口，FTS disabled；图风险受上述通用 section 与索引覆盖限制。"
+        },
+        {
+          "command": "Browser interaction and config API save/readback",
+          "result": "未运行；未提交配置或触发重启。"
+        }
+      ],
+      "acceptance": "设置页整合已通过类型检查、构建和资源同步；浏览器交互及认证态配置保存/重启仍待验收。",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "SETTINGS-DOCTOR-PERSIST",
+      "name": "设置页保留环境自检结果",
+      "description": "环境自检完成后，在应用内切换路由再返回设置页时继续展示最近一次结果。",
+      "status": "done",
+      "dependencies": [
+        "SETTINGS-ADVANCED-CONFIG"
+      ],
+      "scope": [
+        "dashboard/src/views/SettingsPage.vue",
+        "dashboard/src/stores/doctor.ts",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "自检结果与运行状态移出 SettingsPage 组件实例，路由离开并返回后仍显示最近结果。",
+        "结果只在当前应用会话内保留，不写入浏览器本地持久存储。",
+        "Dashboard 构建、文档、JSON 与 diff 检查通过；未完成的浏览器验收明确记录。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus impact runDoctor --direction upstream; source reference audit",
+          "result": "runDoctor 图查询为 UNKNOWN / 0；源码确认由 SettingsPage 的环境自检按钮模板事件触发，组件内 ref 随路由卸载而丢失。SettingsPage 文件级结果也为 UNKNOWN / 0，额外发现同名非 Dashboard 符号造成查询歧义。"
+        },
+        {
+          "command": "Dashboard build; python scripts/check_docs.py; feature JSON parse; git diff --check; GitNexus detect-changes --scope all",
+          "result": "`pnpm --dir dashboard build`（vue-tsc + Vite）exit 0，保留既有 mixed import 与 >500KB chunk 警告；`pnpm --dir dashboard sync:webui` 同步到 webui/dist 与 desktop/dashboard-dist。文档检查 121 files / 1262 local links / 577 migration anchors / 0 errors；feature/locale JSON 与 diff 检查通过。GitNexus 刷新后 status up-to-date（1842 covered files）。UI 源码变更 scope=all 为 9 files / 5 symbols / 0 affected processes / LOW；提交状态文档 follow-up 的 scope=all 为 CRITICAL (status-doc Markdown section fanout)，受progress.md 中通用 Markdown section 扇出，该 diff 不含应用源码。scope=compare main 的分支累计结果为 CRITICAL，流程反复关联 BLOCKED_ADAPTERS，设置源码未涉及该符号。流程图仍遗漏 2924/3124 候选入口且 FTS disabled。"
+        },
+        {
+          "command": "Browser route navigation acceptance",
+          "result": "未运行；未在浏览器进行路由往返验收。"
+        }
+      ],
+      "acceptance": "自检结果已提升至应用级 Pinia 状态，并通过 Dashboard 构建、资源同步和仓库状态检查；浏览器路由往返验收未运行。",
+      "branch": "codex/frontend-ui-polish"
     }
   ]
 }

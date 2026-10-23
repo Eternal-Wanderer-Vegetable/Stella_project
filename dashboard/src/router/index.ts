@@ -54,8 +54,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'config',
-        name: 'config',
-        component: () => import('@/views/ConfigPage.vue'),
+        redirect: { name: 'settings', query: { section: 'advanced' } },
       },
       {
         path: 'settings',

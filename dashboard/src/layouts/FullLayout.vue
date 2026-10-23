@@ -64,7 +64,6 @@ const groups: { header?: string; items: NavItem[] }[] = [
     items: [
       { icon: 'mdi-robot', title: t('core.navigation.platforms'), to: '/platforms' },
       { icon: 'mdi-creation', title: t('core.navigation.providers'), to: '/providers' },
-      { icon: 'mdi-cog', title: t('core.navigation.config'), to: '/config' },
     ],
   },
   {
