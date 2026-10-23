@@ -1045,6 +1045,686 @@
           "result": "Implementation commit a225aa8 adds the four Corona/Nucleus packages to release allowlists, excludes runtime state/secrets, updates Docker liveness and 65s stop grace, bilingual docs, and a WebUI test-auth isolation fixture. Full Python: 4115 passed/29 skipped/3 warnings/281.94s; focused release/install 60 passed, WebUI Cometa/config 43 passed; Ruff, flow check, docs 119/1288/577/0 and dashboard dist parity passed. Standalone archive 561 members with required assets and zero forbidden hits; installer staging 5/5; Docker scratch exclusion sentinels passed. Real Docker build failed at Docker Hub TLS pull; compose plugin, Rust/native Windows, clean VMs, six final products, live QQ/WebChat/model, and rollback acceptance remain NOT RUN. Legacy remains default; CORONA-IMPL stays in_progress / NOT READY. Historical fresh-index status/evidence all runs were 6/11/0/LOW, with intermediate 6/1/774/CRITICAL and 6/1/213/CRITICAL. One current-tree gate was 6/4/3/MEDIUM with three unresolved Skill_* → _is_user_layer attributions; literal/source audit found no matching identifiers and impact/context Skill_delete returned not found. The latest all gate said no indexed symbols overlap the six changed files and explicitly “not a clean tree”; treat it as NOT GREEN. Serial compare main samples include 259 files/315 and 259/240 symbols/processes as CRITICAL (--limit 10 for the latter; output lists 230 more symbols and 776 more flows). Other reindexed outputs varied; preserve every CRITICAL result without waiver. No partial/truncated marker surfaced. Graph limitations are in the report."
         }
       ]
+    },
+    {
+      "id": "PLATFORM-CONFIG-UI",
+      "name": "NoneBot 多平台接入配置界面",
+      "description": "重构 Dashboard 平台页，覆盖 NoneBot 官方适配器目录中的全部适配器，并支持自定义模块与通用环境变量配置。",
+      "status": "done",
+      "dependencies": [
+        "XPLAT-IMPL"
+      ],
+      "scope": [
+        "dashboard/src/views/PlatformsPage.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "webui/services/nonebot_adapter_catalog.json",
+        "webui/services/platformcfg.py",
+        "webui/routers/config.py",
+        "deploy/env_keys.py",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "平台页展示并可搜索当前官方 NoneBot 适配器目录的全部条目，同时保留目录外的自定义适配器模块入口。",
+        "目录适配器显示包安装命令和本地安装状态；适配器安装与模块启用清楚分开，控制台不自动安装包。",
+        "除常用平台专用表单外，通用适配器可添加任意环境变量键值；保护 Stella/NoneBot 核心配置，敏感值脱敏且空白密钥保留现值。",
+        "初始加载完成且后端配置契约完整前，平台配置保存按钮保持禁用。",
+        "表单可保存 OneBot WS、QQ Bot、Telegram polling/webhook、Discord intents 与代理/命令配置；凭据只写本机 .env，GET 不返回密钥。",
+        "Dashboard 类型检查与生产构建、Python 编译、文档门禁和双语 locale JSON 校验通过。",
+        "保存后提示需要重启；当前运行环境的后端未重启或真实平台未连通时，明确保留验收缺口。"
+      ],
+      "evidence": [
+        {
+          "command": "官方 NoneBot adapters.json5 快照核验与目录接入",
+          "result": "2026-10-22 官方目录快照含 32 条适配器记录、31 个唯一包名（OneBot V11/V12 共用包）；页面支持目录检索、安装状态/命令、官方/社区标记，并继续允许添加目录以外的模块。通用适配器变量由 STELLA_ADAPTER_ENV_KEYS 维护，密钥 GET 脱敏。"
+        },
+        {
+          "command": "GitNexus fresh upstream impact for update_adapters, adapters, parse_adapter_modules, _write_adapter_values, platform_adapters_put and PlatformsPage.vue",
+          "result": "后端修改符号 upstream impact 为 LOW；saveSupported 和平台页/路由的图关系返回 UNKNOWN/0，源码确认 saveSupported 由 loadAdapters 更新并控制保存按钮，Vue 调用平台 API，FastAPI 路由派发服务。"
+        },
+        {
+          "command": "GitNexus 1.6.12 upstream impact on PlatformConfig service, config router, env_keys.is_sensitive, and .env writer",
+          "result": "PlatformConfig update service LOW (one direct router caller); router UNKNOWN due frontend API dispatch, source reference confirmed; is_sensitive HIGH (13 impacted); envfile.write_values CRITICAL (12 impacted). Kept multiline adapter JSON updates in a dedicated atomic dotenv writer and did not edit the critical shared writer."
+        },
+        {
+          "command": "node .gitnexus/run.cjs detect-changes --scope all; detect-changes --scope compare --base-ref main",
+          "result": "Both scopes completed without partial/truncated markers: 9 files, 81 symbols, 15 affected execution processes, HIGH risk. Affected flows include Platform_adapters and Platform_adapters_put through adapter parsing, request validation and dotenv persistence. Specific edited service symbols had LOW upstream impact before editing; the aggregate result reflects the full platform configuration change."
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "vue-tsc and Vite production build passed; static bundle synced to webui/dist and desktop/dashboard-dist. Existing Vite chunk-size and mixed dynamic/static import warnings remain."
+        },
+        {
+          "command": "python -m compileall -q webui/services/platformcfg.py webui/routers/config.py deploy/env_keys.py; python scripts/check_docs.py; git diff --check; locale JSON parse",
+          "result": "Python compilation passed; docs check passed (119 files / 1247 local links / 577 anchors / 0 errors); both locale JSON files parse; diff whitespace check passed. Ruff unavailable. Tests were not run."
+        },
+        {
+          "command": "Visual inspection at http://127.0.0.1:8080/#/platforms after syncing static assets",
+          "result": "The latest build rendered all 32 catalog entries with source/project links, generic adapter fields, and the custom module entry. Once loading settled, the old backend warning appeared and save stayed disabled. A brief pre-response state had exposed save; this was fixed by making save default-disabled and disabling it during load. No save was clicked. No service lifecycle command, credential entry or real platform connection was performed."
+        },
+        {
+          "command": "Final implementation validation",
+          "result": "pnpm --dir dashboard build passed after the loading guard fix and pnpm --dir dashboard sync:webui passed; Python compileall and platformcfg import passed (32 catalog records, 31 unique packages, 443 protected keys); catalog/feature/locale JSON parsing passed; python scripts/check_docs.py passed (119 files / 1247 links / 577 anchors / 0 errors); git diff --check passed. Tests were not run per project instructions."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-ADAPTER-PREINSTALL",
+      "name": "按需选择适配器并随安装器预装完整目录",
+      "description": "主页面仅展示已选适配器；将官方目录放入搜索选择器，并随安装包预装可用适配器依赖，对维护停滞或平台不兼容的条目显式禁用。",
+      "status": "done",
+      "dependencies": [
+        "PLATFORM-CONFIG-UI"
+      ],
+      "scope": [
+        "dashboard/src/views/PlatformsPage.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "core/transport/adapter_policy.py",
+        "core/transport/adapter_loader.py",
+        "webui/services/platformcfg.py",
+        "webui/services/nonebot_adapter_catalog.json",
+        "requirements.txt",
+        "pyproject.toml",
+        "requirements-platform.in",
+        "requirements-platform.lock",
+        "docs/guides/platforms.md",
+        "docs/guides/platforms.en.md",
+        "docs/guides/webui.md",
+        "docs/guides/webui.en.md",
+        "docs/development/ci.md",
+        "docs/development/ci.en.md",
+        ".github/workflows/ci.yml",
+        "docs/guides/README.md",
+        "docs/guides/README.en.md",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "平台主视图只呈现已选择的适配器；添加对话框支持搜索、多选和移除，配置表单与目录选择联动。",
+        "32 条目录记录中有 29 条可选择，对应 28 个唯一发行包；OneBot V11/V12 共用一个包。Walle-Q、NTChat 与 Mail 不进入依赖，Python 3.10 下 Heybox 由 marker 跳过。",
+        "Walle-Q、NTChat 与 Mail 在选择器、服务端保存边界和运行时注册器均被屏蔽；历史配置可见并能移除，不会被静默清除。",
+        "其余目录发行包进入 requirements.txt 与 pyproject 默认依赖；Windows 在线/离线安装器、源码运行时和 Docker 均消费同一 requirements.txt，锁文件成功解析。",
+        "新建双语平台适配器指南说明安装/注册区别、Python 条件、三个屏蔽原因和验收边界。",
+        "Dashboard 构建、配置语法/元数据解析、文档和 GitNexus 变更门禁有可复核结果；未运行测试或真实平台连接。"
+      ],
+      "evidence": [
+        {
+          "command": "Dashboard build/sync and browser check at 127.0.0.1:8080/#/platforms",
+          "result": "Build and sync passed; browser showed the saved OneBot adapter alone, 32 entries in the picker, one Telegram result for search, and the Telegram form when temporarily selected. The draft was restored without saving."
+        },
+        {
+          "command": "PyPI metadata and wheel source inspection for Walle-Q 0.2.0, NTChat 0.3.5, Heybox 0.1.1; OneBot V12 API symbol comparison for 2.2.2 and 2.4.6",
+          "result": "The user decided to block Walle-Q and NTChat because both are unmaintained. Their upstream metadata conflicts with Stella core (Walle-Q requires nonebot-adapter-onebot~=2.2.2 vs >=2.4.6; NTChat pins httpx==0.23.0 vs >=0.24.0). Both are disabled in the picker, rejected when newly enabled through the API, and skipped by the runtime loader; old selections remain visible/removable. Heybox requires Python >=3.11 and is conditionally omitted on 3.10. A later CI security repair also blocked Mail: its only release requires aiosmtplib~=3.0, which cannot take the security fix in 5.1.2; the UI, API/runtime policy, and base dependency manifests now agree."
+        },
+        {
+          "command": "uv pip compile --universal --python-version 3.10 -o requirements-platform.lock requirements-platform.in; isolated Python 3.10 and 3.12 uv pip install --dry-run -r requirements-platform.lock",
+          "result": "Lock compilation resolved 174 packages. Isolated dry-runs resolved 160 packages on Python 3.10 (Heybox omitted) and 159 on Python 3.12 (Heybox included); Walle-Q and NTChat were absent in both. No packages were installed by the dry-runs."
+        },
+        {
+          "command": "Dashboard build and asset sync; python -m compileall -q core/transport/adapter_loader.py core/transport/adapter_policy.py webui/services/platformcfg.py webui/routers/config.py; python scripts/check_docs.py; git diff --check; GitNexus detect-changes all and compare main",
+          "result": "Dashboard build and sync passed. Python compileall passed; documentation passed (121 files / 1259 local links / 577 migration anchors / 0 errors); diff check passed. GitNexus all and compare both reported 20 files / 94 symbols / 15 affected processes / HIGH, without partial/truncated output. Browser review confirmed 32 entries, 30 available and 2 blocked; the served backend is older and disables save. No test suite was run, no settings were saved, and no live platform was connected."
+        },
+        {
+          "command": "NoneBot official docs + PyPI JSON for Walle-Q 0.2.0, NTChat 0.3.5, Matrix/python3-olm 0.4.1/3.2.20",
+          "result": "NoneBot distinguishes package installation from runtime registration. Walle-Q 0.2.0 and NTChat 0.3.5 PyPI metadata show the incompatible constraints and last-upload dates 2023-04-10 and 2023-02-03; the user chose to block them as unmaintained. Current python3-olm 3.2.20 publishes CPython 3.12 Windows wheels, so Matrix remains available."
+        },
+        {
+          "command": "PR #119 pip-audit failure triage; PyPI metadata for nonebot-adapter-mail and aiosmtplib advisory PYSEC-2026-3805",
+          "result": "nonebot-adapter-mail 1.0.0a7 is its only published release (2025-01-04) and requires aiosmtplib~=3.0; the security fix requires aiosmtplib>=5.1.2. Mail is therefore added to unavailable_adapter_reasons, hidden from the picker, rejected at save/runtime, removed from requirements.txt/pyproject.toml, and its transitive packages removed from requirements-platform.lock. QQ's maintained adapter still caps cryptography<49; the CI audit exception is limited to PYSEC-2026-3552/3553/3554 with removal criteria in bilingual CI docs."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-ADAPTER-FORM-PRESETS",
+      "name": "NoneBot 适配器文档预设配置表单",
+      "description": "为全部可选目录适配器提供基于其项目文档或配置模型的结构化运行时表单，并安全保存多账号嵌套凭据。",
+      "status": "done",
+      "dependencies": [
+        "PLATFORM-CONFIG-UI",
+        "PLATFORM-ADAPTER-PREINSTALL"
+      ],
+      "scope": [
+        "dashboard/src/data/nonebotAdapterPresets.ts",
+        "dashboard/src/views/PlatformsPage.vue",
+        "webui/services/platformcfg.py",
+        "docs/guides/platforms.md",
+        "docs/guides/platforms.en.md",
+        "docs/reports/2026-10-23-nonebot-adapter-config-research.md",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "29 条当前可选目录模块全部有适配器表单 schema，包含项目文档所示的常用字段、多账号结构和配置类型；Mail schema 保留给升级遗留配置查看。",
+        "Villa Bot 的公钥与连接配置按项目真实 JSON 结构归入每项 Bot；Matrix 使用正确的登录/OAuth 字段并覆盖同步、邀请、E2EE 与连接选项；WxClaw 包含账号和已文档化全局默认项。",
+        "读取适配器 JSON 时递归脱敏嵌套凭据；按稳定账号标识恢复空白凭据，删除条目仍可移除；非密钥时间戳和 token 状态路径保持可编辑。",
+        "中英文使用指南链接到研究记录并说明表单字段依据、配置局限和安全保存行为。",
+        "Dashboard 构建与资源同步、Python 编译/Ruff、目录 schema 覆盖、文档检查、JSON 与 diff 检查完成；测试及真实平台连接不在本任务执行。"
+      ],
+      "evidence": [
+        {
+          "command": "30 selectable catalog modules compared with dashboard/src/data/nonebotAdapterPresets.ts",
+          "result": "All 30 available module paths have one matching preset schema; no missing or extra module keys."
+        },
+        {
+          "command": "Official/project README field review for Matrix, Villa and WxClaw",
+          "result": "Corrected Villa per-bot pub_key/connection fields, Matrix login_user/login_password and oauth_server_url plus documented optional fields, and WxClaw global defaults."
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui; python -m compileall -q webui/services/platformcfg.py; python -m ruff check webui/services/platformcfg.py; python scripts/check_docs.py; git diff --check",
+          "result": "Dashboard vue-tsc and production build passed; assets synced to webui/dist and desktop/dashboard-dist. Python compileall and Ruff passed. Docs check passed (121 files / 1262 links / 577 migration anchors / 0 errors); feature/locale JSON parsed; git diff --check passed."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all and --scope compare --base-ref main --repo Stella_project",
+          "result": "Both scopes completed without partial/truncated output: 20 files, 96 symbols, 15 affected processes, HIGH aggregate risk. Platform adapter read/save, validation, module parsing and dotenv persistence flows are included."
+        },
+        {
+          "command": "Verification boundary",
+          "result": "Automated tests and browser modal save/readback were not run; no configuration was saved and no live platform connection was attempted."
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-ADAPTER-PICKER-UX",
+      "name": "NoneBot 适配器选择窗口易用性",
+      "description": "精简按需适配器选择窗口，将自定义模块添加入口放入窗口，统一卡片布局并隐藏已屏蔽适配器。",
+      "status": "done",
+      "dependencies": [
+        "PLATFORM-ADAPTER-FORM-PRESETS"
+      ],
+      "scope": [
+        "dashboard/src/views/PlatformsPage.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "适配器选择窗口不展示安装命令，计数和列表只呈现可添加目录适配器。",
+        "已屏蔽适配器不出现在选择结果中，自定义 Python 模块可在此窗口添加；主页面移除原自定义模块输入框。",
+        "选择窗口适配器卡片统一宽高，标题、模块名和描述在长文本时保持布局整齐。",
+        "Dashboard 构建、静态资源同步、双语 JSON、文档与 diff 检查完成；不运行测试套件。"
+      ],
+      "evidence": [
+        {
+          "command": "pnpm --dir dashboard build",
+          "result": "vue-tsc 与 Vite 生产构建通过；保留既有动态/静态混合导入与大于 500 KB chunk 警告。"
+        },
+        {
+          "command": "pnpm --dir dashboard sync:webui; python scripts/check_docs.py; locale/feature JSON parse; git diff --check",
+          "result": "Dashboard 资源同步至 webui/dist 与 desktop/dashboard-dist；文档检查 121 files / 1262 local links / 577 migration anchors / 0 errors；locale 与 feature JSON 解析及 diff 检查通过。"
+        },
+        {
+          "command": "UI source inspection",
+          "result": "目录过滤只返回 available 项，选择器不再渲染 nb adapter install 命令或屏蔽卡片；自定义模块入口移入添加窗口，卡片设为统一高度并对长标题/模块/描述限行。"
+        },
+        {
+          "command": "GitNexus impact PlatformsPage/saveAdapters and detect-changes all + compare main",
+          "result": "Component target 未进入图索引、saveAdapters upstream 为 UNKNOWN / 0；rg 源码确认 router 动态加载此页面，选择状态与自定义路径属于本地 Vue 组件，并由既有页面保存至 /platform/adapters。最终 all 与 compare/main 均为 20 files / 96 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated；该聚合风险包含此前平台配置与运行时改动。"
+        },
+        {
+          "command": "Runtime/browser acceptance boundary",
+          "result": "未打开实时页面交互验收；未保存平台配置、启动/重启服务、填写凭据或连接真实平台。"
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-ADAPTER-PICKER-POLISH",
+      "name": "NoneBot 适配器选择窗口视觉细节",
+      "description": "精简目录元数据展示，将自定义适配器入口移至目录网格末尾，并统一卡片尺寸、文字排版和项目文档入口。",
+      "status": "done",
+      "dependencies": [
+        "PLATFORM-ADAPTER-PICKER-UX"
+      ],
+      "scope": [
+        "dashboard/src/views/PlatformsPage.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "选择窗口隐藏目录来源和更新时间，搜索框占满可用宽度。",
+        "目录网格末尾显示带加号的自定义适配器卡片；点击后以简洁表单添加 Python 模块路径。",
+        "主页面适配器卡片和目录选择卡片共用最小高度；标题/模块/描述紧凑对齐，避免单行文字预留空白行。",
+        "项目/文档链接显示为图标，悬浮时展示说明；Dashboard 构建、同步、双语文案、文档和 diff 检查通过。"
+      ],
+      "evidence": [
+        {
+          "command": "pnpm --dir dashboard build",
+          "result": "vue-tsc 与 Vite 生产构建通过；保留既有动态/静态混合导入和大于 500 KB chunk 警告。"
+        },
+        {
+          "command": "pnpm --dir dashboard sync:webui; python scripts/check_docs.py; locale/feature JSON parse; git diff --check",
+          "result": "静态资源同步至 webui/dist 与 desktop/dashboard-dist；三份 index.html SHA-256 一致。文档检查 121 files / 1262 local links / 577 migration anchors / 0 errors；locale 与 feature JSON 解析及 diff 检查通过。"
+        },
+        {
+          "command": "UI source inspection",
+          "result": "目录来源日期栏已移除；搜索框铺满；末尾加号卡片打开自定义模块对话框；main/picker 共用 156px min-height；项目链接改为带 tooltip 的外开图标。"
+        },
+        {
+          "command": "GitNexus impact saveAdapters; detect-changes all + compare main",
+          "result": "saveAdapters upstream 为 UNKNOWN / 0，源代码确认选择器逻辑属于 PlatformsPage.vue 且配置仍通过既有 /platform/adapters 保存入口。最终 all 与 compare/main 均为 20 files / 98 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated；HIGH 包含该工作区此前的平台后端和配置改动。"
+        },
+        {
+          "command": "Runtime/browser acceptance boundary",
+          "result": "没有打开实时浏览器做视觉交互验收；没有保存平台配置、填写凭据或连接真实平台。测试套件未运行。"
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-ADAPTER-RUNTIME-DRIVER-UI",
+      "name": "平台适配器卡片与 Driver 配置位置调整",
+      "description": "统一目录卡片标题起点，将选择框放到卡片右上角；把 NoneBot 全局 DRIVER 配置移入每个适配器的运行时配置窗口。",
+      "status": "done",
+      "dependencies": [
+        "PLATFORM-ADAPTER-PICKER-POLISH"
+      ],
+      "scope": [
+        "dashboard/src/views/PlatformsPage.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "docs/guides/platforms.md",
+        "docs/guides/platforms.en.md",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "目录选择卡片的复选框位于右上角，标题从左侧统一起排，保持与平台主页卡片一致的文本布局。",
+        "每个已选适配器的运行时配置窗口都能编辑 DRIVER，并说明这是影响所有已选适配器的 NoneBot 全局配置。",
+        "进程环境覆盖告警和按当前远程适配器显示的 Driver 建议位于运行时配置窗口；主页不再单独显示 DRIVER 控件。",
+        "中英文界面文案和平台使用指南说明一致；Dashboard 构建、资源同步、文档、JSON 与 diff 检查完成。"
+      ],
+      "evidence": [
+        {
+          "command": "pnpm --dir dashboard build",
+          "result": "vue-tsc 与 Vite 生产构建通过；保留已有 mixed static/dynamic import 与大于 500 KB chunk warnings。"
+        },
+        {
+          "command": "pnpm --dir dashboard sync:webui; python scripts/check_docs.py; locale/feature JSON parse; git diff --check",
+          "result": "Dashboard 资源已同步到 webui/dist 和 desktop/dashboard-dist；文档检查、JSON 解析和 diff 检查通过。"
+        },
+        {
+          "command": "UI source inspection",
+          "result": "目录选择复选框已绝对定位于卡片右上角；Driver 控件、全局作用域说明、覆盖提示与远程 Driver 建议移入每个适配器运行时弹窗，主页移除独立 Driver 控件；驱动保存仍使用原有 /platform/adapters 流程。"
+        },
+        {
+          "command": "GitNexus impact and detect-changes",
+          "result": "编辑前 openAdapterConfig 未被当前索引识别（UNKNOWN / 0）；rg 确认弹窗由该函数打开、Driver 仍通过现有 driver 字段加载并保存。最终 all 和 compare/main 检查结果见 progress.md。"
+        },
+        {
+          "command": "Runtime/browser acceptance boundary",
+          "result": "没有打开实时浏览器或执行 API 保存/回读；没有输入凭据或连接真实平台。测试套件未运行。"
+        }
+      ]
+    },
+    {
+      "id": "PLATFORM-HOME-STATUS-COMPACTION",
+      "name": "平台首页信息精简与连接状态弹窗",
+      "description": "移除平台页安装包说明与常驻进程模块信息；仅在草稿变更时提示保存重启，并将适配器连接详情收纳到状态图标弹窗。",
+      "status": "done",
+      "dependencies": [
+        "PLATFORM-ADAPTER-RUNTIME-DRIVER-UI"
+      ],
+      "scope": [
+        "dashboard/src/views/PlatformsPage.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "移除平台页顶部的安装包说明和主页中当前进程生效模块行。",
+        "保存/重启提醒仅在当前草稿与读取到的配置不一致时显示，恢复原值后提醒消失。",
+        "连接状态入口缩为一个图标并放入已添加平台卡片；点击后显示运行中各适配器连接记录及状态详情。",
+        "连接引用使用与表格正文一致的字体。",
+        "中英文标签同步；Dashboard 构建、静态资源同步、JSON 与 diff 检查通过。"
+      ],
+      "evidence": [
+        {
+          "command": "pnpm --dir dashboard build",
+          "result": "vue-tsc 与 Vite 生产构建通过；保留已有 mixed static/dynamic import 与大于 500 KB chunk warnings。"
+        },
+        {
+          "command": "pnpm --dir dashboard sync:webui; python scripts/check_docs.py; locale/feature JSON parse; git diff --check",
+          "result": "Dashboard 资源同步至 webui/dist 与 desktop/dashboard-dist；文档、JSON 和 diff 检查结果已记录在 progress.md。"
+        },
+        {
+          "command": "GitNexus impact and detect-changes",
+          "result": "编辑前 loadLink upstream LOW / 1 个文件引用；effectiveModules 与 saveAdapters 为 UNKNOWN / 0，rg 确认只用于本页面展示和保存。最终 all / compare main 结果见 progress.md。"
+        },
+        {
+          "command": "Runtime/browser acceptance boundary",
+          "result": "浏览器确认首页已移除安装包说明和进程生效行、未变更时不显示保存提示、状态图标可打开适配器连接详情弹窗，连接引用已统一为表格正文字体。当前旧后端 API 不兼容并禁用保存，未验证新后端保存/回读或连接真实平台；测试套件未运行。"
+        }
+      ]
+    },
+    {
+      "id": "SIDEBAR-RESPONSIVE-NAV",
+      "name": "响应式侧栏与导航行高",
+      "description": "修复侧栏导航文字下沿裁切并居中折叠图标；提供手动展开/折叠，按视口宽度选择默认状态，窄屏展开使用不挤压主内容的覆盖抽屉。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "dashboard/src/layouts/FullLayout.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "导航保留高于 comfortable 的 default 行密度，并使用足以容纳字体下伸部的标题行高；‘外部 Agent 任务’文本容器高度覆盖实际文本高度。",
+        "72px rail 中图标水平居中，点击菜单按钮可在所有视口宽度手动切换展开与折叠。",
+        "宽度大于 1280px 默认展开；宽度不超过 1280px 默认折叠，展开时以 256px 覆盖抽屉显示，点击主界面遮罩后回到 rail，主内容宽度保持不变。",
+        "中英文展开/折叠辅助标签匹配当前状态；Dashboard 构建、静态资源同步、JSON、文档与 diff 检查通过。",
+        "浏览器检查 1600px、1200px、850px 与 390px 下的默认状态、手动切换、遮罩关闭与横向溢出。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus upstream impact and source reference search",
+          "result": "FullLayout.vue 文件级 upstream UNKNOWN / 0；rg 确认 dashboard/src/router/index.ts 导入并将其注册为主布局。索引刷新提示流程集合截断，影响边界以源码调用引用为准。"
+        },
+        {
+          "command": "pnpm --dir dashboard build",
+          "result": "vue-tsc 与 Vite 构建通过；保留既有 mixed static/dynamic import 与大于 500 KB chunk warnings。"
+        },
+        {
+          "command": "pnpm --dir dashboard sync:webui; python scripts/check_docs.py; locale/feature JSON parse; git diff --check",
+          "result": "资源同步至 webui/dist 与 desktop/dashboard-dist；文档检查为 121 files / 1262 local links / 577 migration anchors / 0 errors，locale/feature JSON 与 diff 检查通过。"
+        },
+        {
+          "command": "Browser responsive layout review",
+          "result": "基线测得 Agent 标题 scrollHeight 18px、clientHeight/line-height 16px，确有裁切；修复后为 20px/20px/20px。1600px 默认展开 256px 且支持手动折叠/展开。1200px、850px、390px 默认 72px rail，图标中心与侧栏中心均为 x=36px；展开后覆盖抽屉从 x=0 起、宽 256px，主内容左边界仍为 72px；在 1200px 与 850px 点击主页面遮罩返回 rail，主内容几何不变。390px 与 850px documentElement.scrollWidth 等于 clientWidth。动态调整宽度跨过 1280px 断点会应用相应默认状态，视口覆盖已重置。"
+        }
+      ]
+    },
+    {
+      "id": "PERSONA-SPACE-UX",
+      "name": "人格与空间界面精简与统一设置",
+      "description": "在人格与空间页提供 ALLOWED_GROUPS 编辑入口，去掉出厂默认人格和卡片人格正文，并把人格编辑与群绑定合并为统一的空间设置。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "dashboard/src/views/PersonaPage.vue",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "人格页提供 ALLOWED_GROUPS 编辑入口，通过已有配置 API 读取并写入，校验 QQ 群号，并在保存后按配置页流程请求重启。",
+        "移除出厂默认人格读取与展示。",
+        "空间卡片仅显示名称和群绑定，不展示人格提示词或预览。",
+        "人格提示词与群绑定在名为‘空间设置’的同一弹窗中编辑并保存；保留 WebChat 的虚拟群号 -1。",
+        "Dashboard 构建与静态资源同步成功，浏览器确认两个入口可用且卡片不显示人格内容。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus refresh, status and upstream impact",
+          "result": "本机 GitNexus 1.6.12 索引为 current，commit 659a214，incompleteReasons=[]。load upstream LOW / 4 same-page direct callers; parseGroupIds LOW / 1 caller. SFC 和 Vue/Python HTTP handler 关系的 UNKNOWN / 0 由模板、router、API 源码引用补查。全仓流程报告截断，FTS 构建失败，不把遗漏流程视为无调用。"
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "vue-tsc / Vite production build passed; existing mixed-import and large-chunk warnings remain. Assets synced to webui/dist and desktop/dashboard-dist."
+        },
+        {
+          "command": "Browser review at http://127.0.0.1:8080/#/persona",
+          "result": "Cards show space names and bindings only; the factory-default persona section is absent. Both ALLOWED_GROUPS and combined space-settings dialogs open. WebChat's -1 binding remains editable. No form was submitted; API persistence and restart were not exercised."
+        },
+        {
+          "command": "Dashboard automated tests and authenticated API save/readback",
+          "result": "Not run. No ALLOWED_GROUPS or space configuration was written during browser review."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; python scripts/check_docs.py; feature JSON parse; git diff --check",
+          "result": "The first incremental detect-changes runs attributed 803–808 affected flows and CRITICAL risk to a qq_groups property fanout not supported by the source references. After a complete analyze --index-only --pdg refresh, status was current (1842 covered files; indexed/current commit 659a214) and final detect-changes --scope all runs exited 0 with 4 files / 19–25 symbols / 0 affected processes / LOW. This aligns with the source audit, but process extraction is still incomplete (2923 of 3123 entry candidates were not ranked; branch/depth budgets also apply), and FTS build failed; the low result is limited to indexed graph coverage. Docs, JSON, and diff checks passed."
+        }
+      ],
+      "acceptance": "The requested page behavior is implemented and visually confirmed; backend write/readback and restart behavior remain unverified.",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "WEBCHAT-SETTINGS-CHAT",
+      "name": "WebChat 设置归入聊天界面",
+      "description": "将 WebChat 专属人格提示词设置从空间管理页迁移到聊天界面，避免在群组/人格页管理。",
+      "status": "done",
+      "dependencies": [
+        "PERSONA-SPACE-UX"
+      ],
+      "scope": [
+        "dashboard/src/views/ChatPage.vue",
+        "dashboard/src/views/PersonaPage.vue",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "聊天界面提供 WebChat 设置入口，并使用现有空间 prompt API 读取和保存设置。",
+        "人格与空间页不再管理 WebChat 专属设置，也不允许在此创建或删除 WebChat 空间。",
+        "WebChat 虚拟身份行为保持现状，Dashboard 构建与静态资源同步通过。"
+      ],
+      "evidence": [
+        {
+          "command": "Dashboard source review",
+          "result": "ChatPage.vue 提供 WebChat 设置入口与 prompt 对话框；PersonaPage.vue 将 WebChat 空间排除在普通空间管理之外。"
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "后续群组/人格合并构建包含此变更，vue-tsc 和 Vite 构建通过，资源同步到 webui/dist 和 desktop/dashboard-dist。"
+        },
+        {
+          "command": "Authenticated API save/readback",
+          "result": "未提交表单；未验证后端持久化与运行期回读。"
+        }
+      ],
+      "acceptance": "源码实现已完成；后端认证态保存/回读待验证。",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "GROUP-PERSONA-UNIFIED-UI",
+      "name": "群组与人格统一界面",
+      "description": "将群组管理能力并入空间与人格页面，移除重复导航，并保留旧群组路径兼容。",
+      "status": "done",
+      "dependencies": [
+        "PERSONA-SPACE-UX",
+        "WEBCHAT-SETTINGS-CHAT"
+      ],
+      "scope": [
+        "dashboard/src/views/PersonaPage.vue",
+        "dashboard/src/views/GroupsPage.vue",
+        "dashboard/src/router/index.ts",
+        "dashboard/src/layouts/FullLayout.vue",
+        "dashboard/src/views/WelcomePage.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "统一页面同时提供群组所属空间、消息数、主动静音，以及空间人格和群绑定管理。",
+        "移除独立群组侧栏入口，旧 /groups 地址和首页引导跳转到统一页面。",
+        "WebChat 专属设置继续留在聊天页面；群组与人格页不显示 WebChat 空间。",
+        "Dashboard 构建、资源同步、文档、JSON 与 diff 检查通过。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus analyze --index-only --pdg + upstream impact + source audit",
+          "result": "GitNexus 1.6.12 index-only + PDG refresh (FTS skipped) completed. PersonaPage.vue / GroupsPage.vue upstream are UNKNOWN / 0; SFC methods and Python route symbols are not indexed, so source references were checked. Final detect all: 11 files / 63 symbols / 4 affected processes / MEDIUM; flows are SaveAllowedGroups and SaveSpaceSettings. Compare main: 32 files / 327 symbols / 22 processes / CRITICAL, including earlier platform work on this branch. Process extraction remains incomplete (2924/3124 entry candidates unranked, with branch/depth budgets); FTS is disabled."
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "vue-tsc 与 Vite 生产构建通过，保留既有 mixed import 和大 chunk 警告；资源同步至 webui/dist 和 desktop/dashboard-dist。python scripts/check_docs.py 为 121 files / 1262 local links / 577 migration anchors / 0 errors；feature/locale JSON parse 与 git diff --check 通过。"
+        },
+        {
+          "command": "Browser/API acceptance",
+          "result": "未进行本轮浏览器视觉验收；未写入配置、未触发重启。"
+        }
+      ],
+      "acceptance": "统一页面源码和构建交付完成；浏览器交互及 API 保存/回读尚未验收。",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "GROUP-TAG-SELECTORS",
+      "name": "群号标签输入与空间绑定选择器",
+      "description": "将 ALLOWED_GROUPS 改为逐项添加/删除的群号标签，并让空间群绑定只从现有群号中选择。",
+      "status": "done",
+      "dependencies": [
+        "GROUP-PERSONA-UNIFIED-UI"
+      ],
+      "scope": [
+        "dashboard/src/views/PersonaPage.vue",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "ALLOWED_GROUPS 可逐一输入、添加和移除正整数群号；加载现有逗号配置并按后端格式保存。",
+        "空间群绑定通过现有群号多选器完成，不能自由输入；当前空间的旧绑定保持可见并可移除。",
+        "Dashboard 类型检查、生产构建和静态资源同步通过。",
+        "文档、JSON 与 diff 检查通过，并记录未执行的浏览器/API 验收。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus upstream impact + source audit",
+          "result": "saveAllowedGroups 与 saveSpaceSettings 均为 UNKNOWN / 0 callers；GitNexus 未解析 Vue 模板事件绑定。源码确认两个处理函数由本页模板触发，分别走 /config 与 /spaces/{name}/bindings；群组 API 返回 ALLOWED_GROUPS 群组，空间服务保存整数列表并在重复绑定时从其他空间移除。"
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "vue-tsc 与 Vite 生产构建通过，保留既有 mixed import 与大 chunk 警告；静态资源同步到 webui/dist 与 desktop/dashboard-dist。"
+        },
+        {
+          "command": "python scripts/check_docs.py; feature JSON parse; git diff --check; GitNexus detect-changes --scope all",
+          "result": "Docs: 121 files / 1262 local links / 577 migration anchors / 0 errors; JSON parsing and git diff --check passed. GitNexus 1.6.12 refreshed to HEAD 659a214 and reported 1841 covered files with FTS disabled; process extraction remains incomplete (2924/3124 candidates not ranked). detect-changes all runs reported 11 files / 44-45 symbols / CRITICAL and 805-816 affected processes, with generic `name` fanout into unrelated flows; this unstable aggregate is retained as an unresolved graph limitation, not dismissed as a pass."
+        },
+        {
+          "command": "Browser/API save and readback",
+          "result": "未运行；未修改本机 .env、空间绑定或重启服务。"
+        }
+      ],
+      "acceptance": "群号输入与空间选择界面已实现并通过构建、资源同步；浏览器交互和认证态 API 保存/回读仍未验收。",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "SETTINGS-ADVANCED-CONFIG",
+      "name": "设置页整合高级配置",
+      "description": "移除设置页重复的外观控制，并将原配置页纳入设置页的高级设置区域。",
+      "status": "done",
+      "dependencies": [
+        "GROUP-TAG-SELECTORS"
+      ],
+      "scope": [
+        "dashboard/src/views/SettingsPage.vue",
+        "dashboard/src/views/ConfigPage.vue",
+        "dashboard/src/components/AdvancedConfigSettings.vue",
+        "dashboard/src/router/index.ts",
+        "dashboard/src/layouts/FullLayout.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "设置页移除与顶栏重复的外观选项，顶栏主题切换保留。",
+        "原配置表单在设置页的高级设置区始终可见，搜索、恢复默认、JSON 编辑、未保存提示、保存和按需重启行为保留。",
+        "侧栏不再显示独立配置入口；旧 /config 地址重定向到设置页并展开高级设置。",
+        "Dashboard 类型检查、生产构建、静态资源同步、文档、JSON 与 diff 检查通过。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus upstream impact + source reference audit",
+          "result": "SettingsPage.vue 与 ConfigPage.vue 文件级 impact 为 UNKNOWN / 0，源码确认配置页只由旧路由与侧栏引用。settingsPanels impact 为 UNKNOWN / 0；源码确认它由模板 v-model 控制折叠，后改为常驻高级设置区块并移除状态。共享 ConfigForm impact 为 LOW / 2 callers（原配置页、插件页），保留 ConfigForm，迁移配置表单到 AdvancedConfigSettings.vue。"
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "最终 Settings 页面（高级设置常驻显示、doctor Pinia 状态）经 vue-tsc 与 Vite production build 通过，保留既有 mixed import 与大 chunk 警告；sync:webui 同步至 webui/dist 和 desktop/dashboard-dist。"
+        },
+        {
+          "command": "python scripts/check_docs.py; locale and feature JSON parse; git diff --check; GitNexus detect-changes --scope all",
+          "result": "文档检查 121 files / 1262 local links / 577 migration anchors / 0 errors；feature 与中英文 locale JSON 解析通过，git diff --check 通过。GitNexus 全量刷新后 status up-to-date（1842 covered files）。UI 源码变更的 scope=all 为 9 files / 5 symbols / 0 affected processes / LOW；随后仅更新提交状态文档时，scope=all 为 CRITICAL (status-doc Markdown section fanout)，均从progress.md 中通用 Markdown section 扇出，该次 diff 不含应用源码。scope=compare base_ref=main 为分支累计 CRITICAL，所示流程重复扇出自 BLOCKED_ADAPTERS，当前设置源码未改该符号。流程图仍遗漏 2924/3124 个候选入口，FTS disabled；图风险受上述通用 section 与索引覆盖限制。"
+        },
+        {
+          "command": "Browser interaction and config API save/readback",
+          "result": "未运行；未提交配置或触发重启。"
+        }
+      ],
+      "acceptance": "设置页整合已通过类型检查、构建和资源同步；浏览器交互及认证态配置保存/重启仍待验收。",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "SETTINGS-DOCTOR-PERSIST",
+      "name": "设置页保留环境自检结果",
+      "description": "环境自检完成后，在应用内切换路由再返回设置页时继续展示最近一次结果。",
+      "status": "done",
+      "dependencies": [
+        "SETTINGS-ADVANCED-CONFIG"
+      ],
+      "scope": [
+        "dashboard/src/views/SettingsPage.vue",
+        "dashboard/src/stores/doctor.ts",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "自检结果与运行状态移出 SettingsPage 组件实例，路由离开并返回后仍显示最近结果。",
+        "结果只在当前应用会话内保留，不写入浏览器本地持久存储。",
+        "Dashboard 构建、文档、JSON 与 diff 检查通过；未完成的浏览器验收明确记录。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus impact runDoctor --direction upstream; source reference audit",
+          "result": "runDoctor 图查询为 UNKNOWN / 0；源码确认由 SettingsPage 的环境自检按钮模板事件触发，组件内 ref 随路由卸载而丢失。SettingsPage 文件级结果也为 UNKNOWN / 0，额外发现同名非 Dashboard 符号造成查询歧义。"
+        },
+        {
+          "command": "Dashboard build; python scripts/check_docs.py; feature JSON parse; git diff --check; GitNexus detect-changes --scope all",
+          "result": "`pnpm --dir dashboard build`（vue-tsc + Vite）exit 0，保留既有 mixed import 与 >500KB chunk 警告；`pnpm --dir dashboard sync:webui` 同步到 webui/dist 与 desktop/dashboard-dist。文档检查 121 files / 1262 local links / 577 migration anchors / 0 errors；feature/locale JSON 与 diff 检查通过。GitNexus 刷新后 status up-to-date（1842 covered files）。UI 源码变更 scope=all 为 9 files / 5 symbols / 0 affected processes / LOW；提交状态文档 follow-up 的 scope=all 为 CRITICAL (status-doc Markdown section fanout)，受progress.md 中通用 Markdown section 扇出，该 diff 不含应用源码。scope=compare main 的分支累计结果为 CRITICAL，流程反复关联 BLOCKED_ADAPTERS，设置源码未涉及该符号。流程图仍遗漏 2924/3124 候选入口且 FTS disabled。"
+        },
+        {
+          "command": "Browser route navigation acceptance",
+          "result": "未运行；未在浏览器进行路由往返验收。"
+        }
+      ],
+      "acceptance": "自检结果已提升至应用级 Pinia 状态，并通过 Dashboard 构建、资源同步和仓库状态检查；浏览器路由往返验收未运行。",
+      "branch": "codex/frontend-ui-polish"
     }
   ]
 }

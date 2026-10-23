@@ -7,7 +7,7 @@
 | Job | 内容 |
 |---|---|
 | `lint` | `ruff check .`（Python 3.11） |
-| `security` | `pip-audit -r requirements.txt`（阻塞）+ `bandit`（非阻塞，报告上传为 artifact） |
+| `security` | `pip-audit -r requirements.txt`（阻塞；仅三个上游约束导致的 cryptography ID 按下文精确豁免）+ `bandit`（非阻塞，报告上传为 artifact） |
 | `test` | 3.10 / 3.11 / 3.12 三版本矩阵，从 `requirements-platform.lock` 安装基础与可选平台桥接依赖，再运行 `pytest tests/ --cov=. --cov-branch -n auto`，覆盖率报告上传为 artifact |
 | `cli` | Rust CLI（`cli/`）：`cargo fmt --check` + `clippy -- -D warnings` + `cargo test`，另对帮助文本做子命令清单冒烟（doctor/init/start/stop/restart/status/logs/upgrade/migrate/plugin/capabilities/manifest/compose），防止重构悄悄丢命令 |
 | `windows-native` | windows-latest 上跑 `pytest tests/windows`——进程树、升级与安装可靠性的原生矩阵（哨兵/PID/激活记录等都依赖真实 Windows 语义） |
@@ -26,9 +26,9 @@ ruff check .
 pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 ```
 
-`requirements-platform.lock` 包含 `requirements.txt` 的基础依赖及 `requirements-platform.in` 声明的可选 Uninfo。OneBot v11 出站 codec 需要的 Alconna 已进入基础依赖，因此默认 QQ/WebChat 安装通过 `requirements.txt` 即可获得。
+`requirements-platform.lock` 包含 `requirements.txt` 的基础依赖（包括目录中 29 条可选记录对应的 28 个适配器发行包）及 `requirements-platform.in` 声明的可选 Uninfo。黑盒语音要求 Python 3.11+，因此 Python 3.10 矩阵会按 marker 跳过该包。OneBot v11 出站 codec 需要的 Alconna 也在基础依赖中。
 
-`pip-audit` 是阻塞的，某个上游依赖爆出 CVE 时 CI 会红。若判断为不可立即修复的上游问题，可临时在该步骤加 `|| true`，但应记录原因。
+`pip-audit` 是阻塞的，未列入精确豁免的漏洞会让 CI 失败。当前 NoneBot QQ 适配器仍将 `cryptography` 限制在 `<49`；该适配器使用 Ed25519，没有调用以下公告影响的 PKCS#7 解密或 `cryptography` X.509 验证 API，因此 CI 只豁免三个精确 ID：`PYSEC-2026-3552`、`PYSEC-2026-3553`、`PYSEC-2026-3554`。这不是对已安装 `cryptography` 无漏洞的声明；当 QQ 适配器放宽版本上限并可解析到修复版本后，应删除豁免并恢复完整审计。Mail 适配器因其 `aiosmtplib~=3.0` 约束无法安装 `PYSEC-2026-3805` 的修复版 5.1.2，已在目录和运行时策略中屏蔽，并从基础依赖移除。不要用 `|| true` 关闭其余漏洞检查。
 
 **只有 3.10 红、且是全量 collect error 时，先怀疑传递依赖**。`requirements.txt` 里的直接依赖基本都是下限约束（`>=`），传递依赖则完全不钉——任何上游发一个只支持 3.11+ 的新版本，`test (3.10)` 就会全红，而 3.11/3.12 与开发机全绿。2026-09-01 的实例：`pygtrie` 2.6.0 在模块顶层用了 `typing.Self`（3.11 才有），`import nonebot` 直接抛 `AttributeError: module 'typing' has no attribute 'Self'`，622 个用例全部 error。这类故障的排查方式是**只看 `==== ERRORS ====` 段的第一条 traceback**（几万行日志里全是同一条的复制），修法是在 `requirements.txt` 里显式钉住那个传递依赖并写清原因。
 

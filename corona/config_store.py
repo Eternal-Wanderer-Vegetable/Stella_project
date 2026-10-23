@@ -14,7 +14,7 @@ import sqlite3
 import stat
 import tempfile
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -277,11 +277,23 @@ class ConfigStore:
         expected_revision: str | None,
         idempotency_key: str | None,
         actor: Mapping[str, str] | None = None,
+        allowed_extra_keys: Iterable[str] = (),
+        remove_keys: Iterable[str] = (),
+        quote_keys: Iterable[str] = (),
     ) -> dict[str, Any]:
         """Validate, stage, PREPARE, replace, and COMMIT one immutable revision."""
-        updates, removals = self._normalize_updates(values)
+        updates, removals = self._normalize_updates(
+            values,
+            allowed_extra_keys=allowed_extra_keys,
+            remove_keys=remove_keys,
+        )
+        quoted = set(quote_keys).intersection(updates)
         canonical = json.dumps(
-            {"updates": updates, "remove": sorted(removals)},
+            {
+                "updates": updates,
+                "remove": sorted(removals),
+                "quote": sorted(quoted),
+            },
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -332,7 +344,7 @@ class ConfigStore:
                     "config_source_invalid", current_revision=current_id
                 ) from exc
 
-            after_text = _patch_env(before_text, updates, removals)
+            after_text = _patch_env(before_text, updates, removals, quoted)
             if after_text == before_text:
                 result = self._save_result(
                     current_revision,
@@ -744,13 +756,30 @@ class ConfigStore:
         }
 
     def _normalize_updates(
-        self, values: Mapping[str, Any]
+        self,
+        values: Mapping[str, Any],
+        *,
+        allowed_extra_keys: Iterable[str] = (),
+        remove_keys: Iterable[str] = (),
     ) -> tuple[dict[str, str], set[str]]:
         if not isinstance(values, Mapping):
             raise ConfigStoreError("config_payload_invalid")
         fields = {field["key"]: field for field in self.schema()}
         updates: dict[str, str] = {}
-        removals: set[str] = set()
+        extras = set(allowed_extra_keys)
+        removals = set(remove_keys)
+        for key in extras | removals:
+            if not isinstance(key, str) or not _ENV_KEY.fullmatch(key):
+                raise ConfigStoreError("config_key_unknown")
+        for key in extras:
+            if key not in fields:
+                fields[key] = {
+                    "key": key,
+                    "type": "string",
+                    "sensitive": _is_sensitive(key),
+                }
+        if removals - fields.keys():
+            raise ConfigStoreError("config_key_unknown")
         try:
             from deploy import env_keys
         except Exception:
@@ -781,6 +810,8 @@ class ConfigStore:
                 raise ConfigStoreError("config_value_choice_invalid")
             _validate_field(key, value, field)
             updates[key] = value
+        if removals.intersection(updates):
+            raise ConfigStoreError("config_key_unknown")
         return updates, removals
 
     def _validate_extra_values(
@@ -1111,7 +1142,17 @@ class ConfigStore:
             self.fault_hook(boundary)
 
 
-def _patch_env(text: str, updates: Mapping[str, str], removals: set[str]) -> str:
+def _patch_env(
+    text: str,
+    updates: Mapping[str, str],
+    removals: set[str],
+    quote_keys: set[str] | frozenset[str] = frozenset(),
+) -> str:
+    def encode(key: str, value: str) -> str:
+        if key not in quote_keys:
+            return value
+        return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
     lines = text.splitlines(keepends=True)
     output: list[str] = []
     for line in lines:
@@ -1126,7 +1167,7 @@ def _patch_env(text: str, updates: Mapping[str, str], removals: set[str]) -> str
             continue
         for key, value in updates.items():
             if _assignment_matches(body, key):
-                output.append(f"{key}={value}{newline}")
+                output.append(f"{key}={encode(key, value)}{newline}")
                 matched = True
                 break
         if not matched:
@@ -1137,7 +1178,7 @@ def _patch_env(text: str, updates: Mapping[str, str], removals: set[str]) -> str
         if not any(_assignment_matches(line.rstrip("\r\n"), key) for line in output):
             if result and not result.endswith(("\n", "\r")):
                 result += "\n"
-            result += f"{key}={value}\n"
+            result += f"{key}={encode(key, value)}\n"
     return result
 
 

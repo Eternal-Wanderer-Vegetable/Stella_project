@@ -1,47 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
+import { storeToRefs } from 'pinia';
 
-import { useCustomizerStore, type ThemeMode } from '@/stores/customizer';
 import { api, unwrap } from '@/api/http';
+import AdvancedConfigSettings from '@/components/AdvancedConfigSettings.vue';
+import { useDoctorStore } from '@/stores/doctor';
 import { toastApiError, useToast } from '@/stores/toast';
 
-// 设置页（方案 §6.12）：外观 / 安全 / 维护(doctor) / 关于
+// 设置页：账户安全、环境自检、关于与高级环境变量配置。
 const toast = useToast();
-const customizer = useCustomizerStore();
+const doctorStore = useDoctorStore();
+const { result: doctor, loading: doctorLoading } = storeToRefs(doctorStore);
 
 const username = ref('');
 const oldPassword = ref('');
 const newPassword = ref('');
 const busy = ref(false);
-interface DoctorItem {
-  id: string;
-  level: string;
-  title: string;
-  detail?: string;
-  fix_hint?: string;
-}
-interface DoctorSummary {
-  ok: number;
-  warn: number;
-  error: number;
-  blocking: boolean;
-  total: number;
-}
-interface DoctorReport {
-  version: number;
-  summary: DoctorSummary;
-  items: DoctorItem[];
-}
-const doctor = ref<{
-  ok: boolean;
-  report?: DoctorReport;
-  summary?: DoctorSummary;
-  error?: string;
-  output?: string;
-  exit_code?: number;
-} | null>(null);
-const doctorLoading = ref(false);
-const showRawDoctor = ref(false);
 
 const storedUser = localStorage.getItem('stella-user') ?? '';
 username.value = storedUser;
@@ -81,13 +55,6 @@ async function runDoctor(): Promise<void> {
   }
 }
 
-function setTheme(mode: ThemeMode): void {
-  customizer.setThemeMode(mode);
-}
-
-onMounted(() => {
-  // 无额外初始化
-});
 </script>
 
 <template>
@@ -96,20 +63,6 @@ onMounted(() => {
 
     <v-row>
       <v-col cols="12" md="6">
-        <v-card class="pa-4 mb-4">
-          <div class="text-subtitle-1 font-weight-medium mb-3">外观</div>
-          <v-btn-toggle
-            :model-value="customizer.themeMode"
-            mandatory
-            density="compact"
-            @update:model-value="(v: ThemeMode) => setTheme(v)"
-          >
-            <v-btn value="light">浅色</v-btn>
-            <v-btn value="dark">深色</v-btn>
-            <v-btn value="system">跟随系统</v-btn>
-          </v-btn-toggle>
-        </v-card>
-
         <v-card class="pa-4 mb-4">
           <div class="text-subtitle-1 font-weight-medium mb-3">安全</div>
           <v-text-field v-model="username" label="用户名" density="compact" disabled />
@@ -215,6 +168,13 @@ onMounted(() => {
         </v-card>
       </v-col>
     </v-row>
+
+    <v-card class="mt-4">
+      <v-card-title class="text-subtitle-1 font-weight-medium">高级设置</v-card-title>
+      <v-card-text>
+        <AdvancedConfigSettings />
+      </v-card-text>
+    </v-card>
   </v-container>
 </template>
 

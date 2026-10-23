@@ -15,8 +15,11 @@ import math
 import os
 import time
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
+from io import StringIO
 from typing import Annotated, Any
 
+from dotenv.parser import parse_stream
 from fastapi import APIRouter, Body, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 
@@ -27,7 +30,9 @@ from stella_bootstrap.adapter_names import (
     DEFAULT_ADAPTER_MODULES,
     parse_adapter_modules,
 )
+from stella_bootstrap.adapter_policy import unavailable_adapter_reasons
 from webui.responses import ApiError, ok
+from webui.services import platformcfg as platformcfg_service
 
 router = APIRouter(
     tags=["corona-config"],
@@ -354,11 +359,40 @@ async def platform_adapters(request: Request) -> Any:
         effective = ()
     if configured_value is None:
         configured = DEFAULT_ADAPTER_MODULES
+    unavailable = unavailable_adapter_reasons()
+    catalog = [
+        {
+            **item,
+            "available": item["module"] not in unavailable,
+            **(
+                {"unavailable_reason": unavailable[item["module"]]}
+                if item["module"] in unavailable
+                else {}
+            ),
+        }
+        for item in platformcfg_service._ADAPTER_CATALOG
+    ]
+    adapter_env, adapter_env_process_overrides = (
+        platformcfg_service._adapter_env_status(desired.values)
+    )
+    installed_packages: dict[str, str | None] = {}
+    for package in platformcfg_service._ADAPTER_PACKAGES:
+        try:
+            installed_packages[package] = version(package)
+        except PackageNotFoundError:
+            installed_packages[package] = None
     return ok(
         {
             "modules": list(configured),
             "effective_modules": list(effective),
             "process_override": "STELLA_ADAPTER_MODULES" in os.environ,
+            "driver": desired.values.get("DRIVER", ""),
+            "driver_process_override": "DRIVER" in os.environ,
+            "installed_packages": installed_packages,
+            "catalog": catalog,
+            "adapter_env": adapter_env,
+            "adapter_env_process_overrides": adapter_env_process_overrides,
+            "connections": platformcfg_service._status(desired.values),
             "desired_revision": desired.revision_id,
             "applied_revision": applied.revision_id,
         }
@@ -371,25 +405,33 @@ async def platform_adapters_put(
     payload: dict[str, Any],
     auth: Annotated[AuthContext, Depends(require_auth)],
 ) -> Any:
-    modules = payload.get("modules")
-    if not isinstance(modules, list) or any(
-        not isinstance(module, str) for module in modules
-    ):
+    store = _store(request)
+    current, _path = store.current_revision("desired")
+    parsed, encoded_updates = platformcfg_service._module_updates(
+        payload, dict(current.values)
+    )
+    unavailable = unavailable_adapter_reasons()
+    current_modules = set(
+        parse_adapter_modules(current.values.get("STELLA_ADAPTER_MODULES"))
+    )
+    newly_blocked = (set(parsed) & unavailable.keys()) - current_modules
+    if newly_blocked:
         raise ApiError(
-            "adapter_modules_invalid", data={"code": "adapter_modules_invalid"}
+            "adapter_modules_unavailable",
+            data={"code": "adapter_modules_unavailable", "modules": sorted(newly_blocked)},
         )
-    try:
-        parsed = parse_adapter_modules(",".join(module.strip() for module in modules))
-    except ValueError as exc:
-        raise ApiError(
-            "adapter_modules_invalid", data={"code": "adapter_modules_invalid"}
-        ) from exc
+    updates, removals, quote_keys = _decode_platform_env_updates(encoded_updates)
+    schema_keys = {field["key"] for field in store.schema()}
+    extra_keys = (set(updates) | removals) - schema_keys
     result = _save(
         request,
-        {"STELLA_ADAPTER_MODULES": ",".join(parsed) if parsed else "none"},
+        updates,
         expected_revision=_if_match(request.headers.get("if-match")),
         idempotency_key=request.headers.get("idempotency-key"),
         auth=auth,
+        allowed_extra_keys=extra_keys,
+        remove_keys=removals,
+        quote_keys=quote_keys,
     )
     result["modules"] = list(parsed)
     result["restart_required"] = True
@@ -612,6 +654,9 @@ def _save(
     expected_revision: str | None,
     idempotency_key: str | None,
     auth: AuthContext,
+    allowed_extra_keys: set[str] | frozenset[str] = frozenset(),
+    remove_keys: set[str] | frozenset[str] = frozenset(),
+    quote_keys: set[str] | frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     try:
         return _store(request).save(
@@ -619,6 +664,9 @@ def _save(
             expected_revision=expected_revision,
             idempotency_key=idempotency_key,
             actor=_actor(auth),
+            allowed_extra_keys=allowed_extra_keys,
+            remove_keys=remove_keys,
+            quote_keys=quote_keys,
         )
     except ConfigStoreError as exc:
         conflicts = {
@@ -632,6 +680,28 @@ def _save(
             status_code=409 if exc.code in conflicts else 400,
             data={"code": exc.code, "current_revision": exc.current_revision},
         ) from exc
+
+
+def _decode_platform_env_updates(
+    encoded: dict[str, str | None],
+) -> tuple[dict[str, str], set[str], set[str]]:
+    """Convert the shared platform form's dotenv values to revision values."""
+    updates: dict[str, str] = {}
+    removals: set[str] = set()
+    quote_keys: set[str] = set()
+    for key, raw_value in encoded.items():
+        if raw_value is None:
+            removals.add(key)
+            continue
+        if "\n" in raw_value or "\r" in raw_value or "\0" in raw_value:
+            raise ApiError("adapter_config_value_invalid")
+        if raw_value.startswith("'") and raw_value.endswith("'"):
+            quote_keys.add(key)
+        binding = next(parse_stream(StringIO(f"{key}={raw_value}\n")), None)
+        if binding is None or binding.key != key or binding.value is None or binding.error:
+            raise ApiError("adapter_config_value_invalid")
+        updates[key] = binding.value
+    return updates, removals, quote_keys
 
 
 def _store(request: Request) -> ConfigStore:

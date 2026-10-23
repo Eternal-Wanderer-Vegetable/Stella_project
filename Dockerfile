@@ -21,6 +21,8 @@ RUN npm install --global pnpm@10
 COPY dashboard/package.json dashboard/pnpm-lock.yaml dashboard/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY dashboard/ ./
+# PlatformsPage imports this canonical catalog from the repository root.
+COPY webui/services/nonebot_adapter_catalog.json /webui/services/nonebot_adapter_catalog.json
 RUN pnpm build
 
 FROM python:3.12-slim

@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import importlib
+import logging
 from typing import Any
 
+from core.transport.adapter_policy import unavailable_adapter_reasons
 from stella_bootstrap.adapter_names import (
     DEFAULT_ADAPTER_MODULES,
     parse_adapter_modules,
@@ -37,8 +39,17 @@ def register_enabled_adapters(driver: Any, module_paths: tuple[str, ...]) -> tup
 
     registered_names: list[str] = []
     existing_adapters = getattr(driver, "_adapters", {})
+    unavailable = unavailable_adapter_reasons()
+    blocked = tuple(module for module in module_paths if module in unavailable)
+    if blocked:
+        logging.getLogger("nonebot").warning(
+            "[adapters][boot] 已跳过不再支持的适配器模块 %s；请从 STELLA_ADAPTER_MODULES 移除",
+            ", ".join(blocked),
+        )
 
     for module_path in module_paths:
+        if module_path in unavailable:
+            continue
         try:
             module = importlib.import_module(module_path)
         except ModuleNotFoundError as exc:

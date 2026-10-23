@@ -78,11 +78,12 @@ class _Supervisor:
         self.snapshot = _snapshot("stopped", self.selected.revision_id, "stopped", None)
 
 
-def _app(tmp_path: Path):
+def _app(tmp_path: Path, *, extra_env: str = ""):
     home = tmp_path / "home"
     home.mkdir()
     (home / ".env").write_text(
-        "HOST=127.0.0.1\nPORT=18765\nWEBUI_ENABLED=true\nWEBUI_SERVE_DIST=false\n",
+        "HOST=127.0.0.1\nPORT=18765\nWEBUI_ENABLED=true\nWEBUI_SERVE_DIST=false\n"
+        + extra_env,
         encoding="utf-8",
     )
     external = {"DB_PATH": str(tmp_path / "isolated.db")}
@@ -228,3 +229,117 @@ def test_corona_config_api_auth_revision_redaction_and_sse(tmp_path: Path) -> No
         assert token["current_value"] is None
 
     assert supervisor.started == [changed_revision]
+
+
+def test_corona_platform_adapters_catalog_save_and_secret_redaction(
+    tmp_path: Path,
+) -> None:
+    app, store, _supervisor = _app(
+        tmp_path,
+        extra_env=(
+            "STELLA_ADAPTER_MODULES=nonebot.adapters.onebot.v11\n"
+            "DRIVER=~fastapi+~httpx+~websockets\n"
+            "ONEBOT_ACCESS_TOKEN='onebot-old-secret'\n"
+            'QQ_BOTS=\'[ {"id":"10001","secret":"qq-old-secret"} ]\'\n'
+            'STELLA_ADAPTER_ENV_KEYS=\'["CUSTOM_ADAPTER_TOKEN","CUSTOM_ADAPTER_LABEL","CUSTOM_OLD"]\'\n'
+            'STELLA_ADAPTER_ENV_MODULES=\'{"CUSTOM_ADAPTER_TOKEN":"nonebot.adapters.onebot.v11","CUSTOM_ADAPTER_LABEL":"nonebot.adapters.onebot.v11","CUSTOM_OLD":"nonebot.adapters.onebot.v11"}\'\n'
+            "CUSTOM_ADAPTER_TOKEN='adapter-old-secret'\n"
+            "CUSTOM_ADAPTER_LABEL='old label'\n"
+            "CUSTOM_OLD='remove me'\n"
+        ),
+    )
+    with TestClient(app) as client:
+        setup = client.post(
+            "/api/v1/auth/setup",
+            json={"username": "admin", "password": "cn05-api-test-password"},
+        )
+        assert setup.status_code == 200
+        headers = {"Authorization": f"Bearer {setup.json()['data']['token']}"}
+
+        current = client.get("/api/v1/platform/adapters", headers=headers)
+        assert current.status_code == 200
+        current_data = current.json()["data"]
+        assert current_data["modules"] == ["nonebot.adapters.onebot.v11"]
+        assert current_data["driver"] == "~fastapi+~httpx+~websockets"
+        assert current_data["installed_packages"]
+        assert any(
+            item["module"] == "nonebot.adapters.onebot.v11"
+            for item in current_data["catalog"]
+        )
+        assert set(current_data["connections"]) == {
+            "onebot", "qq", "telegram", "discord"
+        }
+        token_field = next(
+            item
+            for item in current_data["adapter_env"]
+            if item["key"] == "CUSTOM_ADAPTER_TOKEN"
+        )
+        assert token_field["sensitive"] is True
+        assert token_field["has_value"] is True
+        assert token_field["value"] == ""
+        assert "adapter-old-secret" not in str(current_data)
+        assert "onebot-old-secret" not in str(current_data)
+        assert "qq-old-secret" not in str(current_data)
+
+        saved = client.put(
+            "/api/v1/platform/adapters",
+            headers={
+                **headers,
+                "If-Match": current_data["desired_revision"],
+                "Idempotency-Key": "platform-adapters-save-1",
+            },
+            json={
+                "modules": ["nonebot.adapters.onebot.v11"],
+                "driver": "~fastapi+~httpx+~websockets",
+                "connections": {
+                    "onebot": {
+                        "host": "127.0.0.1",
+                        "port": "18766",
+                        "ws_urls": ["wss://example.invalid/onebot"],
+                        "access_token": "",
+                    }
+                },
+                "adapter_env": [
+                    {
+                        "key": "CUSTOM_ADAPTER_TOKEN",
+                        "value": "",
+                        "module": "nonebot.adapters.onebot.v11",
+                    },
+                    {
+                        "key": "CUSTOM_ADAPTER_LABEL",
+                        "value": "space # and \\ slash",
+                        "module": "nonebot.adapters.onebot.v11",
+                    },
+                ],
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        saved_data = saved.json()["data"]
+        assert saved_data["desired_revision"] == saved_data["revision_id"]
+        revision, _path = store.current_revision("desired")
+        assert revision.values["DRIVER"] == "~fastapi+~httpx+~websockets"
+        assert revision.values["CUSTOM_ADAPTER_TOKEN"] == "adapter-old-secret"
+        assert revision.values["CUSTOM_ADAPTER_LABEL"] == "space # and \\ slash"
+        assert "CUSTOM_OLD" not in revision.values
+        assert revision.values["ONEBOT_ACCESS_TOKEN"] == "onebot-old-secret"
+        assert revision.values["ONEBOT_WS_URLS"] == '["wss://example.invalid/onebot"]'
+        assert revision.values["QQ_BOTS"] == '[ {"id":"10001","secret":"qq-old-secret"} ]'
+
+        updated = client.get("/api/v1/platform/adapters", headers=headers).json()["data"]
+        assert updated["desired_revision"] == saved_data["desired_revision"]
+        assert updated["connections"]["onebot"]["port"] == "18766"
+        assert "adapter-old-secret" not in str(updated)
+        assert "qq-old-secret" not in str(updated)
+
+        blocked = client.put(
+            "/api/v1/platform/adapters",
+            headers={
+                **headers,
+                "If-Match": updated["desired_revision"],
+                "Idempotency-Key": "platform-adapters-blocked-1",
+            },
+            json={"modules": ["nonebot.adapters.mail"]},
+        )
+        assert blocked.status_code == 400
+        assert blocked.json()["data"]["code"] == "adapter_modules_unavailable"
+        assert store.state().desired_revision == updated["desired_revision"]

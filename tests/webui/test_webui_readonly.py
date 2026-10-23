@@ -49,8 +49,8 @@ def test_usage_today_shape(client: TestClient):
     assert "fallback_states" in data
 
 
-def test_query_daily_reads_temp_db(isolated_home, monkeypatch):
-    """query_daily：临时库插两行 → 只读返回；空库/坏路径 → 空列表降级。"""
+def test_query_daily_reads_temp_db(isolated_home, monkeypatch, clean_usage_store):
+    """query_daily：临时库插一行 → 只读返回；空库/坏路径 → 空列表降级。"""
     from core.llm import usage_store
     from memory.schema import create_llm_usage_daily_table
 
