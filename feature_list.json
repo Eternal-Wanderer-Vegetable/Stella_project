@@ -930,6 +930,10 @@
         {
           "command": "PR #119 CI run 39936164733 and test package follow-up commit ef85ca5",
           "result": "Adding tests/__init__.py made Python 3.10 and 3.11 test jobs pass. Python 3.12 then exposed one separate isolation failure: test_query_daily_reads_temp_db expected one row but got six because query_daily flushes usage_store's process-global pending rows into the monkeypatched SQLite path. Added a scoped WebUI test fixture to reset usage_store before and after this database-boundary test. In an isolated Python 3.12 environment, the targeted test passed both normally and with a plugin that seeded a pending usage row immediately before fixture setup. Hosted rerun for the fixture is pending. Docker Publish and Dashboard CI passed on commit ef85ca5."
+        },
+        {
+          "command": "GitHub PR #119 latest-head workflows on 019824d2d23995ac23b91ddd8795d1e31fe96958",
+          "result": "All workflows passed: CI run 39937656864 completed 12/12 jobs, including Python 3.10, 3.11 and 3.12; Docker Publish run 39937656868 succeeded; Dashboard CI run 39937656943 succeeded. The test package marker resolved absolute tests.* imports; the clean_usage_store fixture fixed the Python 3.12 temp-database test contamination. Local isolated Python 3.12 validation passed with and without a seeded pending usage row. The PR CI repair is complete; UI/browser and real-platform acceptance remain separate."
         }
       ]
     },
