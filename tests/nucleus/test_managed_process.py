@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from stella_bootstrap.config import build_config_revision, write_revision
+from stella_contracts.control import CONTROL_PROTOCOL_VERSION
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -152,14 +153,23 @@ def _stop(process: subprocess.Popen, port: int, token: str, identity: dict, stre
         port,
         "/_nucleus/v1/lifecycle/drain",
         token,
-        dict(identity, timeout_seconds=35),
+        dict(
+            identity,
+            control_protocol_version=CONTROL_PROTOCOL_VERSION,
+            operation_id="drain-managed-process",
+            timeout_seconds=35,
+        ),
     )
     assert status == 202, response
     status, response = _post_control(
         port,
         "/_nucleus/v1/lifecycle/stop",
         token,
-        identity,
+        dict(
+            identity,
+            control_protocol_version=CONTROL_PROTOCOL_VERSION,
+            operation_id="stop-managed-process",
+        ),
     )
     assert status == 202, response
     try:
@@ -195,10 +205,12 @@ def test_real_managed_nucleus_ready_refuses_second_writer_and_drains(tmp_path: P
         assert ready["generation_id"] == identity["generation_id"]
         assert ready["revision_id"] == first_revision.revision_id
         assert ready["pid"] == first.pid
+        assert ready["control_protocol_version"] == CONTROL_PROTOCOL_VERSION
 
         status, rejected = _health(first_port)
         assert status == 401
         assert first_token not in json.dumps(rejected)
+        assert _health(first_port, "0" * 64)[0] == 401
 
         # Changing live sources cannot mutate the immutable values captured by
         # this generation; health continues to identify the same revision.

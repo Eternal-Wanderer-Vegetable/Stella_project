@@ -14,7 +14,9 @@ from fastapi.responses import JSONResponse
 
 from corona.auth import router as auth_router
 from corona.bootstrap import CoronaBootstrap
+from corona.local_control import create_local_control_app, create_local_control_record
 from corona.supervisor import CoreSupervisor
+from stella_contracts.control import CONTROL_PROTOCOL_VERSION
 from webui.responses import ApiError, error, ok
 from webui.security import configure_auth_runtime, reset_auth_runtime
 
@@ -22,6 +24,7 @@ logger = logging.getLogger("corona")
 
 
 def create_corona_app(bootstrap: CoronaBootstrap, supervisor: CoreSupervisor) -> FastAPI:
+    local_control_record = create_local_control_record(bootstrap)
     configure_auth_runtime(
         stella_home=bootstrap.stella_home,
         token_ttl_hours=bootstrap.token_ttl_hours,
@@ -55,6 +58,22 @@ def create_corona_app(bootstrap: CoronaBootstrap, supervisor: CoreSupervisor) ->
     )
     app.state.supervisor = supervisor
     app.state.auth_audit_path = bootstrap.log_dir / "corona_auth_audit.jsonl"
+    app.state.local_control_record = local_control_record
+    app.state.local_control_app = create_local_control_app(
+        bootstrap, supervisor, local_control_record
+    )
+
+    @app.api_route(
+        "/_corona/local",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    )
+    @app.api_route(
+        "/_corona/local/{local_path:path}",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    )
+    async def local_control_is_not_public(_request: Request):
+        return JSONResponse({"error": {"code": "not_found"}}, status_code=404)
+
     if bootstrap.webui_enabled:
         app.state.rate_limiter = _rate_limiter(bootstrap.login_ratelimit_per_min)
         app.include_router(auth_router)
@@ -78,7 +97,10 @@ def create_corona_app(bootstrap: CoronaBootstrap, supervisor: CoreSupervisor) ->
             {
                 "controller_boot_id": bootstrap.controller_boot_id,
                 "instance_id": bootstrap.instance_id,
+                "control_protocol_version": CONTROL_PROTOCOL_VERSION,
+                "revision_id": bootstrap.revision.revision_id,
                 "core_phase": supervisor.snapshot.phase,
+                "generation_id": getattr(supervisor.snapshot, "generation_id", None),
                 "webui_enabled": bootstrap.webui_enabled,
             }
         )

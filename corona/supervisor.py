@@ -5,23 +5,21 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import secrets
 import sys
 import time
-import urllib.error
-import urllib.request
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from corona.bootstrap import CoronaBootstrap
+from corona.nucleus_client import NucleusClient, NucleusProtocolError
 from corona.process_tree import ManagedProcessTree
-from nucleus.lifecycle import DRAIN_PATH, HEALTH_PATH, STOP_PATH
 from stella_bootstrap.config import PROCESS_ENV_KEYS, RESERVED_ENV_KEYS
 from stella_bootstrap.identity import runtime_dir
+from stella_contracts.control import DRAIN_PATH, STOP_PATH, ControlIdentity
 
 
 class CoreLaunchError(RuntimeError):
@@ -121,24 +119,20 @@ class CoreSupervisor:
             and self._token
         ):
             identity = dict(self._identity)
+            client = self._nucleus_client(identity, self._token)
             try:
                 await asyncio.to_thread(
-                    _post_control,
-                    self.bootstrap.internal_host,
-                    self.bootstrap.internal_port,
+                    client.lifecycle,
                     DRAIN_PATH,
-                    self._token,
-                    dict(identity, timeout_seconds=35),
+                    operation_id=uuid.uuid4().hex,
+                    timeout_seconds=35,
                 )
                 await asyncio.to_thread(
-                    _post_control,
-                    self.bootstrap.internal_host,
-                    self.bootstrap.internal_port,
+                    client.lifecycle,
                     STOP_PATH,
-                    self._token,
-                    identity,
+                    operation_id=uuid.uuid4().hex,
                 )
-            except (OSError, TimeoutError, urllib.error.URLError):
+            except (NucleusProtocolError, OSError, TimeoutError):
                 pass
         task = self._task
         if task is not None:
@@ -283,14 +277,20 @@ class CoreSupervisor:
         self, tree: ManagedProcessTree, identity: dict[str, str], token: str
     ) -> None:
         deadline = time.monotonic() + self.readiness_timeout
+        client = self._nucleus_client(identity, token)
         while time.monotonic() < deadline:
             if tree.poll() is not None:
                 raise CoreLaunchError("process_exited_before_ready")
             try:
                 status, payload = await asyncio.to_thread(
-                    _health, self.bootstrap.internal_host, self.bootstrap.internal_port, token
+                    client.health
                 )
-            except (OSError, TimeoutError, urllib.error.URLError):
+            except NucleusProtocolError as exc:
+                if exc.code == "core_unavailable":
+                    await asyncio.sleep(self.poll_interval)
+                    continue
+                raise CoreLaunchError(exc.code) from exc
+            except (OSError, TimeoutError):
                 await asyncio.sleep(self.poll_interval)
                 continue
             if status == 401:
@@ -304,44 +304,22 @@ class CoreSupervisor:
             await asyncio.sleep(self.poll_interval)
         raise CoreLaunchError("readiness_timeout")
 
+    def _nucleus_client(self, identity: dict[str, str], token: str) -> NucleusClient:
+        try:
+            control_identity = ControlIdentity.from_payload(identity)
+        except (TypeError, ValueError) as exc:
+            raise CoreLaunchError("invalid_core_identity") from exc
+        return NucleusClient(
+            self.bootstrap.internal_host,
+            self.bootstrap.internal_port,
+            identity=control_identity,
+            capability=token,
+            timeout=0.75,
+        )
+
     async def _set_snapshot(self, **changes) -> None:
         async with self._snapshot_lock:
             self._snapshot = replace(self._snapshot, updated_at=_now(), **changes)
-
-
-def _health(host: str, port: int, token: str) -> tuple[int, dict]:
-    request = urllib.request.Request(f"http://{host}:{port}{HEALTH_PATH}")
-    request.add_header("Authorization", f"Bearer {token}")
-    try:
-        with urllib.request.urlopen(request, timeout=0.75) as response:
-            return response.status, json.loads(response.read())
-    except urllib.error.HTTPError as exc:
-        try:
-            payload = json.loads(exc.read())
-        except (ValueError, OSError):
-            payload = {}
-        return exc.code, payload
-
-
-def _post_control(host: str, port: int, path: str, token: str, payload: dict) -> tuple[int, dict]:
-    request = urllib.request.Request(
-        f"http://{host}:{port}{path}",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=2.0) as response:
-            return response.status, json.loads(response.read())
-    except urllib.error.HTTPError as exc:
-        try:
-            payload = json.loads(exc.read())
-        except (ValueError, OSError):
-            payload = {}
-        return exc.code, payload
 
 
 def _now() -> str:

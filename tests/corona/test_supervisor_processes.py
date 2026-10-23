@@ -85,6 +85,7 @@ identity = {
     "generation_id": os.environ["STELLA_GENERATION_ID"],
     "revision_id": os.path.basename(os.path.dirname(os.environ["STELLA_CONFIG_REVISION_FILE"])),
     "pid": os.getpid(),
+    "control_protocol_version": 1,
     "ready": True,
 }
 if mode == "foreign":
@@ -107,7 +108,19 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
     def do_POST(self):
-        data = b'{"ok":true}'
+        if self.headers.get("Authorization") != "Bearer " + token:
+            self.send_response(401)
+            self.end_headers()
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        request = json.loads(self.rfile.read(length) or b"{}")
+        request.update(
+            {
+                "ok": True,
+                "phase": "stopping" if self.path.endswith("/stop") else "draining",
+            }
+        )
+        data = json.dumps(request).encode()
         self.send_response(202)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))

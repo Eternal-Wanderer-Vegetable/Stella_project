@@ -8,6 +8,7 @@ import runpy
 import sys
 from typing import Any
 
+from nucleus.api import InternalRequestGuard
 from nucleus.bootstrap import ManagedBootstrapError, prepare_managed_environment
 from nucleus.lifecycle import (
     BusinessRootLock,
@@ -74,7 +75,9 @@ def main() -> int:
         deferred = defer_managed_business_runtimes()
         if set(deferred) != {"_start_scheduling", "_start_cometa"}:
             raise RuntimeError("managed scheduler and Cometa ready hooks were not registered")
-        app = ManagedNucleusASGI(nonebot.get_asgi(), lifecycle)
+        app = ManagedNucleusASGI(
+            InternalRequestGuard(nonebot.get_asgi(), lifecycle), lifecycle
+        )
         logging_config = {
             "version": 1,
             "disable_existing_loggers": False,

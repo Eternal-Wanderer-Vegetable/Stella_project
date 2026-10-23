@@ -24,10 +24,13 @@ from typing import Any
 
 from typing_extensions import Self
 
-CONTROL_PROTOCOL_VERSION = 1
-HEALTH_PATH = "/_nucleus/v1/health"
-DRAIN_PATH = "/_nucleus/v1/lifecycle/drain"
-STOP_PATH = "/_nucleus/v1/lifecycle/stop"
+from stella_contracts.control import (
+    CONTROL_PROTOCOL_VERSION,
+    DRAIN_PATH,
+    HEALTH_PATH,
+    STOP_PATH,
+)
+
 DEFAULT_SHUTDOWN_BUDGET_SECONDS = 45.0
 FORCE_EXIT_GRACE_SECONDS = 10.0
 _ACTIVE_LIFECYCLE: NucleusLifecycle | None = None
@@ -528,8 +531,24 @@ class ManagedNucleusASGI:
         except (UnicodeDecodeError, json.JSONDecodeError):
             await _send_json(send, 400, {"ok": False, "error": {"code": "invalid_json"}})
             return
+        protocol_version = payload.get("control_protocol_version") if isinstance(payload, dict) else None
+        protocol_valid = (
+            isinstance(protocol_version, int)
+            and not isinstance(protocol_version, bool)
+            and protocol_version == CONTROL_PROTOCOL_VERSION
+        )
         if not isinstance(payload, dict) or not self._identity_matches(payload):
-            await _send_json(send, 409, {"ok": False, "error": {"code": "identity_mismatch"}})
+            code = "identity_mismatch" if protocol_valid else "protocol_mismatch"
+            await _send_json(send, 409, {"ok": False, "error": {"code": code}})
+            return
+        operation_id = payload.get("operation_id")
+        if (
+            not isinstance(operation_id, str)
+            or not operation_id.isascii()
+            or not 1 <= len(operation_id) <= 128
+            or any(not (char.isalnum() or char in "_-") for char in operation_id)
+        ):
+            await _send_json(send, 400, {"ok": False, "error": {"code": "invalid_operation_id"}})
             return
 
         if path == DRAIN_PATH:
@@ -541,8 +560,13 @@ class ManagedNucleusASGI:
                 return
             await _send_json(send, 202, {
                 "ok": True,
+                "control_protocol_version": CONTROL_PROTOCOL_VERSION,
+                "instance_id": self.lifecycle.instance_id,
+                "controller_boot_id": self.lifecycle.controller_boot_id,
                 "phase": self.lifecycle.phase,
                 "generation_id": self.lifecycle.generation_id,
+                "revision_id": self.lifecycle.revision_id,
+                "operation_id": operation_id,
                 "remaining_seconds": remaining,
             })
             return
@@ -556,14 +580,26 @@ class ManagedNucleusASGI:
                 return
             await _send_json(send, 202, {
                 "ok": True,
+                "control_protocol_version": CONTROL_PROTOCOL_VERSION,
+                "instance_id": self.lifecycle.instance_id,
+                "controller_boot_id": self.lifecycle.controller_boot_id,
                 "phase": self.lifecycle.phase,
                 "generation_id": self.lifecycle.generation_id,
+                "revision_id": self.lifecycle.revision_id,
+                "operation_id": operation_id,
             })
             return
 
         await _send_json(send, 404, {"ok": False, "error": {"code": "not_found"}})
 
     def _identity_matches(self, payload: dict[str, Any]) -> bool:
+        protocol_version = payload.get("control_protocol_version")
+        if (
+            not isinstance(protocol_version, int)
+            or isinstance(protocol_version, bool)
+            or protocol_version != CONTROL_PROTOCOL_VERSION
+        ):
+            return False
         for key, expected in (
             ("instance_id", self.lifecycle.instance_id),
             ("controller_boot_id", self.lifecycle.controller_boot_id),

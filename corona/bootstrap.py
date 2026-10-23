@@ -34,6 +34,7 @@ class CoronaBootstrap:
     serve_dist: bool
     public_host: str
     public_port: int
+    local_control_port: int
     internal_host: str
     internal_port: int
     token_ttl_hours: int
@@ -116,6 +117,7 @@ def prepare_corona_bootstrap(
         serve_dist=serve_dist,
         public_host=public_host,
         public_port=public_port,
+        local_control_port=_free_loopback_port(),
         internal_host="127.0.0.1",
         internal_port=_free_loopback_port(),
         token_ttl_hours=token_ttl_hours,

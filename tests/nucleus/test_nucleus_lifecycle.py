@@ -23,6 +23,7 @@ from nucleus.lifecycle import (
     NucleusLifecycle,
 )
 from stella_bootstrap.config import build_config_revision, write_revision
+from stella_contracts.control import CONTROL_PROTOCOL_VERSION
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -135,6 +136,11 @@ async def test_private_control_and_drain_fence() -> None:
     assert status == 401
     assert lifecycle.launch_token not in json.dumps(rejected)
 
+    status, rejected = await request(
+        HEALTH_PATH, authorization=f"Bearer {'0' * 64}"
+    )
+    assert status == 401
+
     bearer = f"Bearer {lifecycle.launch_token}"
     status, health = await request(HEALTH_PATH, authorization=bearer)
     assert status == 200
@@ -142,7 +148,12 @@ async def test_private_control_and_drain_fence() -> None:
     assert health["generation_id"] == lifecycle.generation_id
     assert lifecycle.launch_token not in json.dumps(health)
 
-    wrong_identity = dict(identity, generation_id="generation-other-0001")
+    wrong_identity = dict(
+        identity,
+        control_protocol_version=CONTROL_PROTOCOL_VERSION,
+        operation_id="drain-wrong-generation",
+        generation_id="generation-other-0001",
+    )
     status, rejected = await request(
         DRAIN_PATH,
         method="POST",
@@ -153,14 +164,37 @@ async def test_private_control_and_drain_fence() -> None:
     assert rejected["error"]["code"] == "identity_mismatch"
     assert lifecycle.phase == "ready"
 
+    wrong_protocol = dict(
+        identity,
+        control_protocol_version=CONTROL_PROTOCOL_VERSION + 1,
+        operation_id="drain-wrong-protocol",
+    )
+    status, rejected = await request(
+        DRAIN_PATH,
+        method="POST",
+        body=json.dumps(wrong_protocol).encode(),
+        authorization=bearer,
+    )
+    assert status == 409
+    assert rejected["error"]["code"] == "protocol_mismatch"
+    assert lifecycle.phase == "ready"
+
     status, drained = await request(
         DRAIN_PATH,
         method="POST",
-        body=json.dumps(dict(identity, timeout_seconds=1.0)).encode(),
+        body=json.dumps(
+            dict(
+                identity,
+                control_protocol_version=CONTROL_PROTOCOL_VERSION,
+                operation_id="drain-test-0001",
+                timeout_seconds=1.0,
+            )
+        ).encode(),
         authorization=bearer,
     )
     assert status == 202
     assert drained["phase"] == "draining"
+    assert drained["operation_id"] == "drain-test-0001"
     status, fenced = await request("/api/v1/chat", method="POST", body=b"{}")
     assert status == 503
     assert fenced["error"]["code"] == "core_draining"
@@ -169,11 +203,18 @@ async def test_private_control_and_drain_fence() -> None:
     status, stopped = await request(
         STOP_PATH,
         method="POST",
-        body=json.dumps(identity).encode(),
+        body=json.dumps(
+            dict(
+                identity,
+                control_protocol_version=CONTROL_PROTOCOL_VERSION,
+                operation_id="stop-test-0001",
+            )
+        ).encode(),
         authorization=bearer,
     )
     assert status == 202
     assert stopped["phase"] == "stopping"
+    assert stopped["operation_id"] == "stop-test-0001"
     assert server.should_exit is True
     lifecycle.cancel_watchdog()
 
