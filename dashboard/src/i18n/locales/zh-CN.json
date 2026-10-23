@@ -60,6 +60,9 @@
       "link": "OneBot 链路",
       "groups": "已绑定群数",
       "tokensToday": "今日 token",
+      "corePhase": "核心阶段",
+      "savedRevision": "已保存修订",
+      "appliedRevision": "已应用修订",
       "go": "前往配置"
     },
     "gravitas": {
@@ -106,20 +109,57 @@
       "hint": "无法连接 Stella Bot 进程。桌面壳用户：请先在壳内启动 Bot；浏览器用户：请确认服务地址与端口。",
       "retry": "重试"
     },
+    "system": {
+      "control": "控制面",
+      "connected": "在线",
+      "reconnecting": "连接中断，正在重连",
+      "saved": "已保存",
+      "applied": "已应用",
+      "core": "核心",
+      "operation": "配置操作",
+      "yes": "是",
+      "unknown": "未知",
+      "coreUnavailable": "核心暂不可用；控制面仍在线，可以继续修复配置。聊天请求不会自动重试。",
+      "externalConflict": "检测到 .env 外部修改；请重新载入并确认配置来源后再保存。",
+      "error": "错误阶段/摘要",
+      "restored": "应用失败，上一份配置已恢复。",
+      "recoveryFailed": "上一份配置恢复失败；核心仍未恢复，请查看错误摘要并重试。",
+      "controllerRestart": "此配置需要重启 Corona 控制层；浏览器会在服务恢复后继续显示状态。",
+      "reconnectingDetail": "控制面暂时不可达。登录态已保留；恢复后将继续同步运行状态。",
+      "phases": {
+        "accepted": "已接受",
+        "validating": "校验配置",
+        "prepared": "准备切换",
+        "draining": "等待核心排空",
+        "stopping": "停止旧核心",
+        "starting": "启动新核心",
+        "verifying": "确认就绪",
+        "restoringConfig": "恢复上一份配置",
+        "startingPrevious": "恢复旧核心",
+        "awaitingControllerRestart": "等待控制层重启",
+        "succeeded": "已完成",
+        "rolledBack": "已回滚",
+        "failed": "失败"
+      }
+    },
     "platforms": {
       "title": "平台",
       "subtitle": "适配器与连接",
       "intro": "选择要加载的 NoneBot 适配器模块，并查看当前 Bot 连接。适配器包和凭据由你单独安装与配置。",
+      "introManaged": "选择要加载的 NoneBot 适配器模块，并查看当前核心连接。保存会创建配置修订并应用；核心重启期间控制面仍可用。",
       "modulesTitle": "适配器模块",
       "modulesLabel": "Python 模块路径（每行一个，也可逗号分隔）",
       "modulesHint": "默认 nonebot.adapters.onebot.v11。保存后重启生效；设为空列表会关闭所有 Bot 适配器。这里不安装模块，也不填写凭据。",
+      "modulesHintManaged": "默认 nonebot.adapters.onebot.v11。保存后由控制面应用；设为空列表会关闭所有适配器。这里不安装模块，也不填写凭据。",
       "effectiveModules": "当前进程生效",
       "processOverride": "进程环境变量覆盖了 .env 中的模块列表。保存的值会在该覆盖移除后生效。",
       "saveModules": "保存适配器",
       "modulesSaved": "适配器模块已保存，重启后生效",
+      "modulesApplied": "适配器模块已保存，正在应用",
       "onebotConfig": "OneBot V11 连接配置",
       "onebotConfigHint": "支持多个正向 WebSocket 地址；访问 token 不会回显，留空表示保留现有值。",
       "onebotSaved": "OneBot 配置已保存，重启后生效",
+      "onebotApplied": "OneBot 配置已保存，正在应用",
       "connectionsTitle": "当前连接",
       "notApplicable": "不适用",
       "noOnebotNeeded": "当前没有启用 OneBot V11。NapCat 链路检查不适用，Stella 仍可使用其他已装配的适配器或 WebChat。",
@@ -143,7 +183,12 @@
       "wsUrlsHint": "每行或逗号分隔一个 ws:// 或 wss:// 地址；留空使用反向 WS。",
       "accessToken": "访问 token",
       "accessTokenHint": "须与适配器端配置一致；留空不会更改现有 token。",
-      "restartHint": "保存写入本机 .env，重启后生效。"
+      "restartHint": "保存写入本机 .env，重启后生效。",
+      "restartHintManaged": "保存会生成新配置修订并由控制面应用。"
+    },
+    "providers": {
+      "managedSaveHint": "保存会先持久化配置，再发起一次核心应用；上方状态条会显示保存、应用与就绪状态。",
+      "legacySaveHint": "保存写入 .env，需重启后生效。"
     }
   }
 }

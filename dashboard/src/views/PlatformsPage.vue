@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { api, unwrap } from '@/api/http';
+import { idempotencyKey, revisionWriteOptions } from '@/api/system';
 import { toastApiError, useToast } from '@/stores/toast';
+import { useSystemStore } from '@/stores/system';
 
 interface ConnectionStatus {
   adapter: string;
@@ -30,6 +32,9 @@ const adapterModulesText = ref('');
 const effectiveModules = ref<string[]>([]);
 const processOverride = ref(false);
 const error = ref('');
+const desiredRevision = ref('');
+const savingModules = ref(false);
+const savingOneBot = ref(false);
 let timer: number | null = null;
 
 const editingOneBot = ref(false);
@@ -38,6 +43,7 @@ const accessToken = ref('');
 const host = ref('');
 const port = ref('');
 const toast = useToast();
+const system = useSystemStore();
 const { t } = useI18n();
 
 const configuredModules = computed(() =>
@@ -63,28 +69,48 @@ async function loadAdapterModules(): Promise<void> {
       modules: string[];
       effective_modules: string[];
       process_override: boolean;
+      desired_revision?: string;
     }>(api.get('/platform/adapters'));
     adapterModulesText.value = result.modules.join('\n');
     effectiveModules.value = result.effective_modules;
     processOverride.value = result.process_override;
+    desiredRevision.value = result.desired_revision ?? system.status?.desired_revision ?? '';
   } catch (err) {
     toastApiError(toast, err);
   }
 }
 
 async function saveAdapterModules(): Promise<void> {
+  if (savingModules.value) return;
+  savingModules.value = true;
   try {
+    await system.refreshStatus();
+    const managed = system.managed;
+    const revision = desiredRevision.value || system.status?.desired_revision || '';
+    const options = managed
+      ? revisionWriteOptions(revision, idempotencyKey('platform-adapters'))
+      : undefined;
     const result = await unwrap<{
       modules: string[];
       restart_required: boolean;
-    }>(
-      api.put('/platform/adapters', { modules: configuredModules.value }),
-    );
+      revision_id?: string;
+      desired_revision?: string;
+    }>(api.put('/platform/adapters', { modules: configuredModules.value }, options));
     adapterModulesText.value = result.modules.join('\n');
-    toast.success(t('features.platforms.modulesSaved'));
+    const nextRevision = result.desired_revision ?? result.revision_id ?? revision;
+    desiredRevision.value = nextRevision;
+    if (managed) {
+      system.noteDesiredRevision(nextRevision);
+      await system.applyRevision(nextRevision);
+      toast.success(t('features.platforms.modulesApplied'));
+    } else {
+      toast.success(t('features.platforms.modulesSaved'));
+    }
     await loadAdapterModules();
   } catch (err) {
     toastApiError(toast, err);
+  } finally {
+    savingModules.value = false;
   }
 }
 
@@ -95,11 +121,13 @@ async function loadConfig(): Promise<void> {
       port: string;
       ws_urls: string[];
       has_token: boolean;
+      desired_revision?: string;
     }>(api.get('/platform/onebot'));
     host.value = cfg.host;
     port.value = String(cfg.port);
     wsUrlsText.value = cfg.ws_urls.join(', ');
     accessToken.value = '';
+    desiredRevision.value = cfg.desired_revision ?? system.status?.desired_revision ?? '';
   } catch (err) {
     toastApiError(toast, err);
   }
@@ -111,19 +139,37 @@ function openEditor(): void {
 }
 
 async function saveOneBotConfig(): Promise<void> {
+  if (savingOneBot.value) return;
+  savingOneBot.value = true;
   try {
-    await unwrap(
+    await system.refreshStatus();
+    const managed = system.managed;
+    const revision = desiredRevision.value || system.status?.desired_revision || '';
+    const options = managed
+      ? revisionWriteOptions(revision, idempotencyKey('platform-onebot'))
+      : undefined;
+    const result = await unwrap<{ revision_id?: string; desired_revision?: string }>(
       api.put('/platform/onebot', {
         ws_urls: wsUrlsText.value.split(/[\s,]+/).filter(Boolean),
         access_token: accessToken.value,
         host: host.value,
         port: port.value,
-      }),
+      }, options),
     );
-    toast.success(t('features.platforms.onebotSaved'));
+    const nextRevision = result.desired_revision ?? result.revision_id ?? revision;
+    desiredRevision.value = nextRevision;
+    if (managed) {
+      system.noteDesiredRevision(nextRevision);
+      await system.applyRevision(nextRevision);
+      toast.success(t('features.platforms.onebotApplied'));
+    } else {
+      toast.success(t('features.platforms.onebotSaved'));
+    }
     editingOneBot.value = false;
   } catch (err) {
     toastApiError(toast, err);
+  } finally {
+    savingOneBot.value = false;
   }
 }
 
@@ -163,7 +209,7 @@ onBeforeUnmount(() => {
       </v-chip>
     </div>
     <p class="text-body-2 text-medium-emphasis mb-4">
-      {{ t('features.platforms.intro') }}
+      {{ system.managed ? t('features.platforms.introManaged') : t('features.platforms.intro') }}
     </p>
     <v-alert v-if="error" type="error" variant="tonal" class="mb-3">{{ error }}</v-alert>
 
@@ -174,7 +220,7 @@ onBeforeUnmount(() => {
       <v-textarea
         v-model="adapterModulesText"
         :label="t('features.platforms.modulesLabel')"
-        :hint="t('features.platforms.modulesHint')"
+        :hint="system.managed ? t('features.platforms.modulesHintManaged') : t('features.platforms.modulesHint')"
         persistent-hint
         rows="2"
         auto-grow
@@ -187,7 +233,7 @@ onBeforeUnmount(() => {
         {{ t('features.platforms.processOverride') }}
       </v-alert>
       <div class="d-flex justify-end mt-3">
-        <v-btn color="primary" @click="saveAdapterModules">
+        <v-btn color="primary" :loading="savingModules" :disabled="system.operationPending" @click="saveAdapterModules">
           {{ t('features.platforms.saveModules') }}
         </v-btn>
       </div>
@@ -297,13 +343,13 @@ onBeforeUnmount(() => {
             persistent-hint
           />
           <v-alert type="info" density="compact" variant="tonal" class="mt-2">
-            {{ t('features.platforms.restartHint') }}
+            {{ system.managed ? t('features.platforms.restartHintManaged') : t('features.platforms.restartHint') }}
           </v-alert>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
           <v-btn @click="editingOneBot = false">{{ t('core.common.cancel') }}</v-btn>
-          <v-btn color="primary" @click="saveOneBotConfig">{{ t('core.common.save') }}</v-btn>
+          <v-btn color="primary" :loading="savingOneBot" :disabled="system.operationPending" @click="saveOneBotConfig">{{ t('core.common.save') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

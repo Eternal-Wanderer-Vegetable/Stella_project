@@ -60,6 +60,9 @@
       "link": "OneBot link",
       "groups": "Bound groups",
       "tokensToday": "Tokens today",
+      "corePhase": "Core phase",
+      "savedRevision": "Saved revision",
+      "appliedRevision": "Applied revision",
       "go": "Open"
     },
     "gravitas": {
@@ -106,20 +109,57 @@
       "hint": "Cannot reach the Stella bot process. Desktop users: start the bot from the desktop shell first. Browser users: verify the address and port.",
       "retry": "Retry"
     },
+    "system": {
+      "control": "Control plane",
+      "connected": "Online",
+      "reconnecting": "Connection interrupted; reconnecting",
+      "saved": "Saved",
+      "applied": "Applied",
+      "core": "Core",
+      "operation": "Configuration operation",
+      "yes": "Yes",
+      "unknown": "Unknown",
+      "coreUnavailable": "The core is unavailable; the control plane is still online, so you can repair configuration. Chat requests are not retried automatically.",
+      "externalConflict": "An external .env edit was detected. Reload and confirm the configuration source before saving again.",
+      "error": "Failed stage / summary",
+      "restored": "Apply failed; the previous configuration was restored.",
+      "recoveryFailed": "Restoring the previous configuration failed; the core is still unavailable. Review the error summary and retry.",
+      "controllerRestart": "This configuration requires a Corona control-plane restart. Status tracking will resume when the service returns.",
+      "reconnectingDetail": "The control plane is temporarily unreachable. Your login session is retained and runtime status will resync when it returns.",
+      "phases": {
+        "accepted": "Accepted",
+        "validating": "Validating configuration",
+        "prepared": "Preparing switch",
+        "draining": "Draining the core",
+        "stopping": "Stopping the old core",
+        "starting": "Starting the new core",
+        "verifying": "Verifying readiness",
+        "restoringConfig": "Restoring previous configuration",
+        "startingPrevious": "Restoring previous core",
+        "awaitingControllerRestart": "Waiting for control-plane restart",
+        "succeeded": "Completed",
+        "rolledBack": "Rolled back",
+        "failed": "Failed"
+      }
+    },
     "platforms": {
       "title": "Platforms",
       "subtitle": "Adapters and connections",
       "intro": "Choose the NoneBot adapter modules to load and review active Bot connections. Install adapter packages and configure their credentials separately.",
+      "introManaged": "Choose the NoneBot adapter modules to load and review core connections. Saving creates a configuration revision and applies it while the control plane remains available during core restart.",
       "modulesTitle": "Adapter modules",
       "modulesLabel": "Python module paths (one per line or comma-separated)",
       "modulesHint": "Default: nonebot.adapters.onebot.v11. Changes take effect after restart. An empty list disables all Bot adapters. This field does not install modules or accept credentials.",
+      "modulesHintManaged": "Default: nonebot.adapters.onebot.v11. The control plane applies changes after saving. An empty list disables all adapters. This field does not install modules or accept credentials.",
       "effectiveModules": "Effective in this process",
       "processOverride": "A process environment variable overrides the module list in .env. The saved value takes effect after removing that override.",
       "saveModules": "Save adapters",
       "modulesSaved": "Adapter modules saved; restart to apply",
+      "modulesApplied": "Adapter modules saved; applying now",
       "onebotConfig": "OneBot V11 connection settings",
       "onebotConfigHint": "Multiple forward WebSocket URLs are supported. The access token is never returned; leave it blank to keep the current value.",
       "onebotSaved": "OneBot settings saved; restart to apply",
+      "onebotApplied": "OneBot settings saved; applying now",
       "connectionsTitle": "Active connections",
       "notApplicable": "Not applicable",
       "noOnebotNeeded": "OneBot V11 is not enabled. NapCat link checks do not apply; Stella can still use other configured adapters or WebChat.",
@@ -143,7 +183,12 @@
       "wsUrlsHint": "Use one ws:// or wss:// URL per line or comma-separated; leave blank for reverse WS.",
       "accessToken": "Access token",
       "accessTokenHint": "Must match the adapter-side value; blank leaves the current token unchanged.",
-      "restartHint": "Saved to the local .env file. Restart to apply."
+      "restartHint": "Saved to the local .env file. Restart to apply.",
+      "restartHintManaged": "Saving creates a configuration revision and asks the control plane to apply it."
+    },
+    "providers": {
+      "managedSaveHint": "Saving persists the configuration first, then starts one core apply. The status bar above shows saved, applied, and readiness state.",
+      "legacySaveHint": "Saved to .env; restart to apply."
     }
   }
 }

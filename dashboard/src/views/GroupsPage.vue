@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import { api, unwrap } from '@/api/http';
 import { toastApiError, useToast } from '@/stores/toast';
+import { useSystemStore } from '@/stores/system';
 
 // 群组页（方案 §6.11）：白名单群 + 空间绑定 + 运行期静音
 interface GroupItem {
@@ -17,7 +18,15 @@ interface SpaceItem {
 
 const groups = ref<GroupItem[]>([]);
 const spaces = ref<string[]>([]);
+const loadError = ref(false);
+const loadedGeneration = ref<string | null>(null);
 const toast = useToast();
+const system = useSystemStore();
+const cacheStale = computed(() =>
+  loadError.value
+  || system.coreUnavailable
+  || Boolean(loadedGeneration.value && system.coreGeneration !== loadedGeneration.value),
+);
 
 async function load(): Promise<void> {
   try {
@@ -27,7 +36,10 @@ async function load(): Promise<void> {
     ]);
     groups.value = g.groups;
     spaces.value = s.spaces.map((x) => x.name);
+    loadedGeneration.value = system.coreGeneration;
+    loadError.value = false;
   } catch (err) {
+    loadError.value = true;
     toastApiError(toast, err);
   }
 }
@@ -63,6 +75,10 @@ onMounted(load);
 <template>
   <v-container fluid class="pa-6">
     <h1 class="text-h5 font-weight-bold mb-1">群组与绑定</h1>
+    <v-alert v-if="cacheStale" type="warning" variant="tonal" class="mb-3">
+      群组与空间列表可能来自旧核心缓存。核心恢复后可重新载入。
+      <v-btn size="small" variant="text" @click="load">重新载入</v-btn>
+    </v-alert>
     <p class="text-body-2 text-medium-emphasis mb-4">
       群绑定写入空间（立即生效）；白名单变更写入 .env（需重启）。
     </p>
