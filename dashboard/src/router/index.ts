@@ -50,8 +50,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: 'groups',
-        name: 'groups',
-        component: () => import('@/views/GroupsPage.vue'),
+        redirect: { name: 'persona' },
       },
       {
         path: 'config',

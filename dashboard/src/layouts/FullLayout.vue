@@ -72,9 +72,8 @@ const groups: { header?: string; items: NavItem[] }[] = [
     items: [
       { icon: 'mdi-puzzle', title: t('core.navigation.extension'), to: '/extension' },
       { icon: 'mdi-book-open-variant', title: t('core.navigation.knowledgeBase'), to: '/knowledge-base' },
-      { icon: 'mdi-heart', title: t('core.navigation.persona'), to: '/persona' },
+      { icon: 'mdi-account-group', title: t('core.navigation.persona'), to: '/persona' },
       { icon: 'mdi-clock-outline', title: t('core.navigation.cron'), to: '/cron' },
-      { icon: 'mdi-account-group', title: t('core.navigation.groups'), to: '/groups' },
       { icon: 'mdi-robot-industrial', title: t('core.navigation.cometa'), to: '/cometa' },
     ],
   },

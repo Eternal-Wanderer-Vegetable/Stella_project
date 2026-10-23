@@ -1320,6 +1320,183 @@
           "result": "基线测得 Agent 标题 scrollHeight 18px、clientHeight/line-height 16px，确有裁切；修复后为 20px/20px/20px。1600px 默认展开 256px 且支持手动折叠/展开。1200px、850px、390px 默认 72px rail，图标中心与侧栏中心均为 x=36px；展开后覆盖抽屉从 x=0 起、宽 256px，主内容左边界仍为 72px；在 1200px 与 850px 点击主页面遮罩返回 rail，主内容几何不变。390px 与 850px documentElement.scrollWidth 等于 clientWidth。动态调整宽度跨过 1280px 断点会应用相应默认状态，视口覆盖已重置。"
         }
       ]
+    },
+    {
+      "id": "PERSONA-SPACE-UX",
+      "name": "人格与空间界面精简与统一设置",
+      "description": "在人格与空间页提供 ALLOWED_GROUPS 编辑入口，去掉出厂默认人格和卡片人格正文，并把人格编辑与群绑定合并为统一的空间设置。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "dashboard/src/views/PersonaPage.vue",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "人格页提供 ALLOWED_GROUPS 编辑入口，通过已有配置 API 读取并写入，校验 QQ 群号，并在保存后按配置页流程请求重启。",
+        "移除出厂默认人格读取与展示。",
+        "空间卡片仅显示名称和群绑定，不展示人格提示词或预览。",
+        "人格提示词与群绑定在名为‘空间设置’的同一弹窗中编辑并保存；保留 WebChat 的虚拟群号 -1。",
+        "Dashboard 构建与静态资源同步成功，浏览器确认两个入口可用且卡片不显示人格内容。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus refresh, status and upstream impact",
+          "result": "本机 GitNexus 1.6.12 索引为 current，commit 659a214，incompleteReasons=[]。load upstream LOW / 4 same-page direct callers; parseGroupIds LOW / 1 caller. SFC 和 Vue/Python HTTP handler 关系的 UNKNOWN / 0 由模板、router、API 源码引用补查。全仓流程报告截断，FTS 构建失败，不把遗漏流程视为无调用。"
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "vue-tsc / Vite production build passed; existing mixed-import and large-chunk warnings remain. Assets synced to webui/dist and desktop/dashboard-dist."
+        },
+        {
+          "command": "Browser review at http://127.0.0.1:8080/#/persona",
+          "result": "Cards show space names and bindings only; the factory-default persona section is absent. Both ALLOWED_GROUPS and combined space-settings dialogs open. WebChat's -1 binding remains editable. No form was submitted; API persistence and restart were not exercised."
+        },
+        {
+          "command": "Dashboard automated tests and authenticated API save/readback",
+          "result": "Not run. No ALLOWED_GROUPS or space configuration was written during browser review."
+        },
+        {
+          "command": "GitNexus detect-changes --scope all; python scripts/check_docs.py; feature JSON parse; git diff --check",
+          "result": "The first incremental detect-changes runs attributed 803–808 affected flows and CRITICAL risk to a qq_groups property fanout not supported by the source references. After a complete analyze --index-only --pdg refresh, status was current (1842 covered files; indexed/current commit 659a214) and final detect-changes --scope all runs exited 0 with 4 files / 19–25 symbols / 0 affected processes / LOW. This aligns with the source audit, but process extraction is still incomplete (2923 of 3123 entry candidates were not ranked; branch/depth budgets also apply), and FTS build failed; the low result is limited to indexed graph coverage. Docs, JSON, and diff checks passed."
+        }
+      ],
+      "acceptance": "The requested page behavior is implemented and visually confirmed; backend write/readback and restart behavior remain unverified.",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "WEBCHAT-SETTINGS-CHAT",
+      "name": "WebChat 设置归入聊天界面",
+      "description": "将 WebChat 专属人格提示词设置从空间管理页迁移到聊天界面，避免在群组/人格页管理。",
+      "status": "done",
+      "dependencies": [
+        "PERSONA-SPACE-UX"
+      ],
+      "scope": [
+        "dashboard/src/views/ChatPage.vue",
+        "dashboard/src/views/PersonaPage.vue",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "聊天界面提供 WebChat 设置入口，并使用现有空间 prompt API 读取和保存设置。",
+        "人格与空间页不再管理 WebChat 专属设置，也不允许在此创建或删除 WebChat 空间。",
+        "WebChat 虚拟身份行为保持现状，Dashboard 构建与静态资源同步通过。"
+      ],
+      "evidence": [
+        {
+          "command": "Dashboard source review",
+          "result": "ChatPage.vue 提供 WebChat 设置入口与 prompt 对话框；PersonaPage.vue 将 WebChat 空间排除在普通空间管理之外。"
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "后续群组/人格合并构建包含此变更，vue-tsc 和 Vite 构建通过，资源同步到 webui/dist 和 desktop/dashboard-dist。"
+        },
+        {
+          "command": "Authenticated API save/readback",
+          "result": "未提交表单；未验证后端持久化与运行期回读。"
+        }
+      ],
+      "acceptance": "源码实现已完成；后端认证态保存/回读待验证。",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "GROUP-PERSONA-UNIFIED-UI",
+      "name": "群组与人格统一界面",
+      "description": "将群组管理能力并入空间与人格页面，移除重复导航，并保留旧群组路径兼容。",
+      "status": "done",
+      "dependencies": [
+        "PERSONA-SPACE-UX",
+        "WEBCHAT-SETTINGS-CHAT"
+      ],
+      "scope": [
+        "dashboard/src/views/PersonaPage.vue",
+        "dashboard/src/views/GroupsPage.vue",
+        "dashboard/src/router/index.ts",
+        "dashboard/src/layouts/FullLayout.vue",
+        "dashboard/src/views/WelcomePage.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "统一页面同时提供群组所属空间、消息数、主动静音，以及空间人格和群绑定管理。",
+        "移除独立群组侧栏入口，旧 /groups 地址和首页引导跳转到统一页面。",
+        "WebChat 专属设置继续留在聊天页面；群组与人格页不显示 WebChat 空间。",
+        "Dashboard 构建、资源同步、文档、JSON 与 diff 检查通过。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus analyze --index-only --pdg + upstream impact + source audit",
+          "result": "GitNexus 1.6.12 index-only + PDG refresh (FTS skipped) completed. PersonaPage.vue / GroupsPage.vue upstream are UNKNOWN / 0; SFC methods and Python route symbols are not indexed, so source references were checked. Final detect all: 11 files / 63 symbols / 4 affected processes / MEDIUM; flows are SaveAllowedGroups and SaveSpaceSettings. Compare main: 32 files / 327 symbols / 22 processes / CRITICAL, including earlier platform work on this branch. Process extraction remains incomplete (2924/3124 entry candidates unranked, with branch/depth budgets); FTS is disabled."
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "vue-tsc 与 Vite 生产构建通过，保留既有 mixed import 和大 chunk 警告；资源同步至 webui/dist 和 desktop/dashboard-dist。python scripts/check_docs.py 为 121 files / 1262 local links / 577 migration anchors / 0 errors；feature/locale JSON parse 与 git diff --check 通过。"
+        },
+        {
+          "command": "Browser/API acceptance",
+          "result": "未进行本轮浏览器视觉验收；未写入配置、未触发重启。"
+        }
+      ],
+      "acceptance": "统一页面源码和构建交付完成；浏览器交互及 API 保存/回读尚未验收。",
+      "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "GROUP-TAG-SELECTORS",
+      "name": "群号标签输入与空间绑定选择器",
+      "description": "将 ALLOWED_GROUPS 改为逐项添加/删除的群号标签，并让空间群绑定只从现有群号中选择。",
+      "status": "done",
+      "dependencies": [
+        "GROUP-PERSONA-UNIFIED-UI"
+      ],
+      "scope": [
+        "dashboard/src/views/PersonaPage.vue",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "ALLOWED_GROUPS 可逐一输入、添加和移除正整数群号；加载现有逗号配置并按后端格式保存。",
+        "空间群绑定通过现有群号多选器完成，不能自由输入；当前空间的旧绑定保持可见并可移除。",
+        "Dashboard 类型检查、生产构建和静态资源同步通过。",
+        "文档、JSON 与 diff 检查通过，并记录未执行的浏览器/API 验收。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus upstream impact + source audit",
+          "result": "saveAllowedGroups 与 saveSpaceSettings 均为 UNKNOWN / 0 callers；GitNexus 未解析 Vue 模板事件绑定。源码确认两个处理函数由本页模板触发，分别走 /config 与 /spaces/{name}/bindings；群组 API 返回 ALLOWED_GROUPS 群组，空间服务保存整数列表并在重复绑定时从其他空间移除。"
+        },
+        {
+          "command": "pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+          "result": "vue-tsc 与 Vite 生产构建通过，保留既有 mixed import 与大 chunk 警告；静态资源同步到 webui/dist 与 desktop/dashboard-dist。"
+        },
+        {
+          "command": "python scripts/check_docs.py; feature JSON parse; git diff --check; GitNexus detect-changes --scope all",
+          "result": "Docs: 121 files / 1262 local links / 577 migration anchors / 0 errors; JSON parsing and git diff --check passed. GitNexus 1.6.12 refreshed to HEAD 659a214 and reported 1841 covered files with FTS disabled; process extraction remains incomplete (2924/3124 candidates not ranked). detect-changes all runs reported 11 files / 44-45 symbols / CRITICAL and 805-816 affected processes, with generic `name` fanout into unrelated flows; this unstable aggregate is retained as an unresolved graph limitation, not dismissed as a pass."
+        },
+        {
+          "command": "Browser/API save and readback",
+          "result": "未运行；未修改本机 .env、空间绑定或重启服务。"
+        }
+      ],
+      "acceptance": "群号输入与空间选择界面已实现并通过构建、资源同步；浏览器交互和认证态 API 保存/回读仍未验收。",
+      "branch": "codex/frontend-ui-polish"
     }
   ]
 }

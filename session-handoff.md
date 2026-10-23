@@ -1,6 +1,34 @@
 # Session Handoff
 
-## Current Session — NoneBot platform configuration and responsive sidebar
+## Current Session — Group tag inputs and space group selector
+
+用户要求 `ALLOWED_GROUPS` 改为逐项输入群号标签，并让空间设置从已有群号中选择绑定。当前分支 `codex/frontend-ui-polish`；保留此前群组/人格合并和 WebChat 设置迁移的未提交工作。
+
+- Implementation：`PersonaPage.vue` 的 ALLOWED_GROUPS 弹窗以 tag 显示既有群号，单个正整数按 Enter/加号加入、逐项移除；仍把列表序列化为既有逗号分隔 `.env` 字符串。空间绑定改用多选列表，候选为当前 `/groups` 返回群号加当前空间已有绑定；没有自由输入，旧绑定可保留或取消。
+- API boundary：只改 Dashboard 表单，复用 `/config`、`/groups`、`/spaces/{name}/bindings`。保存 ALLOWED_GROUPS 后按既有流程请求重启；空间 API 的单群单空间语义不变。没有写本机配置、空间绑定或重启服务。
+- GitNexus：编辑前 `saveAllowedGroups`、`saveSpaceSettings` 与 PersonaPage.vue upstream impact 均 UNKNOWN / 0；Vue 模板 callback 未建边。源码确认模板触发处理函数，并核对配置、群组、空间绑定 route/service。索引刷新至 HEAD `659a214`、1841 covered files、FTS disabled；流程提取未排名 2924/3124 个候选。`detect-changes --scope all` 复跑范围为 11 files / 44–45 symbols / 805–816 affected processes / CRITICAL；flow 展示以通用 `name` 属性关联无关路径，重复计数不一致。将其作为未解决的图聚合异常记录，不视为通过或确证本页面有 800 个调用流程。
+- Validation：Dashboard `vue-tsc` 与 Vite production build 通过，存在既有 mixed static/dynamic import 与 >500KB chunk warnings；`sync:webui` 同步到 `webui/dist`、`desktop/dashboard-dist`。`check_docs.py`：121 files / 1262 local links / 577 migration anchors / 0 errors；feature / locale JSON parse 和 `git diff --check` 通过。未运行自动化测试、浏览器交互或认证态 API save/readback。
+- Files：`dashboard/src/views/PersonaPage.vue`、Dashboard 构建产物（`dashboard/dist/`、`webui/dist/`、`desktop/dashboard-dist/`）、`feature_list.json`、`progress.md`、`session-handoff.md`。
+- Next：在无需改配置的浏览器联调中确认 tag 添加/删除、Enter/加号、选择器候选与历史绑定呈现；再用授权配置环境验证 `/config` 和空间绑定 API 保存/回读及重启行为。
+
+## Previous Session — Groups and persona interface consolidation
+
+用户要求将“群组”和“人格”界面融合。PersonaPage 同时呈现群组表、空间人格卡片、`ALLOWED_GROUPS` 入口和“空间设置”弹窗；`GroupsPage.vue` 已移除，侧栏保留一个入口，旧 `/groups` 重定向到 `/persona`。API 和验证边界见下方记录。
+
+## Previous Session — WebChat settings moved to Chat
+
+WebChat prompt 设置入口已从空间管理移至 ChatPage；PersonaPage 隐藏 WebChat 专属空间，并阻止在普通空间管理页创建/删除。实现复用了现有 WebChat prompt API；聊天身份流程未改。群组/人格合并后的 Dashboard 构建和资源同步覆盖这部分源码。认证态保存/回读和浏览器交互尚未验证。
+
+## Previous Session — Persona and space interface
+
+用户提出四项人格与空间页调整：从该页编辑 `ALLOWED_GROUPS`、移除出厂默认人格展示、把人格和群绑定编辑统一为“空间设置”、卡片不再展示人格正文。当前分支 `codex/frontend-ui-polish`，起始提交 `659a214`（刚完成并提交侧栏工作）。本轮改动目前未提交。
+
+- Implementation：`dashboard/src/views/PersonaPage.vue` 增加独立的 `ALLOWED_GROUPS` 表单，通过已有 `/config` API 读写，按配置页约定保存后请求重启。每张空间卡片仅显示空间名和群绑定；一键“空间设置”弹窗内编辑人格提示词与绑定群，并用现有两条 API 保存。移除默认人格 GET 与只读展示卡片。WebChat 的虚拟群号 `-1` 可继续保存在空间绑定里，但白名单输入只接受正 QQ 群号。
+- GitNexus：Docker GitNexus 因本机 Docker 引擎不可用，改用本机已核验的 GitNexus 1.6.12 runner；全量刷新后 runner identity current，索引 commit `659a214`，status current（1842 covered files）、`incompleteReasons=[]`。`load` upstream LOW（同页 4 直接调用），`parseGroupIds` LOW（1 直接调用）。PersonaPage 文件级查询、模板事件处理函数及跨 Vue/Python HTTP API 结果为 UNKNOWN/0；已用 router 注册、模板引用和 `/config`、`/spaces/{name}/prompt`、`/bindings` 源码补证。全仓流程目录有候选截断，FTS build 失败；不以缺失流程当作无影响证明。此前增量检测曾把 `qq_groups` 同名字段扇出成 CRITICAL / 803–808 processes，但全量 `analyze --index-only --pdg` 后最终 `detect-changes --scope all` 为 exit 0、4 files / 19–25 symbols / 0 affected processes / LOW；源码审查也无法将先前列出的 Status、Execute_operation、Get_config 和 Get_status 扇出映射到此页面。保留增量图异常记录；当前 LOW 仅对索引覆盖范围有效，流程抽取仍因入口、深度和分支预算不完整。
+- Verification：Dashboard build 与 `sync:webui` 已通过，并同步 `webui/dist` / `desktop/dashboard-dist`。浏览器检查 `/persona` 卡片、空间设置弹窗、允许群组弹窗和 WebChat `-1` 绑定；没有提交任一表单，因此配置文件未更改，也未请求重启。`python scripts/check_docs.py`、feature JSON parse、`git diff --check` 通过；自动化测试未运行。
+- Next：下一项界面需求可继续；另需单独验证认证态 API 保存 / 读回，确认 `/config` 写入和重启行为以及空间 prompt / bindings 的双端结果。GitNexus 对 `qq_groups` 的 CRITICAL 扇出仍待图索引层面解释，不能视为风险关闭。
+
+## Completed Session — NoneBot platform configuration and responsive sidebar
 
 用户要求平台页支持全部 NoneBot 适配器，按需添加，并将可用适配器作为依赖随安装包预装；后续要求按各适配器项目文档预设运行时配置表单。用户决定：Walle-Q 与 NTChat 已缺乏维护，直接屏蔽并记录原因。当前分支 `codex/frontend-ui-polish` 从同步后的 `main@9de22e696f60a14fefa91f17024dd45bdef21cde` 创建。同步前的旧本地改动留在 `stash@{0}`，本任务未触碰。`PLATFORM-ADAPTER-PREINSTALL` 和 `PLATFORM-ADAPTER-FORM-PRESETS` 均完成各自记录的源码/本地验证范围。
 

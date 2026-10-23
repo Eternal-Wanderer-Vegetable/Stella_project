@@ -18,6 +18,17 @@ const input = ref('');
 const busy = ref(false);
 const listEl = ref<HTMLElement | null>(null);
 const toast = useToast();
+const webChatSettingsDialog = ref(false);
+const webChatPrompt = ref('');
+const webChatSettingsLoading = ref(false);
+const webChatSettingsLoaded = ref(false);
+const webChatSettingsSaving = ref(false);
+const webChatSpaceReady = ref(false);
+const webChatSettingsMessage = ref('');
+
+interface SpaceItem {
+  name: string;
+}
 
 const FAILBACK = '……？';
 
@@ -97,12 +108,66 @@ async function reset(): Promise<void> {
   }
 }
 
+function closeWebChatSettings(): void {
+  webChatSettingsDialog.value = false;
+  webChatSettingsLoaded.value = false;
+  webChatSettingsMessage.value = '';
+}
+
+async function openWebChatSettings(): Promise<void> {
+  webChatSettingsDialog.value = true;
+  webChatSettingsLoading.value = true;
+  webChatSettingsLoaded.value = false;
+  webChatSpaceReady.value = false;
+  webChatSettingsMessage.value = '';
+  try {
+    const data = await unwrap<{ spaces: SpaceItem[] }>(api.get('/spaces'));
+    webChatSpaceReady.value = data.spaces.some((space) => space.name === 'webchat');
+    if (!webChatSpaceReady.value) {
+      webChatSettingsMessage.value = '首次发送一条 WebChat 消息后，系统会创建专属空间；之后即可在这里设置人格。';
+      return;
+    }
+    const prompt = await unwrap<{ text: string }>(api.get('/spaces/webchat/prompt'));
+    webChatPrompt.value = prompt.text;
+    webChatSettingsLoaded.value = true;
+  } catch (err) {
+    webChatSettingsDialog.value = false;
+    toastApiError(toast, err);
+  } finally {
+    webChatSettingsLoading.value = false;
+  }
+}
+
+async function saveWebChatSettings(): Promise<void> {
+  if (!webChatSettingsLoaded.value || webChatSettingsSaving.value) return;
+  webChatSettingsSaving.value = true;
+  try {
+    await unwrap(api.put('/spaces/webchat/prompt', { text: webChatPrompt.value }));
+    toast.success('WebChat 设置已保存');
+    closeWebChatSettings();
+  } catch (err) {
+    toastApiError(toast, err);
+  } finally {
+    webChatSettingsSaving.value = false;
+  }
+}
+
 onMounted(loadHistory);
 </script>
 
 <template>
   <v-layout class="chat-layout">
     <v-main class="chat-main">
+      <div class="chat-header d-flex align-center ga-3 px-4 pt-4">
+        <div>
+          <h1 class="text-h5 font-weight-bold">聊天</h1>
+          <div class="text-caption text-medium-emphasis">WebChat 私聊 · 独立记忆空间</div>
+        </div>
+        <v-spacer />
+        <v-btn variant="tonal" prepend-icon="mdi-cog-outline" @click="openWebChatSettings">
+          WebChat 设置
+        </v-btn>
+      </div>
       <div ref="listEl" class="chat-scroll">
         <div class="pa-4">
           <div
@@ -136,6 +201,46 @@ onMounted(loadHistory);
         </div>
       </div>
     </v-main>
+    <v-dialog
+      :model-value="webChatSettingsDialog"
+      max-width="760"
+      @update:model-value="(open: boolean) => { if (!open) closeWebChatSettings(); }"
+    >
+      <v-card>
+        <v-card-title>WebChat 设置</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            这里设置聊天界面 WebChat 使用的人格。WebChat 的专属空间和虚拟会话身份由系统固定管理。
+          </p>
+          <v-progress-linear v-if="webChatSettingsLoading" indeterminate color="primary" class="mb-4" />
+          <v-alert v-if="webChatSettingsMessage" type="info" variant="tonal">
+            {{ webChatSettingsMessage }}
+          </v-alert>
+          <v-textarea
+            v-if="webChatSpaceReady"
+            v-model="webChatPrompt"
+            label="WebChat 人格提示词"
+            rows="12"
+            auto-grow
+            :disabled="webChatSettingsLoading || webChatSettingsSaving || !webChatSettingsLoaded"
+          />
+          <div class="text-caption text-medium-emphasis mt-2">专属空间：webchat · 虚拟会话：-1</div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn :disabled="webChatSettingsSaving" @click="closeWebChatSettings">关闭</v-btn>
+          <v-btn
+            v-if="webChatSpaceReady"
+            color="primary"
+            :loading="webChatSettingsSaving"
+            :disabled="webChatSettingsLoading || !webChatSettingsLoaded"
+            @click="saveWebChatSettings"
+          >
+            保存 WebChat 设置
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-layout>
 </template>
 
@@ -147,6 +252,7 @@ onMounted(loadHistory);
   flex-direction: column;
   justify-content: space-between;
 }
+.chat-header { flex: 0 0 auto; }
 .chat-scroll {
   flex: 1;
   overflow-y: auto;

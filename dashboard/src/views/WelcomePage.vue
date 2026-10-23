@@ -92,7 +92,7 @@ const uptimeText = computed(() => {
 // 群数；step3 看进程存活（pid）。
 const steps = computed(() => [
   { key: 'step1', to: '/providers', done: endpointsReady.value === true },
-  { key: 'step2', to: '/groups', done: (status.value?.allowed_group_count ?? 0) > 0 },
+  { key: 'step2', to: '/persona', done: (status.value?.allowed_group_count ?? 0) > 0 },
   { key: 'step3', to: '/platforms', done: !!status.value?.pid },
 ]);
 
