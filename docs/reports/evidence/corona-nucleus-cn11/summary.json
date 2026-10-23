@@ -66,5 +66,266 @@
     "Docker Hub TLS timeout prevented a real application image build",
     "docker compose plugin unavailable; no compose config/up",
     "Rust toolchain, native Windows/Linux clean VM, live QQ/WebChat/model, final six-product and rollback acceptance not run"
-  ]
+  ],
+  "implementation_commit": "a225aa8",
+  "gitnexus": {
+    "version": "1.6.12",
+    "pre_edit_impacts": {
+      "COMMON_DIRS": "UNKNOWN/0; source audit verified Standalone/OneClick/staging consumers",
+      "FORBIDDEN_PARTS": "UNKNOWN/0; source audit verified _ignore_release_entries/_assert_clean consumers",
+      "build_standalone": "LOW; 2 impacted; direct caller main",
+      "stage_installer_resources": "LOW; 2 impacted",
+      "_assert_clean": "LOW; 3 impacted",
+      "_ignore_release_entries": "LOW; 1 caller",
+      "Dockerfile/docker-compose.yml/.dockerignore": "UNKNOWN/0; Dockerfile/compose/source references audited",
+      "tests/webui/conftest.py": "UNKNOWN/0; pytest subtree auto-discovery audited",
+      "architecture_docs": "MEDIUM; 53-57 document-link nodes",
+      "release_docs": "MEDIUM; 56-69 document-link nodes",
+      "progress.md": "LOW/26",
+      "session-handoff.md": "LOW/19",
+      "feature_list.json": "LOW/19",
+      "CN11_report_zh": "MEDIUM/38; 0 affected processes",
+      "CN11_report_en": "MEDIUM/31; 0 affected processes; indirect modules Memory and Sandbox",
+      "CN11_summary_json": "LOW/27; 0 affected processes"
+    },
+    "implementation_precommit": {
+      "scope_all": {
+        "files": 19,
+        "symbols": 45,
+        "affected_processes": 0,
+        "risk": "LOW",
+        "partial": false,
+        "truncated": false
+      },
+      "compare_main": {
+        "files": 259,
+        "symbols": 1559,
+        "affected_processes": 150,
+        "risk": "CRITICAL",
+        "listing_capped": true,
+        "partial": false,
+        "truncated": false
+      }
+    },
+    "analyzer_limitations": "Process-flow extraction omitted 3165 of 3365 entry candidates and skipped 937 callees; graph absence is not proof of no path.",
+    "status_evidence_precommit": {
+      "scope_all_runs": [
+        {
+          "files": 6,
+          "symbols": 11,
+          "affected_processes": 0,
+          "risk": "LOW",
+          "partial": false,
+          "truncated": false,
+          "index_state": "first run"
+        },
+        {
+          "files": 6,
+          "symbols": 1,
+          "affected_processes": 774,
+          "risk": "CRITICAL",
+          "changed_symbol": "Section ?",
+          "flow_diff_names": "blank",
+          "partial": false,
+          "truncated": false,
+          "display_omitted_entries": true,
+          "index_state": "intermediate"
+        },
+        {
+          "files": 6,
+          "symbols": 1,
+          "affected_processes": 213,
+          "risk": "CRITICAL",
+          "changed_symbol": "Section ?",
+          "flow_diff_names": "blank",
+          "partial": false,
+          "truncated": false,
+          "display_omitted_entries": true,
+          "index_state": "intermediate"
+        },
+        {
+          "files": 6,
+          "symbols": 11,
+          "affected_processes": 0,
+          "risk": "LOW",
+          "partial": false,
+          "truncated": false,
+          "index_state": "final fresh-index run"
+        }
+      ],
+      "compare_main_runs": [
+        {
+          "files": 259,
+          "symbols": 1559,
+          "affected_processes": 150,
+          "risk": "CRITICAL",
+          "display_omitted_entries": true,
+          "partial": false,
+          "truncated": false,
+          "index_state": "implementation-stage index"
+        },
+        {
+          "files": 259,
+          "symbols": 508,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "display_omitted_entries": true,
+          "partial": false,
+          "truncated": false
+        },
+        {
+          "files": 259,
+          "symbols": 500,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "display_omitted_entries": true,
+          "partial": false,
+          "truncated": false
+        },
+        {
+          "files": 259,
+          "symbols": 554,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "display_omitted_entries": true,
+          "partial": false,
+          "truncated": false
+        },
+        {
+          "files": 259,
+          "symbols": 327,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "display_omitted_entries": true,
+          "partial": false,
+          "truncated": false
+        },
+        {
+          "files": 259,
+          "symbols": 346,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "display_omitted_entries": true,
+          "partial": false,
+          "truncated": false,
+          "command_limit": 10
+        },
+        {
+          "files": 259,
+          "symbols": 478,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "display_omitted_entries": true,
+          "partial": false,
+          "truncated": false,
+          "command_limit": 10,
+          "index_state": "latest final gate before evidence refresh"
+        }
+      ],
+      "source_audit": "Second-stage staged names were only the bilingual reports, summary JSON, feature_list.json, progress.md, and session-handoff.md; no runtime files changed. Exact-UID File impacts: Chinese report MEDIUM/38, English MEDIUM/31, summary JSON LOW/27; each had zero affected processes. Intermediate detect-changes all outputs returned CRITICAL with unresolved Section ? and blank flow names; first/final fresh-index all output was LOW. Preserve the CRITICAL outputs without waiver. context Get_config returned symbol-not-found.",
+      "final_gate_before_summary_refresh": {
+        "scope_all": {
+          "files": 6,
+          "symbols": 11,
+          "affected_processes": 0,
+          "risk": "LOW",
+          "partial": false,
+          "truncated": false
+        },
+        "compare_main": {
+          "files": 259,
+          "symbols": 478,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "display_omitted_entries": true,
+          "partial": false,
+          "truncated": false,
+          "command_limit": 10
+        }
+      },
+      "final_gate_after_evidence_refresh": {
+        "scope_all": {
+          "files": 6,
+          "symbols": 4,
+          "affected_processes": 3,
+          "risk": "MEDIUM",
+          "changed_symbols": [
+            "Section 2026-10-23-corona-nucleus-cn11.en.md",
+            "Section 2026-10-23-corona-nucleus-cn11.md",
+            "Section summary.json",
+            "Section session-handoff.md"
+          ],
+          "affected_flows": [
+            "Skill_delete -> _is_user_layer (3 steps), changed session-handoff.md",
+            "Skill_detail -> _is_user_layer (3 steps), changed session-handoff.md",
+            "Skill_save -> _is_user_layer (3 steps), changed session-handoff.md"
+          ],
+          "partial_marker": false,
+          "truncated_marker": false
+        },
+        "compare_main": {
+          "files": 259,
+          "symbols": 195,
+          "affected_processes": 779,
+          "risk": "CRITICAL",
+          "command_limit": 10,
+          "additional_listed_symbols": 185,
+          "additional_listed_flows": 769,
+          "partial_marker": false,
+          "truncated_marker": false
+        },
+        "source_audit": "Current staged files are bilingual reports, summary JSON, feature_list.json, progress.md, and session-handoff.md only. No runtime changes. Literal searches for Skill_delete, Skill_detail, Skill_save, and _is_user_layer in the changed docs returned no hits; impact Skill_delete and context Skill_delete returned not found. Preserve the MEDIUM attribution for review rather than waiving it. Counts differ from earlier fresh-index samples."
+      },
+      "final_precommit_gate_repeat": {
+        "scope_all": {
+          "files_touched": 6,
+          "indexed_symbol_overlap": false,
+          "result": "Diff touched 6 file(s) but no indexed symbols overlap those hunks — not a clean tree.",
+          "gate_status": "NOT GREEN",
+          "partial_marker": false,
+          "truncated_marker": false
+        },
+        "compare_main": {
+          "files": 259,
+          "symbols": 262,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "command_limit": 10,
+          "additional_listed_symbols": 252,
+          "additional_listed_flows": 776,
+          "partial_marker": false,
+          "truncated_marker": false
+        },
+        "source_audit": "The staged tree remains six docs/status/evidence files, with no runtime code changes. Previous serial all output for the same file set reported 6 files/4 symbols/3 affected processes/MEDIUM and three unresolvable Skill_* flows. Preserve both conflicting detector outcomes; neither is a green gate."
+      },
+      "final_precommit_gate_confirmation": {
+        "scope_all": {
+          "files_touched": 6,
+          "indexed_symbol_overlap": false,
+          "result": "Diff touched 6 file(s) but no indexed symbols overlap those hunks — not a clean tree.",
+          "gate_status": "NOT GREEN",
+          "partial_marker": false,
+          "truncated_marker": false
+        },
+        "compare_main": {
+          "files": 259,
+          "symbols": 240,
+          "affected_processes": 786,
+          "risk": "CRITICAL",
+          "command_limit": 10,
+          "additional_listed_symbols": 230,
+          "additional_listed_flows": 776,
+          "partial_marker": false,
+          "truncated_marker": false
+        },
+        "source_audit": "This compare sample followed the prior no-overlap all gate and returned 259/240/786/CRITICAL with --limit 10; 230 more symbols and 776 more flows were listed. The all gate again returned no indexed symbol overlap and explicitly stated not a clean tree. The staged tree remains docs/status/evidence only with no runtime source change. Counts fluctuate across index snapshots."
+      }
+    }
+  },
+  "documentation_check": {
+    "files": 119,
+    "local_links": 1288,
+    "migration_anchors": 577,
+    "errors": 0
+  }
 }

@@ -1,6 +1,6 @@
 # Corona / Nucleus 实施 CN11：发布负载与默认切换门禁
 
-日期：2026-10-23（Asia/Shanghai） · 基线：`28744fa`（CN10 证据绑定） · 分支：`codex/corona-nucleus-implementation`
+日期：2026-10-23（Asia/Shanghai） · 基线：`28744fa`（CN10 证据绑定） · CN11 实现提交：`a225aa8` · 分支：`codex/corona-nucleus-implementation`
 
 范围：工程计划 [CN11](../plans/2026-10-23-corona-nucleus-engineering-plan.md#cn11)。本阶段完成发布包/installer staging 白名单、运行数据排除、Docker 存活探针与停止预算、双语部署/架构/发布说明，以及测试 home 隔离回归。默认入口保持 legacy；CN11 仍为 **NOT READY**，没有执行默认切换或发布。
 
@@ -30,7 +30,13 @@
 - Docker scratch build 使用 15 类合成数据标记：保留 `.env.example` 与两个程序入口，过滤 `.stella`、密钥、control/ownership、部署答案、SQLite sidecar、日志、models、NapCat；0 个禁用命中。
 - Dashboard 三份目录 `dashboard/dist`、`webui/dist`、`desktop/dashboard-dist` 完全一致。Compose YAML 由 PyYAML 6.0.3 解析成功，确认 `init: true`、`stop_grace_period: 65s`。
 - 真实 Docker 应用镜像构建未完成：Docker 29.1.3 client/server 可用，但拉取 `node:24-slim` 遇到 Docker Hub TLS handshake timeout。主机没有 `docker compose` 插件，故未运行 Compose config/up；scratch build 只验证上下文过滤。
-- 隔离 `STELLA_HOME` 的全量 Python：**4115 passed / 29 skipped / 3 warnings / 281.94s**。此前 suite-order 的 Cometa/WebUI 401 失败在加入每例 auth runtime 清理后消失。机器可读原始摘要位于 [evidence](evidence/corona-nucleus-cn11/summary.json)；GitNexus 提交门禁会在证据提交中补齐。
+- 隔离 `STELLA_HOME` 的全量 Python：**4115 passed / 29 skipped / 3 warnings / 281.94s**。此前 suite-order 的 Cometa/WebUI 401 失败在加入每例 auth runtime 清理后消失。机器可读摘要位于 [evidence](evidence/corona-nucleus-cn11/summary.json)。
+
+## GitNexus 提交门禁
+
+CN11 实现提交前 `detect-changes --scope all`：**19 files / 45 symbols / 0 processes / LOW**；未报告 partial/truncated。`--scope compare --base-ref main`：**259 files / 1559 symbols / 150 processes / CRITICAL**（累计分支风险，列表有上限，计数覆盖全部变更）。索引分析本身提示进程流提取未排序 3165/3365 个入口候选、跳过 937 个 callee；图缺边不证明路径不存在。编辑前文档影响见上节。状态/证据 follow-up 初始及摘要刷新前最后一次 fresh-index `scope=all` 均为 **6 files / 11 symbols / 0 processes / LOW**。中间两个 serial 输出为 **6 files / 1 symbol / CRITICAL**，affected process 记录分别为 774 与 213；唯一命名项是无法解析的 `Section ?`，flow 差分里的变更符号名为空。之后当前六个状态/报告文件的提交门禁报 **6 files / 4 symbols / 3 processes / MEDIUM**：四个 Markdown/JSON `Section` 符号；三个流程为 `Skill_delete`、`Skill_detail`、`Skill_save` 到 `_is_user_layer`，均标注改自 `session-handoff.md`。该文件、双语报告与 JSON 中对这些符号的字面量复查为 0 命中，`impact Skill_delete` 与 `context Skill_delete` 均 not found；因此流程归因缺少可解析符号依据，保留 MEDIUM 待人工复核，不豁免。再一次提交门禁对六个改动文件返回“no indexed symbols overlap those hunks — not a clean tree”；按规则记为未通过，不能将零重叠当作干净结果。输出未报告 partial/truncated。精确 File UID 复查：中文报告 MEDIUM/38、英文报告 MEDIUM/31（均 0 affected processes；英文间接指向 Memory/Sandbox 模块），JSON 摘要 LOW/27（0 processes）。`context Get_config` 报 symbol not found。第二阶段 staged 文件仅为两份报告、JSON、`feature_list.json`、`progress.md`、`session-handoff.md`；无运行时代码修改。保留所有 CRITICAL 输出，不以 `riskSharedAxes` 豁免；计数随索引重建变化。
+
+多次 fresh-index 后对 `main` 的 serial compare 观测到 **259 files / 327、346、478、500、508 或 554 symbols / 786 processes / CRITICAL**；之后样本为 **259/195/779/CRITICAL**、**259/262/786/CRITICAL**、**259/315/786/CRITICAL** 和 **259/240/786/CRITICAL**。240-symbol 样本的命令使用 `--limit 10`，输出另列 230 个符号与 776 条流程（计数覆盖全部变更）。计数随索引重建显著变化，均保留为 CRITICAL 并待人工复核。原实现阶段索引曾报 1559 symbols / 150 processes。机器摘要记录各次样本和索引覆盖限制。
 
 ## 未运行 / 未完成
 
