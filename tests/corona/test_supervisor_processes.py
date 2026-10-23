@@ -12,7 +12,9 @@ import socket
 import statistics
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -230,6 +232,8 @@ async def test_crash_after_ready_uses_bounded_restart_budget(tmp_path: Path) -> 
 async def test_linux_real_core_100_cycles_do_not_leak_or_overlap(
     tmp_path: Path,
 ) -> None:
+    executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="cn10-soak")
+    asyncio.get_running_loop().set_default_executor(executor)
     bootstrap = _bootstrap(tmp_path, instance_id="cn10-process-soak")
     selected_mode = ["exclusive_ready"]
     supervisor = CoreSupervisor(
@@ -262,6 +266,12 @@ async def test_linux_real_core_100_cycles_do_not_leak_or_overlap(
         }
 
     try:
+        # asyncio.to_thread uses a lazy default executor. Start all workers before
+        # sampling so runner-specific pool growth is not mistaken for a leak.
+        worker_barrier = threading.Barrier(4)
+        await asyncio.gather(
+            *(asyncio.to_thread(worker_barrier.wait, timeout=5) for _ in range(4))
+        )
         for cycle in range(100):
             selected_mode[0] = cycle_modes[cycle % len(cycle_modes)]
             snapshot = await supervisor.start()
@@ -352,7 +362,10 @@ async def test_linux_real_core_100_cycles_do_not_leak_or_overlap(
             evidence_path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
         print("CN10_METRIC " + json.dumps(evidence, sort_keys=True))
     finally:
-        await supervisor.stop()
+        try:
+            await supervisor.stop()
+        finally:
+            executor.shutdown(wait=True)
 
 
 @pytest.mark.parametrize(
@@ -470,6 +483,7 @@ def test_owner_loss_drains_core_and_fences_descendant_tree(tmp_path: Path) -> No
     from corona.process_tree import ManagedProcessTree
 
     child_pid_file = tmp_path / "owner-loss-worker.pid"
+    ready_file = tmp_path / "owner-loss-ready"
     child_code = r"""
 import asyncio
 import os
@@ -495,6 +509,7 @@ lifecycle = NucleusLifecycle(
 server = SimpleNamespace(should_exit=False)
 lifecycle.attach_server(server)
 lifecycle.mark_ready()
+open(sys.argv[2], "w", encoding="ascii").write("ready")
 deadline = time.monotonic() + 5
 while not server.should_exit and time.monotonic() < deadline:
     time.sleep(0.01)
@@ -503,14 +518,15 @@ asyncio.run(lifecycle.finish_process_group_shutdown())
 lifecycle.cancel_watchdog()
 """
     tree = ManagedProcessTree.spawn(
-        [sys.executable, "-c", child_code, str(child_pid_file)],
+        [sys.executable, "-c", child_code, str(child_pid_file), str(ready_file)],
         cwd=ROOT,
         env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(ROOT)},
         log_path=tmp_path / "owner-loss.log",
     )
     deadline = time.monotonic() + 5
-    while not child_pid_file.exists() and time.monotonic() < deadline:
+    while not ready_file.exists() and time.monotonic() < deadline:
         time.sleep(0.02)
+    assert ready_file.exists()
     assert child_pid_file.exists()
     child_pid = int(child_pid_file.read_text())
     tree.close_owner_watch()  # Simulate the Corona process closing on crash.
