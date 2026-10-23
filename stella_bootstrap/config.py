@@ -79,6 +79,7 @@ def build_config_revision(
     project_root: Path,
     stella_home: Path,
     external_environment: Mapping[str, str] | None = None,
+    source_text_overrides: Mapping[str, str] | None = None,
     settings_path: Path | None = None,
     created_at: str | None = None,
     revision_id: str | None = None,
@@ -91,6 +92,9 @@ def build_config_revision(
     """
     project = project_root.expanduser().resolve()
     home = stella_home.expanduser().resolve()
+    overrides = dict(source_text_overrides or {})
+    if set(overrides) - {".env"} or any(not isinstance(value, str) for value in overrides.values()):
+        raise ConfigBuildError("only a text override for the base .env source is supported")
     captured = capture_external_environment(external_environment)
     external = {
         _canonical_key(key): value
@@ -101,7 +105,10 @@ def build_config_revision(
     }
 
     base_path = home / ".env"
-    base_text, base_digest = _read_source(base_path)
+    base_text, base_digest = _read_source(
+        base_path,
+        text_override=overrides.get(".env") if ".env" in overrides else None,
+    )
     parsed_base = parse_dotenv(base_text, environment=captured, override=False)
     base_values = {_canonical_key(key): value for key, value in parsed_base.items()}
     values = {
@@ -178,7 +185,12 @@ def _profile_name(environment: str) -> str | None:
     return None
 
 
-def _read_source(path: Path) -> tuple[str, str | None]:
+def _read_source(
+    path: Path, *, text_override: str | None = None
+) -> tuple[str, str | None]:
+    if text_override is not None:
+        raw = text_override.encode("utf-8")
+        return text_override, hashlib.sha256(raw).hexdigest()
     try:
         raw = path.read_bytes()
     except FileNotFoundError:

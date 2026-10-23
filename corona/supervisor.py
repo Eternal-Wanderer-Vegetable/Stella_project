@@ -108,29 +108,90 @@ class CoreSupervisor:
         await self._first_state.wait()
         return self._snapshot
 
-    async def stop(self) -> None:
+    def select_revision(self, revision, revision_file) -> None:
+        """Select a previously validated immutable revision for the next generation."""
+        if (
+            revision.project_root != str(self.bootstrap.project_root)
+            or revision.stella_home != str(self.bootstrap.stella_home)
+        ):
+            raise CoreLaunchError("revision_identity_mismatch")
+        self.bootstrap = replace(
+            self.bootstrap,
+            revision=revision,
+            revision_file=revision_file,
+        )
+
+    async def start_once(self) -> CoreSnapshot:
+        """Start one generation without consuming the autonomous crash retry budget."""
+        previous_attempts = self.max_attempts
+        self.max_attempts = 1
+        try:
+            return await self.start()
+        finally:
+            self.max_attempts = previous_attempts
+
+    async def drain_core(self, operation_id: str) -> bool:
+        tree = self._tree
+        if (
+            tree is None
+            or tree.poll() is not None
+            or self._snapshot.phase != "ready"
+            or not self._identity
+            or not self._token
+        ):
+            return False
+        client = self._nucleus_client(dict(self._identity), self._token)
+        await asyncio.to_thread(
+            client.lifecycle,
+            DRAIN_PATH,
+            operation_id=f"{operation_id}-drain",
+            timeout_seconds=35,
+        )
+        await self._set_snapshot(phase="draining")
+        return True
+
+    async def core_reachable(self) -> bool:
+        """Confirm that the owned generation still answers its identity-bound health probe."""
+        tree = self._tree
+        if (
+            tree is None
+            or tree.poll() is not None
+            or self._snapshot.phase != "ready"
+            or not self._identity
+            or not self._token
+        ):
+            return False
+        client = self._nucleus_client(dict(self._identity), self._token)
+        try:
+            status, payload = await asyncio.to_thread(client.health)
+        except (NucleusProtocolError, OSError, TimeoutError):
+            return False
+        return status == 200 and payload.get("ready") is True
+
+    async def stop(self, operation_id: str | None = None, *, already_drained: bool = False) -> None:
         self._desired = False
         tree = self._tree
         if (
             tree is not None
             and tree.poll() is None
-            and self._snapshot.phase == "ready"
+            and self._snapshot.phase in {"ready", "draining"}
             and self._identity
             and self._token
         ):
             identity = dict(self._identity)
             client = self._nucleus_client(identity, self._token)
             try:
-                await asyncio.to_thread(
-                    client.lifecycle,
-                    DRAIN_PATH,
-                    operation_id=uuid.uuid4().hex,
-                    timeout_seconds=35,
-                )
+                if not already_drained and self._snapshot.phase == "ready":
+                    await asyncio.to_thread(
+                        client.lifecycle,
+                        DRAIN_PATH,
+                        operation_id=f"{operation_id or uuid.uuid4().hex}-drain",
+                        timeout_seconds=35,
+                    )
                 await asyncio.to_thread(
                     client.lifecycle,
                     STOP_PATH,
-                    operation_id=uuid.uuid4().hex,
+                    operation_id=f"{operation_id or uuid.uuid4().hex}-stop",
                 )
             except (NucleusProtocolError, OSError, TimeoutError):
                 pass
@@ -165,6 +226,7 @@ class CoreSupervisor:
             await self._set_snapshot(
                 phase="starting",
                 desired="running",
+                revision_id=self.bootstrap.revision.revision_id,
                 generation_id=generation_id,
                 pid=None,
                 attempt=attempt,

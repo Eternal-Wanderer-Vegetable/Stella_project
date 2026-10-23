@@ -14,7 +14,10 @@ from fastapi.responses import JSONResponse
 
 from corona.auth import router as auth_router
 from corona.bootstrap import CoronaBootstrap
+from corona.config_api import router as config_api_router
+from corona.config_store import ConfigStore
 from corona.local_control import create_local_control_app, create_local_control_record
+from corona.operations import OperationManager
 from corona.supervisor import CoreSupervisor
 from stella_contracts.control import CONTROL_PROTOCOL_VERSION
 from webui.responses import ApiError, error, ok
@@ -23,7 +26,14 @@ from webui.security import configure_auth_runtime, reset_auth_runtime
 logger = logging.getLogger("corona")
 
 
-def create_corona_app(bootstrap: CoronaBootstrap, supervisor: CoreSupervisor) -> FastAPI:
+def create_corona_app(
+    bootstrap: CoronaBootstrap,
+    supervisor: CoreSupervisor,
+    *,
+    config_store: ConfigStore | None = None,
+    operation_manager: OperationManager | None = None,
+    startup_decision=None,
+) -> FastAPI:
     local_control_record = create_local_control_record(bootstrap)
     configure_auth_runtime(
         stella_home=bootstrap.stella_home,
@@ -34,7 +44,20 @@ def create_corona_app(bootstrap: CoronaBootstrap, supervisor: CoreSupervisor) ->
     async def lifespan(app: FastAPI):
         tasks: list[asyncio.Task] = []
         app.state.rate_limiter = _rate_limiter(bootstrap.login_ratelimit_per_min)
-        tasks.append(asyncio.create_task(supervisor.start()))
+        decision = app.state.startup_decision
+        if decision is None or decision.action == "normal":
+            if decision is None or decision.start_core:
+                await supervisor.start()
+            else:
+                await supervisor.stop()
+        elif decision.start_core:
+            await supervisor.start_once()
+        else:
+            await supervisor.stop()
+        if operation_manager is not None:
+            await operation_manager.finalize_startup_recovery(
+                decision, supervisor.snapshot
+            )
         if bootstrap.webui_enabled and bootstrap.serve_dist:
             tasks.append(asyncio.create_task(_build_dashboard(bootstrap)))
         try:
@@ -57,6 +80,9 @@ def create_corona_app(bootstrap: CoronaBootstrap, supervisor: CoreSupervisor) ->
         lifespan=lifespan,
     )
     app.state.supervisor = supervisor
+    app.state.config_store = config_store
+    app.state.operation_manager = operation_manager
+    app.state.startup_decision = startup_decision
     app.state.auth_audit_path = bootstrap.log_dir / "corona_auth_audit.jsonl"
     app.state.local_control_record = local_control_record
     app.state.local_control_app = create_local_control_app(
@@ -77,6 +103,8 @@ def create_corona_app(bootstrap: CoronaBootstrap, supervisor: CoreSupervisor) ->
     if bootstrap.webui_enabled:
         app.state.rate_limiter = _rate_limiter(bootstrap.login_ratelimit_per_min)
         app.include_router(auth_router)
+        if config_store is not None and operation_manager is not None:
+            app.include_router(config_api_router)
 
         @app.get("/api/v1/system/core")
         async def core_status(request: Request):
@@ -131,7 +159,10 @@ async def _build_dashboard(bootstrap: CoronaBootstrap) -> None:
             rebuild_source_dashboard, bootstrap.project_root, bootstrap.serve_dist
         )
     except Exception as exc:
-        logger.warning("Dashboard source build failed (%s); Corona control API remains available", type(exc).__name__)
+        logger.warning(
+            "Dashboard source build failed (%s); Corona control API remains available",
+            type(exc).__name__,
+        )
 
 
 def _require_loopback(request: Request) -> None:

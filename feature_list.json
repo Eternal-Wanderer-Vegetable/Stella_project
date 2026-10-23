@@ -1008,6 +1008,11 @@
           "report": "docs/reports/2026-10-23-corona-nucleus-cn04.md",
           "command": "CN04: GitNexus impacts + protocol/identity/local-control regressions + full Python + Ruff/compileall/flow/docs + staged detect-changes all/compare",
           "result": "Implemented protocol v1 and Nucleus capability/actor guard, Corona JWT-derived header client, generation/operation-checked lifecycle ACKs, and separate loopback deploy-control listener/capability record. Focused Corona/Nucleus regression: 29 passed / 5.21s; Ruff, compileall and message-flow passed. Full Python rerun with initialized isolated STELLA_HOME: 4057 passed / 29 skipped / 2 failed / 249.00s; trace-dead-incarnation and standalone-doctor failures each passed alone, so suite remains NOT GREEN from unresolved order/state behavior. Docs 119/1280/577/0. Repeated serial staged GitNexus all: 21 files / 31–32 symbols / 420–492 processes / CRITICAL; compare main: 172/363–382/509–518 / CRITICAL. Counts varied without partial/truncated output. The first compare was PARTIAL and discarded, then rerun serially without partial/truncated markers. No user data/live acceptance."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn05.md",
+          "command": "CN05: GitNexus upstream impact/source audit + config transaction/API/recovery and real-core regressions + full Python + Ruff/compileall/flow/docs + staged detect-changes all/compare",
+          "result": "Added revision CAS, PREPARED/COMMITTED crash recovery, conditional external-edit-safe rollback, serialized idempotent apply/restart/start/stop operations, revision-bound process readiness, startup recovery and authenticated config/operation/status/SSE APIs. Legacy remains default. Focused Corona/Nucleus regressions: 40 passed / 6.43s; Ruff, compileall, message-flow and docs passed. Full suite: 4072 passed / 29 skipped / 4 failed / 1 warning / 251.38s; all four exact failures passed alone (4 passed / 6.03s), but root cause remains unknown and full suite is NOT GREEN. Tests used temporary isolated STELLA_HOME; no user data or live platforms. Staged GitNexus all: 17 files / 17 symbols / 13 processes / HIGH; compare main: 182 / 720 / 88 / CRITICAL cumulative, serial and without partial/truncated markers. Overall CORONA-IMPL remains in progress / NOT READY."
         }
       ]
     }
