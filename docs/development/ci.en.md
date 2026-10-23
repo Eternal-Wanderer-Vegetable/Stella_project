@@ -26,7 +26,7 @@ ruff check .
 pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 ```
 
-`requirements-platform.lock` includes the base dependencies from `requirements.txt` plus optional Uninfo from `requirements-platform.in`. Alconna, required by the OneBot v11 outbound target codec, is now a base dependency, so the default QQ/WebChat installation gets it from `requirements.txt`.
+`requirements-platform.lock` includes the base dependencies from `requirements.txt`, including the 29 adapter distributions for 30 selectable catalog entries, plus optional Uninfo from `requirements-platform.in`. Heybox requires Python 3.11+, so the Python 3.10 matrix skips it through its environment marker. Alconna, required by the OneBot v11 outbound target codec, is also a base dependency.
 
 `pip-audit` is blocking, so CI goes red when an upstream dependency exposes a CVE. If you determine that an upstream issue cannot be fixed immediately, you may temporarily add `|| true` to that step, but record the reason.
 

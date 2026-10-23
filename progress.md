@@ -2,16 +2,103 @@
 
 ## Current State
 
-**Last Updated:** 2026-10-22 (Asia/Shanghai)
-**Active Feature:** WEBUI-STARTUP-BUILD: rebuild Dashboard from source startup and include current assets in release images.
-**Inherited Feature:** PR #117 is merged at `main@08dbbb0` with hosted CI and Docker Publish green; real QQ reply verification remains pending. TEST-REPO-SYNC is blocked pending Linux/Windows test-checkout access. Gravitas test-host asset verification remains external.
-**Scope:** On `codex/auto-build-dashboard-on-source-start`, rebuild and sync Dashboard before source `bot.py` serves requests, preserve release-time frontend assets, repair Docker image asset propagation, and update bilingual deployment guidance.
+**Last Updated:** 2026-10-23 (Asia/Shanghai)
+**Active Feature:** WEBUI-STARTUP-BUILD: rebuild Dashboard from source startup and include current assets in release images. PLATFORM-CONFIG-UI and its on-demand adapter preinstall follow-up are complete for their recorded source-validation scope.
+**Inherited Features:** XPLAT-IMPL remains blocked / NOT READY on real platform and clean-VM acceptance. Other merged or open work retains its recorded state.
+**Scope:** On `codex/frontend-ui-polish`, the platform page shows only selected adapters and browses the 32-entry catalog in a picker. All 29 unique distributions for the 30 selectable catalog records are declared in the normal dependency manifests; Walle-Q and NTChat are blocked by the user's decision, and Heybox is marked for Python >=3.11. Each of the 30 selectable module paths now has a documentation-based configuration preset. The pre-existing WEBUI-STARTUP-BUILD remains the active feature per `feature_list.json`.
 
-**What's Done:** Source startup rebuilds and syncs the locked Dashboard before serving and aborts on failure. Windows release assets are already built by Release; Docker now builds Dashboard assets in a Node stage. Isolated pnpm 11.25 install/build/sync passed. Ruff, py_compile, docs and diff checks passed. This machine has no Docker daemon, so the image build remains for hosted CI.
+**Current UI follow-up:** Adapter-specific runtime forms, generic environment fields, and the shared NoneBot `DRIVER` setting are in dialogs opened from each selected adapter card. The `DRIVER` control appears in every adapter dialog and explains that its value applies to all selected adapters. The picker checkbox sits in the upper-right corner so catalog titles align with platform-card titles. On the platform home, the installer banner and effective-module row are removed, the save/restart reminder appears only for a changed draft, and a compact status icon opens per-adapter connection details. Connection references inherit the same body font as other table cells. All 30 selectable catalog modules have documentation-based structured fields, including multi-account JSON lists; nested credentials are redacted and blank submissions retain stored values. The picker refinements are complete: blocked adapters and install commands are hidden, the custom adapter entry is a plus tile at the end of the grid, source/date metadata is hidden, page/picker cards share a 156px minimum height, and project links use hover tooltips. Dashboard build/sync and documentation checks passed. Browser review confirmed the home layout and opened the adapter status dialog; save/readback remains unverified because the served backend is older and disables saving.
 
-**Files:** `bot.py`, `webui/source_build.py`, `deploy/process.py`, Dashboard pnpm configuration, Dockerfile/ignore/workflow, bilingual Docker deployment guides, `feature_list.json`, `progress.md`, and `session-handoff.md`.
+**What's Done:** The platform page shows only selected adapters and offers the searchable catalog in an add dialog. The picker shows only the 30 available adapters, hides Walle-Q and NTChat, omits package install commands and directory metadata, and places custom adapter entry in a plus tile at the end of the grid. Platform and picker cards share a 156px minimum height; the project/docs icon shows a tooltip on hover; picker checkboxes sit at the upper right with titles aligned to the platform cards. Each selected adapter's runtime dialog contains the global NoneBot `DRIVER` control and its override/remote-platform guidance. The platform home no longer shows the installer banner or effective-module row; its save reminder is draft-difference driven, and connection details open from a compact icon in the added-platforms card. The 30 selectable modules map to 29 bundled distributions; Heybox is omitted on Python 3.10. All 30 module paths match a typed adapter preset. Dashboard build/sync, Python compile/Ruff, dependency resolution/dry-runs, schema coverage, documentation checks and GitNexus checks passed. Platform config UI, preinstall, form presets, picker UX, visual polish, Driver placement, and home-status follow-ups are recorded as done for their source-validation scope.
 
-**What's Next:** PR [#118](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/118) is open against `main@08dbbb0`; hosted CI and Docker build/smoke are running. Direct source startup on Linux/Windows and test-host verification remain external; TEST-REPO-SYNC acceptance also remains pending.
+**Files:** `dashboard/src/views/PlatformsPage.vue`, `dashboard/src/data/nonebotAdapterPresets.ts`, bilingual locales, `webui/services/nonebot_adapter_catalog.json`, `webui/services/platformcfg.py`, `webui/routers/config.py`, `deploy/env_keys.py`, bilingual platform guides, the adapter configuration research note, and task state files.
+
+**What's Next:** When the new backend and Dashboard are served together, verify platform API save/readback; the current local backend is older and the page disables saving. Actual packaged installer artifacts and live platform connections were not verified. No credentials were entered, no running service was restarted, and tests were not run.
+
+## 2026-10-23 — Adapter card alignment and shared Driver placement
+
+- Scope：将目录选择卡片的复选框移到右上角，使标题从左侧统一起排；把主页的 `DRIVER` 控件移入每个已选适配器的运行时配置窗口。
+- Implementation：Driver 值仍是一个共享的 NoneBot 设置；任一适配器窗口的修改都会影响全部已选适配器。全局范围说明、`DRIVER` 字段、建议值按钮、进程环境覆盖提示均放在该窗口；远程平台建议只在当前适配器适用时显示。主页面保留统一保存按钮。
+- GitNexus：编辑前对 `openAdapterConfig` 的 upstream impact 返回 UNKNOWN / 0（目标未被索引）；源码检索确认该函数打开配置弹窗，`driver` 沿现有配置读取/保存路径维护。最终 `detect-changes --scope all` 与 `--scope compare --base-ref main` 均为 20 files / 99 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated；该风险统计包含工作区此前的平台依赖、后端和 UI 修改。
+- Verification：`pnpm --dir dashboard build`（vue-tsc + Vite）通过；`pnpm --dir dashboard sync:webui` 同步至 `webui/dist` 与 `desktop/dashboard-dist`；`python scripts/check_docs.py` 通过（121 files / 1262 local links / 577 migration anchors / 0 errors）；双语 locale / feature JSON parse 与 `git diff --check` 通过。Vite 既有 mixed import 与 >500 KB chunk 警告仍在。
+- Acceptance boundary：未打开浏览器做布局交互检查，未执行平台配置保存/回读或真实平台连接；测试套件未运行。
+
+## 2026-10-23 — Platform home status compaction
+
+- Scope：移除平台首页安装包说明和“当前进程生效”行；只有配置草稿与已加载快照不同时显示保存/重启提示；将连接状态详情从页面底部收进状态图标弹窗。
+- Implementation：草稿快照覆盖已选模块、全局 DRIVER、OneBot/QQ/Telegram/Discord 表单和适配器环境变量；成功保存后随 API 读回重置基线，改动恢复原值时提示自动隐藏。入口放在“已添加的平台”卡片标题旁；弹窗保留运行 Bot 的逐连接记录及 OneBot 汇总状态。界面明确 OneBot 提供心跳/探活，其他适配器健康度未知。
+- GitNexus：编辑前 `loadLink` upstream LOW / 1 个文件引用；`effectiveModules`、`saveAdapters` UNKNOWN / 0，源码检索确认其引用范围限于本 Vue 页面并沿现有 `/platform/adapters` 保存路径。最终 `detect-changes --scope all` 与 `--scope compare --base-ref main` 均为 20 files / 99 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated；该风险统计包含工作区此前的平台目录、依赖和后端改动。
+- Verification：`pnpm --dir dashboard build`（vue-tsc + Vite）通过；`pnpm --dir dashboard sync:webui` 同步到 `webui/dist` 与 `desktop/dashboard-dist`；文档检查 121 files / 1262 local links / 577 migration anchors / 0 errors；locale JSON、`git diff --check` 通过。Vite 既有 mixed import 与 >500 KB chunk 警告仍在。
+- Acceptance boundary：浏览器已检查更新后的首页布局并打开连接状态弹窗；dirty-state 交互未通过新后端 API 保存/回读验证。当前旧后端禁用保存；未连接真实平台，测试套件未运行。
+
+## 2026-10-23 — Connection reference typography
+
+- Scope：统一适配器连接状态弹窗中“连接引用”值的字体与同一行其他单元格一致。
+- Implementation：移除 `<code>` 的浏览器默认等宽字体样式，保留原引用值与表格行键。
+- GitNexus：`ConnectionStatus.instance_ref` upstream 为 UNKNOWN / 0；源码检索确认该模板只在连接表中呈现该字段。
+- Verification：`pnpm --dir dashboard build`（vue-tsc + Vite）与 `pnpm --dir dashboard sync:webui` 通过；`python scripts/check_docs.py` 为 121 files / 1262 local links / 577 migration anchors / 0 errors；locale/feature JSON parse 与 `git diff --check` 通过。浏览器重载后连接状态弹窗显示引用值与同表格文本统一使用正文字体。保留 Vite 既有 mixed import 与 >500 KB chunk 警告；未运行测试套件。
+
+## 2026-10-23 — NoneBot adapter documentation-based forms
+
+- Scope：为全部可选目录适配器提供项目文档/配置模型预设字段，替代让用户自行查文档并手填通用环境变量的体验；多账号 JSON 提供结构化 Bot/账号项。
+- Schema：新增 `dashboard/src/data/nonebotAdapterPresets.ts`，静态对比目录的 30 条 `available` 模块，preset 为 30，missing/extra 均为空。补齐 Villa 的每 Bot `pub_key`、connection_type、callback_url、verify_event；Matrix 改正 `login_user` / `login_password`、`oauth_server_url`，覆盖 refresh、sync、invitation、E2EE 和 global options；WxClaw 加入 README 中的全局默认项。对照报告为 `docs/reports/2026-10-23-nonebot-adapter-config-research.md`。
+- Secret handling：适配器 JSON 嵌套字段递归脱敏；提交时按 app/user/account/Bot ID 等恢复空白凭据；Token 过期时间戳和 Token store 路径保持可编辑。未改变共享 dotenv writer。
+- GitNexus：编辑前 `saveAdapters` UNKNOWN/0、`setAdapterSelected` UNKNOWN/0，源码确认保存经 `/platform/adapters`；`update_adapters` LOW / one caller。最终 `detect-changes` all 与 compare/main 均为 20 files / 96 symbols / 15 flows / HIGH aggregate，无 partial/truncated。HIGH 来自整个平台功能变更影响面，不等同于单个编辑前目标符号风险；完整边界见交接。
+- 验证：`pnpm --dir dashboard build`（vue-tsc + Vite）及 `pnpm --dir dashboard sync:webui` 通过；Python compileall 和 `python -m ruff check webui/services/platformcfg.py` 通过；docs 121 files / 1262 links / 577 anchors / 0 errors；30/30 module coverage、feature/locale JSON parse 与 `git diff --check` 通过。Vite 现有 mixed import 与 >500 KB chunk warnings 仍在。未运行测试。
+- 验收边界：没有打开实时页面核对模态框，也未使用当前后端保存/回读配置；没有输入凭据、重启服务或连接真实平台。仍需在新版后端与 Dashboard 同时运行时做浏览器表单保存/回读验收。
+
+## 2026-10-23 — NoneBot adapter picker UX
+
+- Scope：移除适配器卡片上的 `nb adapter install ...` 命令；自定义模块改在适配器选择窗口添加；统一目录卡片尺寸；隐藏 Walle-Q / NTChat 等不可用目录项。
+- Implementation：picker 只搜索 `available` 目录项，标题计数只报可添加项；自定义路径逐项输入并校验 Python dotted module path，重复项报错，若输入目录中已有模块则直接选择已知适配器；主页面不再显示目录外模块 textarea。卡片统一 204px 高，标题与描述限两行，模块路径单行省略。
+- GitNexus：组件名未进入索引，`saveAdapters` upstream 为 UNKNOWN / 0；源码确认 `/platforms` 路由动态加载 `PlatformsPage.vue`，picker 状态和自定义路径在本组件维护并由既有保存流程写入 `/platform/adapters`。最终 all 与 compare/main 都为 20 files / 96 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated；聚合包含此前平台配置与运行时改动。
+- Verification：`pnpm --dir dashboard build`（`vue-tsc` + Vite）通过；`pnpm --dir dashboard sync:webui` 同步到 `webui/dist` 和 `desktop/dashboard-dist`；`python scripts/check_docs.py` 为 121 files / 1262 links / 577 migration anchors / 0 errors；locale/feature JSON parse 和 `git diff --check` 通过。未运行测试；Vite 的既有 mixed import 与 >500 KB chunk warnings 保留。
+- Acceptance boundary：没有在实时浏览器中执行选择、添加自定义模块或保存配置；没有运行/重启服务、填写凭据或连接真实平台。
+
+## 2026-10-23 — NoneBot adapter picker visual refinement
+
+- Scope：隐藏选择窗口的目录来源和更新时间；将自定义适配器入口放到列表末尾并改为“+”卡片；使主页面与 picker 卡片尺寸一致；修复标题和模块文字间距；以可悬浮提示的外链图标代替项目主页/文档文字。
+- Implementation：搜索栏占满可用宽度；目录网格末尾始终显示加号卡片，点击后打开 Python dotted module 输入对话框；已选卡片与目录卡片共用 `156px` 最小高度；标题不再空占两行高度，描述最多两行；项目链接在主卡片、picker 卡片与预设配置说明中统一为打开图标和 tooltip。
+- GitNexus：`saveAdapters` upstream UNKNOWN / 0；源码确认 picker 仍经 `PlatformsPage.vue` 既有 `/platform/adapters` 保存入口。最终 all 与 compare/main 均为 20 files / 98 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated。聚合风险包括工作区此前的平台后端、依赖和 UI 改动。
+- Verification：`pnpm --dir dashboard build`（`vue-tsc` + Vite）通过；`pnpm --dir dashboard sync:webui` 成功，dashboard / webui / desktop 的 `index.html` SHA-256 相同；文档 121 files / 1262 links / 577 migration anchors / 0 errors；locale/feature JSON parse、`git diff --check` 通过。Vite 既有混合导入及 >500 KB chunk 警告保留；未运行测试。
+- Acceptance boundary：未在实时浏览器中交互检查 plus 卡片/tooltip，也未保存平台配置或连接真实平台。
+
+## 2026-10-22 — NoneBot multi-platform configuration UI
+
+- Scope: replace the raw adapter-module textarea and OneBot-only editor with selectable OneBot V11, QQ Official, Telegram and Discord cards, dedicated connection fields, official package install commands, custom module paths and current-link monitoring. Multiple platforms can be enabled together.
+- Design basis: NoneBot separates installing an adapter package from registering/loading its module; each adapter documents its own credentials and driver needs. AstrBot’s Discord WebUI guide shows platform-specific token/proxy fields and intent/permission guidance. The UI links to the official docs and never runs package installation itself.
+- GitNexus before edit: adapter update service LOW (one direct router caller); route UNKNOWN / 0 graph callers with Vue API source reference verified; `env_keys.is_sensitive` HIGH (13 impacted); `envfile.write_values` CRITICAL (12 impacted). HIGH and CRITICAL findings were surfaced before edits. A dedicated atomic dotenv writer handles adapter JSON settings; the critical shared writer was not modified.
+- Implementation: frontend now offers package status/install commands, OneBot reverse/forward WS, QQ App ID/Secret and intents, Telegram token/polling/webhook/API/proxy, Discord token/intents/command registration/proxy, custom module paths and DRIVER guidance. Backend persists adapter JSON and credentials to the local `.env`, retains blank secret fields and additional bot entries, validates endpoints/intents, redacts secrets from status responses, and audits platform names without credential values.
+- Verification: `pnpm --dir dashboard build` passed (`vue-tsc` plus Vite); `pnpm --dir dashboard sync:webui` synced the generated bundle. `python -m compileall -q webui/services/platformcfg.py webui/routers/config.py deploy/env_keys.py` passed. `python scripts/check_docs.py` passed (119 files / 1247 local links / 577 anchors / 0 errors); both locale files parse as JSON; `git diff --check` passed. Ruff is unavailable. Tests were not run.
+- Runtime boundary: after the latest bundle sync and page refresh, all catalog entries render. The settled response shows the old-backend warning and disables saving. A brief pre-response state had exposed save; it is now fixed by initializing save capability to false and also guarding on `loadingAdapters`. No save was clicked or service lifecycle command issued; no `.env` credentials were entered and no real platform connection was attempted. Real platform acceptance remains NOT READY.
+
+## 2026-10-22 — On-demand adapter picker and installer dependency follow-up
+
+- Scope: revise the platform page after feedback so it shows only selected adapters by default, and investigate shipping all 32 catalog entries (31 unique packages) as installed dependencies in the installer.
+- UI: moved the searchable catalog into an add dialog; the main page renders only selected cards with remove actions. Restored the `nb adapter install` hint inside the picker for packages missing from the current runtime. Existing specialized forms appear when their adapter is selected.
+- Browser evidence: after `pnpm --dir dashboard sync:webui`, a separate browser tab at `127.0.0.1:8080/#/platforms` rendered the saved OneBot card alone; the picker showed 32 entries; searching `telegram` narrowed to Telegram; selecting it added the card and token form; deselecting it restored the original draft. No credentials were entered and Save was not clicked.
+- Dependency evidence: PyPI currently declares Walle-Q 0.2.0 with `nonebot-adapter-onebot~=2.2.2`, conflicting with Stella's `>=2.4.6`; NTChat 0.3.5 declares `httpx==0.23.0`, conflicting with the current NoneBot/AnyIO stack. Walle-Q imports OneBot V12 names that exist in 2.4.6, and NTChat source contains no direct `httpx` import, but this is static compatibility evidence only. Heybox requires Python >=3.11; the embedded installer Python 3.12 satisfies it, while Python 3.10 support would need a marker.
+- Blocker: no dependency or installer manifests were changed. A plain `pip install -r requirements.txt` cannot resolve the two upstream constraints. Need choose a maintained metadata compatibility patch for those two wheels or an isolated runtime strategy before claiming all adapters are installed in every package. NoneBot documents adapter package installation separately from registration; package availability alone does not select/register a platform.
+- GitNexus: `PlatformsPage.vue` file impact returned UNKNOWN / 0; source audit confirmed the route dynamically loads the view and that it uses `/platform/adapters` GET/PUT. The Docker GitNexus container was stopped, so the local `.gitnexus/run.cjs` runner was used. Final all/compare detected 9 files, 83 symbols, 15 affected processes, HIGH, with no partial/truncated markers.
+- Validation: `pnpm --dir dashboard build` passed (includes `vue-tsc`); Vite emitted existing mixed static/dynamic import and large-chunk warnings. `pnpm --dir dashboard sync:webui` synced to `webui/dist` and `desktop/dashboard-dist`; feature/locale JSON parsing, `python scripts/check_docs.py` (119 files / 1247 links / 577 anchors / 0 errors), and `git diff --check` passed. Tests were not run.
+
+## 2026-10-22 — Full NoneBot adapter catalog follow-up
+
+- Scope: extend the platform page to cover every adapter in the current official NoneBot adapter directory, while retaining arbitrary custom module paths and supporting adapter-specific dotenv variables that do not have dedicated Stella forms.
+- Source: `webui/services/nonebot_adapter_catalog.json` is normalized from the official `nonebot2/assets/adapters.json5` source. The checked snapshot contains 32 records and 31 unique package names (OneBot V11/V12 share one package). The Dashboard uses the same JSON as a bundled display fallback when the running API is stale.
+- Implementation: catalog entries are searchable and show official/community-maintained status, package install command, local package status, and project link. Generic key/value settings are tracked via `STELLA_ADAPTER_ENV_KEYS`, protected against Stella/NoneBot core settings, and redact secrets from GET responses; blank secret inputs preserve saved values. Installation remains a separate operator action.
+- GitNexus: fresh upstream checks for the modified platform service/parser/writer/route paths were LOW; frontend dispatch and route symbols returned UNKNOWN/0 and were verified through source references. Final `detect-changes --scope all` and `--scope compare --base-ref main` both completed without partial/truncated markers: 9 files / 81 symbols / 15 affected processes / HIGH. Affected flows include adapter reads/saves, module parsing, validation and dotenv persistence; the shared env writer was not edited.
+- Validation: `pnpm --dir dashboard build` and `pnpm --dir dashboard sync:webui` passed; `python -m compileall -q webui/services/platformcfg.py webui/routers/config.py deploy/env_keys.py` and import probe passed (32 catalog records, 31 unique packages, 443 protected keys); catalog/feature/locale JSON parsing passed; `python scripts/check_docs.py` passed (119 files / 1247 links / 577 anchors / 0 errors); `git diff --check` passed. Tests were not run under repository task instructions.
+- Runtime boundary: after syncing and refreshing, all 32 catalog cards render; once the API response settles, the old-backend warning appears and save is disabled. The transient pre-response enabled state has been fixed and rechecked in the browser. No save was clicked, no service lifecycle command issued, no credentials entered, and no live adapter connection attempted.
+
+## 2026-10-22 — Adapter preinstall decision and closure
+
+- Decision: the user classified Walle-Q and NTChat as unmaintained and asked to block them with documented reasons. No compatibility metadata forks or dependency downgrades are used.
+- Implementation: blocked modules are unavailable in the picker and server-side new selections are rejected; existing selections stay visible for removal; the runtime registration path skips both. The remaining 30 catalog records correspond to 29 unique distributions in `requirements.txt` and `pyproject.toml`; Heybox has a Python >=3.11 marker. Existing Docker, source and Windows installer flows consume `requirements.txt`.
+- Dependency evidence: `uv pip compile --universal --python-version 3.10 -o requirements-platform.lock requirements-platform.in` resolved 174 packages. Isolated `uv pip install --dry-run -r requirements-platform.lock` resolved 160 packages for Python 3.10 (Heybox skipped) and 159 for Python 3.12 (Heybox included); blocked packages were absent. Dry-runs did not install packages. No release installer artifact was built.
+- Final validation: Dashboard build and sync passed; Python compileall passed; `python scripts/check_docs.py` passed (121 files / 1259 local links / 577 migration anchors / 0 errors); `git diff --check` passed. GitNexus `detect-changes` all and compare/main both reported 20 files / 94 symbols / 15 affected processes / HIGH, without partial/truncated output. The diff includes the broader platform configuration page, API and persistence work.
+- Browser/runtime boundary: the refreshed page showed 32 picker records, 30 available and two blocked. The current local server runs an older backend, so the compatibility warning appears and Save stays disabled. No settings were saved, no running service was restarted, no credentials were entered, and no live platform connection was attempted. No tests were run per task instructions.
+- Status: `PLATFORM-ADAPTER-PREINSTALL` is done for source, manifests, UI, documentation and local validation. Actual built installer artifacts, current-backend save/readback and live platform acceptance remain unverified.
 
 ## 2026-10-22 — Source Dashboard startup rebuild and release audit
 

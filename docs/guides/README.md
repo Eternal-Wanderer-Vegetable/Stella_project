@@ -8,6 +8,7 @@
 | --- | --- |
 | [Docker 部署](deployment-docker.md) | 部署容器、迁移与备份 |
 | [WebUI 管理](webui.md) | 管理面板、鉴权与首启排查 |
+| [NoneBot 平台适配器](platforms.md) | 选择平台、配置适配器与查看预装/屏蔽策略 |
 | [Cometa 外部任务](cometa.md) | 接入外部 Agent、认证与长任务回投 |
 | [定时任务](scheduling.md) | 管理群级 Cron、权限和投递 |
 | [技能使用](skills.md) | 配置运行时技能、来源与受控执行 |

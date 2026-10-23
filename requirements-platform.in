@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-# 可选平台桥接的额外依赖；OneBot v11 出站所需 Alconna 已列入 requirements.txt。
+# 基础依赖含全部可用目录适配器；此文件仅添加可选平台桥接 Uninfo。
 -r requirements.txt
 nonebot-plugin-uninfo==0.11.2

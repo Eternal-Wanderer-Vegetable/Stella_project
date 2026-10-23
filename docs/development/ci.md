@@ -26,7 +26,7 @@ ruff check .
 pytest tests/ --cov=. --cov-branch -n auto --dist loadgroup
 ```
 
-`requirements-platform.lock` 包含 `requirements.txt` 的基础依赖及 `requirements-platform.in` 声明的可选 Uninfo。OneBot v11 出站 codec 需要的 Alconna 已进入基础依赖，因此默认 QQ/WebChat 安装通过 `requirements.txt` 即可获得。
+`requirements-platform.lock` 包含 `requirements.txt` 的基础依赖（包括目录中 30 条可选记录对应的 29 个适配器发行包）及 `requirements-platform.in` 声明的可选 Uninfo。黑盒语音要求 Python 3.11+，因此 Python 3.10 矩阵会按 marker 跳过该包。OneBot v11 出站 codec 需要的 Alconna 也在基础依赖中。
 
 `pip-audit` 是阻塞的，某个上游依赖爆出 CVE 时 CI 会红。若判断为不可立即修复的上游问题，可临时在该步骤加 `|| true`，但应记录原因。
 

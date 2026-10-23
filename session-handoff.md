@@ -1,6 +1,28 @@
 # Session Handoff
 
-## Current Session — Source Dashboard startup rebuild and release audit
+## Current Session — NoneBot adapter picker, preinstall, documentation forms, and visual polish
+
+用户要求平台页支持全部 NoneBot 适配器，按需添加，并将可用适配器作为依赖随安装包预装；后续要求按各适配器项目文档预设运行时配置表单。用户决定：Walle-Q 与 NTChat 已缺乏维护，直接屏蔽并记录原因。当前分支 `codex/frontend-ui-polish` 从同步后的 `main@9de22e696f60a14fefa91f17024dd45bdef21cde` 创建。同步前的旧本地改动留在 `stash@{0}`，本任务未触碰。`PLATFORM-ADAPTER-PREINSTALL` 和 `PLATFORM-ADAPTER-FORM-PRESETS` 均完成各自记录的源码/本地验证范围。
+
+- UI follow-up：主视图只显示已选平台，32 条适配器目录移入可搜索添加对话框；已选项可移除，选中后显示对应专用表单。移除后不会立即保存；只有点保存才会持久化选择。
+- Picker UX：选择窗口只展示 30 个可用项，Walle-Q / NTChat 等 unavailable 项不显示且计数不包含它们；卡片不再给出 `nb adapter install ...` 指令。自定义 Python 模块在同一选择窗口逐个添加，主页面的自定义模块 textarea 已移除；若输入目录里已有的可用模块会直接选择，屏蔽模块不能通过该入口绕过策略。
+- Visual polish：选择器隐藏目录来源和日期，搜索框占满可用宽度；目录网格末尾增加“+ 添加自定义适配器”卡片，点击后打开模块路径对话框；平台页和 picker 适配器卡片共享 `156px` 最小高度。标题不再保留空白第二行导致模块路径下沉，项目主页/文档入口在卡片和预设说明中改为外链图标，悬浮显示 tooltip。
+- 已有实现：`PlatformsPage.vue` 保留 OneBot V11、QQ 官方、Telegram、Discord 专用表单，并从 `webui/services/nonebot_adapter_catalog.json` 提供 32 条目录记录（31 个唯一包名）。目录外的自定义模块仍可启用。适配器卡显示官方/社区维护标记、本机包状态与项目链接；选择对话框不显示包安装命令。
+- 通用配置：平台页可为任意适配器录入环境变量键值；`STELLA_ADAPTER_ENV_KEYS` 追踪这些值。后端保护 Stella/NoneBot 核心字段，密钥不从 GET 返回；保存空白密钥会保留旧值，删除变量会移除其 dotenv 项。
+- 专用连接配置：OneBot WS、QQ Bot、Telegram polling/webhook、Discord intents 与代理/命令配置写入本机 `.env`，GET 仅返回脱敏状态；多 Bot 配置保留其余 bot。配置使用专属原子 dotenv writer。审计事件只记连接平台名称，不记表单值。
+- 文档预设：新增 `dashboard/src/data/nonebotAdapterPresets.ts`，与 30 个可选目录模块逐项一致；多 Bot JSON 列表用结构化字段编辑，未列入专用表单的变量仍在高级字段中。Villa 的 `pub_key`、每 Bot 连接方式与 callback path 修正为文档结构；Matrix 的登录/OAuth 字段、sync/invitation/E2EE 选项和 WxClaw 账号/全局默认项按项目文档预填。研究记录为 [2026-10-23-nonebot-adapter-config-research.md](docs/reports/2026-10-23-nonebot-adapter-config-research.md)。
+- JSON 密钥保护：后端递归隐藏嵌套 token、secret、password、key、ticket、cookie 等凭据，并按 `account_id` 等标识恢复提交中的空白密钥；Matrix token 过期时间与状态文件路径不会因名字含 `token` 而误隐藏。此逻辑位于适配器配置服务，不修改共享 dotenv writer。
+- 官方资料：[NoneBot Adapter 文档](https://nonebot.dev/docs/advanced/adapter)、[NoneBot Store 文档](https://nonebot.dev/docs/tutorial/store)、[官方适配器目录 JSON5](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5)、[NoneBot 配置文档](https://nonebot.dev/docs/appendices/config)；AstrBot Discord WebUI 指南曾用于专用字段参考。
+- 依赖决策及状态：Walle-Q 0.2.0 要求 `nonebot-adapter-onebot~=2.2.2`，与 Stella `>=2.4.6` 冲突；NTChat 0.3.5 固定 `httpx==0.23.0`，与 Stella `>=0.24.0` 冲突。用户决定按维护状态直接屏蔽。两者不进依赖，picker/API/运行时均拒绝新启用或注册，并保留旧配置以便移除。其余 30 个目录记录对应 29 个唯一发行包，进入 `requirements.txt`、`pyproject.toml` 和安装包通用 requirements 链；Heybox 通过 Python >=3.11 marker，Python 3.10 跳过。
+- GitNexus：针对 `update_adapters`、`parse_adapter_modules`、`register_enabled_adapters` 的 upstream impact 为 LOW；适配器预装阶段 all/compare 为 20 files / 94 symbols / 15 flows / HIGH。添加表单和状态记录后最终 all 与 compare/main 均为 20 files / 96 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated。主要流程包括适配器读写、校验、模块解析及 dotenv 持久化；共享 env writer 未修改。
+- 最新表单验证：`pnpm --dir dashboard build`（含 `vue-tsc`）与 `pnpm --dir dashboard sync:webui` 通过；30/30 目录模块都有预设，Python compileall、Ruff、双语 docs 门禁、feature/locale JSON 和 `git diff --check` 通过。Vite 保留既有 mixed import 和大 chunk 警告。未运行测试，也未在浏览器中完成表单保存/readback。
+- 最新 picker 验证：Dashboard build 和资源同步成功；dashboard / webui / desktop 的入口 HTML SHA-256 一致；文档 121 files / 1262 links / 577 anchors / 0 errors；双语 locale 和 feature JSON parse、diff check 通过。`saveAdapters` upstream UNKNOWN / 0；最终 detect all 与 compare/main 均为 20 files / 98 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated（包含此前平台改动）。未运行测试，也未在浏览器里交互检查加号卡片、tooltip 或保存/readback。
+- 最新 UI follow-up：目录选择卡片勾选框移到右上角，标题与主页适配器卡片左对齐；NoneBot 全局 `DRIVER`、共享范围提示、进程环境覆盖提示和远程平台建议放入每个已选适配器的运行时配置弹窗。Driver 仍通过原有 `/platform/adapters` 保存字段提交，页面底部保留统一保存按钮。中英文指南已说明 `DRIVER` 是全局设置。当前源码构建、资源同步、文档和 locale/feature JSON 检查通过；最终 GitNexus all / compare main 结果见 progress.md。未运行测试或浏览器交互验收，也未保存配置或连接真实平台。
+- 最新首页调整：删除平台首页顶部安装包说明与“当前进程生效”行；保存/重启提示以完整草稿快照比较，仅在配置发生变化时显示，保存后重读基线，恢复原配置时自动隐藏。连接状态入口收进“已添加的平台”卡片标题旁的单一图标，点击打开连接详情表；表格按运行中的适配器连接记录展示，健康度保留 OneBot 心跳/探活差异，其他适配器仍显示未知。“连接引用”使用表格正文的统一字体，并已在浏览器中目视确认。Dashboard 构建、`sync:webui`、文档与 locale JSON 检查通过；GitNexus 最终结果记入 progress.md。浏览器确认首页布局并打开连接状态弹窗；当前旧后端 API 不兼容，页面禁用保存，因此未验证新后端保存/回读，亦未连接真实平台；测试未运行。
+- 当前运行边界：浏览器显示 32 项、30 可选和 2 个屏蔽项，但 `127.0.0.1:8080` 服务仍是旧后端，所以 UI 警告 API 不兼容并禁用保存。未保存任何配置、未重启服务、未输入凭据、未尝试真实连接；也没有构建最终安装器工件。源码与依赖变更已完成，当前 backend save/readback、实际 release installer 与平台 live 验收仍未确认。
+- 下一步：如要做 UI 运行验收，在新版 WebUI backend 和 Dashboard 一起运行时检查 picker 交互与 API save/readback；如要宣称发布安装器验收，则需实际构建并检查安装器/离线 wheelhouse。不要将依赖 dry-run 等同于构建工件或真实平台兼容性。
+
+## Previous Session — Source Dashboard startup rebuild and release audit
 
 The blank test UI came from a stale `webui/dist`. This branch now rebuilds the Dashboard when `bot.py` is run from a source checkout or source archive, before serving requests; a failed build stops the new process rather than serving stale assets. Release products with a version-marked frontend skip this runtime path.
 
