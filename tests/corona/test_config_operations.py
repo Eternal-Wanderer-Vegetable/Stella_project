@@ -23,6 +23,7 @@ INSTANCE = "cn05-operations-test"
 
 _FAKE_CORE = r"""
 import json
+import hashlib
 import os
 import sys
 import threading
@@ -41,16 +42,23 @@ identity = {
     "ready": True,
 }
 token = os.environ["STELLA_LAUNCH_TOKEN"]
+route_catalog = {
+    "control_protocol_version": 1,
+    "route_catalog_version": 1,
+    **{key: identity[key] for key in ("instance_id", "controller_boot_id", "generation_id", "revision_id")},
+    "routes": [],
+    "digest": hashlib.sha256(b"[]").hexdigest(),
+}
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_args):
         return
     def do_GET(self):
-        if self.path != "/_nucleus/v1/health" or self.headers.get("Authorization") != "Bearer " + token:
+        if self.path not in {"/_nucleus/v1/health", "/_nucleus/v1/routes"} or self.headers.get("Authorization") != "Bearer " + token:
             self.send_response(401)
             self.end_headers()
             return
-        data = json.dumps(identity).encode()
+        data = json.dumps(route_catalog if self.path == "/_nucleus/v1/routes" else identity).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
@@ -274,7 +282,9 @@ async def test_apply_controls_real_fake_core_and_fences_target_failure(
 
     async def tracked_start_once():
         snapshot = await original_start_once()
-        start_results.append((snapshot.phase, snapshot.revision_id, snapshot.error_code))
+        start_results.append(
+            (snapshot.phase, snapshot.revision_id, snapshot.error_code)
+        )
         return snapshot
 
     supervisor.start_once = tracked_start_once

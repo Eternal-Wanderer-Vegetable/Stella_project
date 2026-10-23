@@ -29,7 +29,9 @@ from stella_contracts.control import (
     DRAIN_PATH,
     HEALTH_PATH,
     STOP_PATH,
+    ControlIdentity,
 )
+from stella_contracts.route_catalog import NUCLEUS_ROUTES_PATH, AdapterRouteCatalog
 
 DEFAULT_SHUTDOWN_BUDGET_SECONDS = 45.0
 FORCE_EXIT_GRACE_SECONDS = 10.0
@@ -439,9 +441,23 @@ def _terminate_group_descendants(pgid: int, remaining: float) -> None:
 class ManagedNucleusASGI:
     """Wrap NoneBot's app with admission fencing and private lifecycle endpoints."""
 
-    def __init__(self, application: Any, lifecycle: NucleusLifecycle) -> None:
+    def __init__(
+        self,
+        application: Any,
+        lifecycle: NucleusLifecycle,
+        route_catalog: AdapterRouteCatalog | None = None,
+    ) -> None:
         self.application = application
         self.lifecycle = lifecycle
+        expected = ControlIdentity(
+            instance_id=lifecycle.instance_id,
+            controller_boot_id=lifecycle.controller_boot_id,
+            generation_id=lifecycle.generation_id,
+            revision_id=lifecycle.revision_id,
+        )
+        if route_catalog is not None and route_catalog.identity != expected:
+            raise ValueError("route catalog identity does not match managed generation")
+        self.route_catalog = route_catalog
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         scope_type = scope.get("type")
@@ -459,7 +475,7 @@ class ManagedNucleusASGI:
             return
 
         path = scope.get("path", "")
-        if scope_type == "http" and path in {HEALTH_PATH, DRAIN_PATH, STOP_PATH}:
+        if scope_type == "http" and path in {HEALTH_PATH, NUCLEUS_ROUTES_PATH, DRAIN_PATH, STOP_PATH}:
             await self._control(scope, receive, send)
             return
 
@@ -499,9 +515,18 @@ class ManagedNucleusASGI:
 
         path = scope.get("path", "")
         method = scope.get("method", "GET").upper()
-        if path == HEALTH_PATH:
+        if path in {HEALTH_PATH, NUCLEUS_ROUTES_PATH}:
             if method != "GET":
                 await _send_json(send, 405, {"ok": False, "error": {"code": "method_not_allowed"}})
+                return
+            if path == NUCLEUS_ROUTES_PATH:
+                if self.route_catalog is None:
+                    await _send_json(send, 503, {"ok": False, "error": {"code": "route_catalog_unavailable"}})
+                    return
+                if self.lifecycle.phase != "ready":
+                    await _send_json(send, 503, {"ok": False, "error": {"code": "core_not_ready"}})
+                    return
+                await _send_json(send, 200, self.route_catalog.to_payload())
                 return
             phase = self.lifecycle.phase
             await _send_json(send, 200, {

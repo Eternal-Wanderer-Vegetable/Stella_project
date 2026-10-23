@@ -64,6 +64,7 @@ def _bootstrap(
 
 _FAKE_CORE = r"""
 import json
+import hashlib
 import os
 import sys
 import threading
@@ -92,16 +93,23 @@ if mode == "foreign":
     identity["pid"] += 10
 
 token = os.environ["STELLA_LAUNCH_TOKEN"]
+route_catalog = {
+    "control_protocol_version": 1,
+    "route_catalog_version": 1,
+    **{key: identity[key] for key in ("instance_id", "controller_boot_id", "generation_id", "revision_id")},
+    "routes": [],
+    "digest": hashlib.sha256(b"[]").hexdigest(),
+}
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_args):
         return
     def do_GET(self):
-        if self.path != "/_nucleus/v1/health" or self.headers.get("Authorization") != "Bearer " + token:
+        if self.path not in {"/_nucleus/v1/health", "/_nucleus/v1/routes"} or self.headers.get("Authorization") != "Bearer " + token:
             self.send_response(401)
             self.end_headers()
             return
-        data = json.dumps(identity).encode()
+        data = json.dumps(route_catalog if self.path == "/_nucleus/v1/routes" else identity).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
@@ -172,7 +180,10 @@ async def test_crash_after_ready_uses_bounded_restart_budget(tmp_path: Path) -> 
         backoff_base=0.01,
         max_attempts=2,
         command_factory=lambda _boot: [
-            sys.executable, "-c", _FAKE_CORE, "crash_after_ready"
+            sys.executable,
+            "-c",
+            _FAKE_CORE,
+            "crash_after_ready",
         ],
     )
     assert (await supervisor.start()).phase == "ready"
@@ -262,7 +273,9 @@ def test_child_environment_never_inherits_desktop_session_capability(
     assert secret not in child_environment.values()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX process groups are unavailable on Windows")
+@pytest.mark.skipif(
+    os.name == "nt", reason="POSIX process groups are unavailable on Windows"
+)
 def test_process_tree_kills_descendant_after_root_exit(tmp_path: Path) -> None:
     from corona.process_tree import ManagedProcessTree
 
@@ -292,7 +305,9 @@ def test_process_tree_kills_descendant_after_root_exit(tmp_path: Path) -> None:
         os.kill(child_pid, 0)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX owner pipe is unavailable on Windows")
+@pytest.mark.skipif(
+    os.name == "nt", reason="POSIX owner pipe is unavailable on Windows"
+)
 def test_owner_loss_drains_core_and_fences_descendant_tree(tmp_path: Path) -> None:
     from corona.process_tree import ManagedProcessTree
 

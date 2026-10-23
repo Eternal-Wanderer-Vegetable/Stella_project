@@ -90,6 +90,7 @@ def main() -> int:
                 port=bootstrap.public_port,
                 log_level="info",
                 access_log=False,
+                proxy_headers=False,
             )
         )
         local_app = app.state.local_control_app

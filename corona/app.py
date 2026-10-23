@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from corona.adapter_proxy import AdapterProxyMiddleware
 from corona.auth import router as auth_router
 from corona.bootstrap import CoronaBootstrap
 from corona.config_api import router as config_api_router
@@ -81,6 +82,7 @@ def create_corona_app(
         redoc_url=None,
         lifespan=lifespan,
     )
+    app.add_middleware(AdapterProxyMiddleware, supervisor=supervisor)
     app.state.supervisor = supervisor
     app.state.config_store = config_store
     app.state.operation_manager = operation_manager

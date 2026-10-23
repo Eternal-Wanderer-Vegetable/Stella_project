@@ -7,6 +7,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 from typing import Any
@@ -24,6 +25,11 @@ from stella_contracts.control import (
     validate_health_payload,
     validate_lifecycle_ack,
 )
+from stella_contracts.route_catalog import (
+    NUCLEUS_ROUTES_PATH,
+    AdapterRouteCatalog,
+    validate_route_catalog,
+)
 
 _HOP_BY_HOP = frozenset(
     {
@@ -36,8 +42,17 @@ _HOP_BY_HOP = frozenset(
         "transfer-encoding",
         "upgrade",
         "host",
-        "cookie",
-        "content-length",
+        "expect",
+    }
+)
+_FORWARDED_HEADERS = frozenset(
+    {
+        "forwarded",
+        "x-forwarded-for",
+        "x-forwarded-host",
+        "x-forwarded-port",
+        "x-forwarded-prefix",
+        "x-forwarded-proto",
     }
 )
 
@@ -72,9 +87,17 @@ class NucleusClient:
                 raise ValueError("Nucleus client requires a loopback endpoint")
         except ValueError as exc:
             raise ValueError("Nucleus client requires a loopback endpoint") from exc
-        if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        if (
+            isinstance(port, bool)
+            or not isinstance(port, int)
+            or not 1 <= port <= 65535
+        ):
             raise ValueError("Nucleus client port is invalid")
-        if not isinstance(capability, str) or not capability or not capability.isascii():
+        if (
+            not isinstance(capability, str)
+            or not capability
+            or not capability.isascii()
+        ):
             raise ValueError("Nucleus capability is invalid")
         self.host = host
         self.port = port
@@ -92,13 +115,25 @@ class NucleusClient:
                 raise NucleusProtocolError(str(exc)) from exc
         return status, payload
 
+    def route_catalog(self) -> AdapterRouteCatalog:
+        """Read and validate the exact route directory for this generation."""
+        status, payload = self._request("GET", NUCLEUS_ROUTES_PATH)
+        if status != 200:
+            raise NucleusProtocolError("route_catalog_unavailable")
+        try:
+            return validate_route_catalog(payload, self.identity)
+        except ControlContractError as exc:
+            raise NucleusProtocolError(str(exc)) from exc
+
     def lifecycle(
         self, path: str, *, operation_id: str, **extra: object
     ) -> dict[str, Any]:
         if path not in {DRAIN_PATH, STOP_PATH}:
             raise NucleusProtocolError("unknown_lifecycle_operation")
         try:
-            payload = lifecycle_payload(self.identity, operation_id=operation_id, **extra)
+            payload = lifecycle_payload(
+                self.identity, operation_id=operation_id, **extra
+            )
         except ControlContractError as exc:
             raise NucleusProtocolError(str(exc)) from exc
         status, response = self._request("POST", path, payload)
@@ -147,6 +182,7 @@ class NucleusClient:
         *,
         actor: TrustedActor,
         request_id: str | None = None,
+        preserve_platform_credentials: bool = False,
     ) -> list[tuple[str, str]]:
         """Preserve repeatable application headers while replacing trust headers."""
         pairs = list(incoming.items() if isinstance(incoming, Mapping) else incoming)
@@ -165,7 +201,10 @@ class NucleusClient:
                 not name
                 or name.startswith("x-stella-")
                 or name in excluded
+                or name in _FORWARDED_HEADERS
                 or (name == "authorization" and actor.kind != "adapter")
+                or (name == "cookie" and not preserve_platform_credentials)
+                or (name == "content-length" and not preserve_platform_credentials)
                 or "\r" in name
                 or "\n" in name
             ):
@@ -198,6 +237,28 @@ class NucleusClient:
 
     async def proxy_http(self, request: Any, actor: TrustedActor) -> Any:
         """Stream one already-authorized API request to this exact generation."""
+        return await self._proxy_http(
+            request, actor, preserve_platform_credentials=False
+        )
+
+    async def proxy_adapter_http(self, request: Any, adapter: str) -> Any:
+        """Stream an adapter request while retaining its protocol credentials."""
+        try:
+            actor = TrustedActor(adapter, "adapter", "adapter")
+        except ControlContractError as exc:
+            raise NucleusProtocolError("untrusted_adapter") from exc
+        return await self._proxy_http(
+            request, actor, preserve_platform_credentials=True
+        )
+
+    async def _proxy_http(
+        self,
+        request: Any,
+        actor: TrustedActor,
+        *,
+        preserve_platform_credentials: bool,
+    ) -> Any:
+        """Forward a streamed request without allowing a caller-selected upstream."""
         import httpx
 
         from corona.proxy import ProxyResponse, response_headers
@@ -214,7 +275,22 @@ class NucleusClient:
             (bytes(name).decode("latin-1"), bytes(value).decode("latin-1"))
             for name, value in request.scope.get("headers", ())
         ]
-        headers = self.forward_header_pairs(incoming, actor=actor)
+        content_lengths = [
+            value.strip()
+            for name, value in incoming
+            if name.lower() == "content-length"
+        ]
+        if preserve_platform_credentials and (
+            len(content_lengths) > 1
+            or (content_lengths and not content_lengths[0].isascii())
+            or (content_lengths and not content_lengths[0].isdigit())
+        ):
+            raise NucleusProtocolError("unsafe_content_length")
+        headers = self.forward_header_pairs(
+            incoming,
+            actor=actor,
+            preserve_platform_credentials=preserve_platform_credentials,
+        )
 
         async def request_body():
             async for chunk in request.stream():
@@ -245,12 +321,40 @@ class NucleusClient:
             await response.aclose()
             await client.aclose()
 
+        outgoing_headers = response_headers(response.headers.raw)
+        if preserve_platform_credentials:
+            outgoing_headers = self._rewrite_private_locations(outgoing_headers)
         return ProxyResponse(
             status_code=response.status_code,
-            headers=response_headers(response.headers.raw),
+            headers=outgoing_headers,
             body=response.aiter_raw(),
             close=close,
         )
+
+    def _rewrite_private_locations(
+        self, headers: list[tuple[bytes, bytes]]
+    ) -> list[tuple[bytes, bytes]]:
+        """Never disclose Nucleus's private loopback origin in a redirect."""
+        rewritten: list[tuple[bytes, bytes]] = []
+        for name, value in headers:
+            if name.lower() != b"location":
+                rewritten.append((name, value))
+                continue
+            try:
+                parsed = urllib.parse.urlsplit(value.decode("latin-1"))
+                if (
+                    parsed.scheme.lower() in {"http", "https"}
+                    and (parsed.hostname or "").lower() == self.host.lower()
+                    and parsed.port == self.port
+                ):
+                    relative = urllib.parse.urlunsplit(
+                        ("", "", parsed.path or "/", parsed.query, parsed.fragment)
+                    )
+                    value = relative.encode("latin-1")
+            except (UnicodeError, ValueError):
+                pass
+            rewritten.append((name, value))
+        return rewritten
 
     def group_bindings(
         self, action: str, payload: dict[str, object], *, actor: TrustedActor

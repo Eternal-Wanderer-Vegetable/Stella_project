@@ -17,6 +17,8 @@ from nucleus.lifecycle import (
     NucleusLifecycle,
     set_active_lifecycle,
 )
+from nucleus.route_catalog import build_adapter_route_catalog
+from stella_contracts.control import ControlIdentity
 
 
 def _make_server(config: Any, lifecycle: NucleusLifecycle) -> Any:
@@ -45,7 +47,10 @@ def main() -> int:
     try:
         lock = BusinessRootLock.acquire(bootstrap.database_path)
     except BusinessRootLockError as exc:
-        print(f"[nucleus] business database ownership rejected ({type(exc).__name__})", file=sys.stderr)
+        print(
+            f"[nucleus] business database ownership rejected ({type(exc).__name__})",
+            file=sys.stderr,
+        )
         return 73
 
     lifecycle = NucleusLifecycle(
@@ -72,11 +77,22 @@ def main() -> int:
         driver = nonebot.get_driver()
         from nucleus.framework import defer_managed_business_runtimes
 
+        identity = ControlIdentity(
+            instance_id=bootstrap.instance_id,
+            controller_boot_id=bootstrap.controller_boot_id,
+            generation_id=bootstrap.generation_id,
+            revision_id=bootstrap.revision.revision_id,
+        )
+        route_catalog = build_adapter_route_catalog(driver, identity)
         deferred = defer_managed_business_runtimes()
         if set(deferred) != {"_start_scheduling", "_start_cometa"}:
-            raise RuntimeError("managed scheduler and Cometa ready hooks were not registered")
+            raise RuntimeError(
+                "managed scheduler and Cometa ready hooks were not registered"
+            )
         app = ManagedNucleusASGI(
-            InternalRequestGuard(nonebot.get_asgi(), lifecycle), lifecycle
+            InternalRequestGuard(nonebot.get_asgi(), lifecycle),
+            lifecycle,
+            route_catalog,
         )
         logging_config = {
             "version": 1,

@@ -20,6 +20,7 @@ from corona.process_tree import ManagedProcessTree
 from stella_bootstrap.config import PROCESS_ENV_KEYS, RESERVED_ENV_KEYS
 from stella_bootstrap.identity import runtime_dir
 from stella_contracts.control import DRAIN_PATH, STOP_PATH, ControlIdentity
+from stella_contracts.route_catalog import AdapterRouteCatalog
 
 
 class CoreLaunchError(RuntimeError):
@@ -38,6 +39,7 @@ class CoreSnapshot:
     attempt: int = 0
     error_code: str | None = None
     updated_at: str = ""
+    route_catalog: AdapterRouteCatalog | None = None
 
     def public(self) -> dict:
         return {
@@ -170,15 +172,30 @@ class CoreSupervisor:
 
     def business_client(self) -> NucleusClient | None:
         """Return an identity-bound client only while this exact core is ready."""
+        return self._client_for_snapshot(self._snapshot)
+
+    def business_client_for_catalog(
+        self, route_catalog: AdapterRouteCatalog
+    ) -> NucleusClient | None:
+        """Return a client only while the catalog's exact generation remains ready."""
+        snapshot = self._snapshot
+        if snapshot.route_catalog is not route_catalog:
+            return None
+        client = self._client_for_snapshot(snapshot)
+        if self._snapshot is not snapshot:
+            return None
+        return client
+
+    def _client_for_snapshot(self, snapshot: CoreSnapshot) -> NucleusClient | None:
         tree = self._tree
         if (
             tree is None
             or tree.poll() is not None
-            or self._snapshot.phase != "ready"
+            or snapshot.phase != "ready"
             or not self._identity
             or not self._token
-            or self._snapshot.generation_id != self._identity.get("generation_id")
-            or self._snapshot.revision_id != self._identity.get("revision_id")
+            or snapshot.generation_id != self._identity.get("generation_id")
+            or snapshot.revision_id != self._identity.get("revision_id")
         ):
             return None
         return self._nucleus_client(dict(self._identity), self._token)
@@ -252,8 +269,13 @@ class CoreSupervisor:
             try:
                 tree = await self._spawn(identity, token)
                 self._tree = tree
-                await self._await_ready(tree, identity, token)
-                await self._set_snapshot(phase="ready", pid=tree.pid, error_code=None)
+                route_catalog = await self._await_ready(tree, identity, token)
+                await self._set_snapshot(
+                    phase="ready",
+                    pid=tree.pid,
+                    error_code=None,
+                    route_catalog=route_catalog,
+                )
                 self._first_state.set()
                 # Any exit while desired=running is unexpected, including exit 0.
                 exit_code = await asyncio.to_thread(tree.wait)
@@ -352,7 +374,7 @@ class CoreSupervisor:
 
     async def _await_ready(
         self, tree: ManagedProcessTree, identity: dict[str, str], token: str
-    ) -> None:
+    ) -> AdapterRouteCatalog:
         deadline = time.monotonic() + self.readiness_timeout
         client = self._nucleus_client(identity, token)
         while time.monotonic() < deadline:
@@ -377,7 +399,15 @@ class CoreSupervisor:
                 expected = dict(identity, pid=tree.pid)
                 if any(payload.get(key) != value for key, value in expected.items()):
                     raise CoreLaunchError("foreign_core_identity")
-                return
+                try:
+                    route_catalog = await asyncio.to_thread(client.route_catalog)
+                except NucleusProtocolError as exc:
+                    raise CoreLaunchError(exc.code) from exc
+                if route_catalog.identity != client.identity:
+                    raise CoreLaunchError("route_catalog_identity_mismatch")
+                if tree.poll() is not None:
+                    raise CoreLaunchError("process_exited_before_ready")
+                return route_catalog
             await asyncio.sleep(self.poll_interval)
         raise CoreLaunchError("readiness_timeout")
 

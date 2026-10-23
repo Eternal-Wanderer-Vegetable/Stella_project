@@ -23,7 +23,8 @@ from nucleus.lifecycle import (
     NucleusLifecycle,
 )
 from stella_bootstrap.config import build_config_revision, write_revision
-from stella_contracts.control import CONTROL_PROTOCOL_VERSION
+from stella_contracts.control import CONTROL_PROTOCOL_VERSION, ControlIdentity
+from stella_contracts.route_catalog import AdapterRoute, create_route_catalog
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -42,7 +43,9 @@ def _lifecycle(*, force_exit=lambda _code: None) -> NucleusLifecycle:
     )
 
 
-def test_business_root_lock_is_process_held_and_keyed_by_database(tmp_path: Path) -> None:
+def test_business_root_lock_is_process_held_and_keyed_by_database(
+    tmp_path: Path,
+) -> None:
     database = tmp_path / "shared" / "memory.db"
     lock = BusinessRootLock.acquire(database)
     try:
@@ -88,7 +91,21 @@ async def test_private_control_and_drain_fence() -> None:
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"ok"})
 
-    app = ManagedNucleusASGI(inner, lifecycle)
+    identity_contract = ControlIdentity(
+        instance_id=lifecycle.instance_id,
+        controller_boot_id=lifecycle.controller_boot_id,
+        generation_id=lifecycle.generation_id,
+        revision_id=lifecycle.revision_id,
+    )
+    catalog = create_route_catalog(
+        identity_contract,
+        [
+            AdapterRoute(
+                "OneBot V11", "/onebot/v11/ws", "websocket", (), "OneBot V11 WS"
+            )
+        ],
+    )
+    app = ManagedNucleusASGI(inner, lifecycle, catalog)
     identity = {
         "instance_id": lifecycle.instance_id,
         "controller_boot_id": lifecycle.controller_boot_id,
@@ -122,8 +139,12 @@ async def test_private_control_and_drain_fence() -> None:
             receive,
             send,
         )
-        status = next(item["status"] for item in sent if item["type"] == "http.response.start")
-        payload = next(item["body"] for item in sent if item["type"] == "http.response.body")
+        status = next(
+            item["status"] for item in sent if item["type"] == "http.response.start"
+        )
+        payload = next(
+            item["body"] for item in sent if item["type"] == "http.response.body"
+        )
         return status, json.loads(payload)
 
     status, starting = await request("/api/v1/chat", method="POST", body=b"{}")
@@ -136,9 +157,7 @@ async def test_private_control_and_drain_fence() -> None:
     assert status == 401
     assert lifecycle.launch_token not in json.dumps(rejected)
 
-    status, rejected = await request(
-        HEALTH_PATH, authorization=f"Bearer {'0' * 64}"
-    )
+    status, rejected = await request(HEALTH_PATH, authorization=f"Bearer {'0' * 64}")
     assert status == 401
 
     bearer = f"Bearer {lifecycle.launch_token}"
@@ -147,6 +166,14 @@ async def test_private_control_and_drain_fence() -> None:
     assert health["ready"] is True
     assert health["generation_id"] == lifecycle.generation_id
     assert lifecycle.launch_token not in json.dumps(health)
+
+    status, private_routes = await request("/_nucleus/v1/routes")
+    assert status == 401
+    assert "OneBot V11" not in json.dumps(private_routes)
+    status, routes = await request("/_nucleus/v1/routes", authorization=bearer)
+    assert status == 200
+    assert routes["generation_id"] == lifecycle.generation_id
+    assert routes["routes"][0]["path"] == "/onebot/v11/ws"
 
     wrong_identity = dict(
         identity,
@@ -261,7 +288,9 @@ async def test_shutdown_callbacks_share_one_remaining_budget() -> None:
         lifecycle.cancel_watchdog()
 
 
-def test_managed_framework_uses_locked_driver_and_ignores_dotenv(tmp_path: Path) -> None:
+def test_managed_framework_uses_locked_driver_and_ignores_dotenv(
+    tmp_path: Path,
+) -> None:
     cwd = tmp_path / "synthetic-cwd"
     cwd.mkdir()
     (cwd / ".env").write_text(
