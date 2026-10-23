@@ -1667,7 +1667,9 @@ class MemoryConsolidator:
                         "id, owner_type, owner_key, subject_key, audience, fact_key,"
                         "source_conversation_key, source_row_id, candidate_id, fact_subject_key,"
                         "source_digest, verification_status, provenance_json) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) "
+                        "ON CONFLICT(owner_key, audience, fact_key, "
+                        "source_conversation_key, source_row_id) DO NOTHING",
                         (
                             evidence_id,
                             row_owner_type,
@@ -1685,8 +1687,32 @@ class MemoryConsolidator:
                         ),
                     )
                     has_new_evidence = cursor.rowcount == 1
-                elif (
-                    str(existing_evidence[1] or "") == source["source_digest"]
+                    if not has_new_evidence:
+                        # Another consolidator may have inserted this exact source
+                        # after our SELECT. The unique key is the idempotency guard;
+                        # adopt its row so lineage links remain attached to the
+                        # winning evidence record rather than surfacing IntegrityError.
+                        existing_evidence = cursor.execute(
+                            "SELECT id, source_digest, verification_status "
+                            "FROM memory_evidence WHERE owner_key = ? AND audience = ? "
+                            "AND fact_key = ? AND source_conversation_key = ? "
+                            "AND source_row_id = ?",
+                            (
+                                row_owner_key,
+                                row_audience,
+                                fact_key,
+                                source["source_conversation_key"],
+                                source_row_id,
+                            ),
+                        ).fetchone()
+                        if existing_evidence is None:
+                            raise sqlite3.IntegrityError(
+                                "memory evidence conflict did not resolve to its source row"
+                            )
+                        evidence_id = str(existing_evidence[0])
+                if (
+                    existing_evidence is not None
+                    and str(existing_evidence[1] or "") == source["source_digest"]
                     and str(existing_evidence[2] or "")
                     in {"unknown", "legacy_unverified"}
                 ):
