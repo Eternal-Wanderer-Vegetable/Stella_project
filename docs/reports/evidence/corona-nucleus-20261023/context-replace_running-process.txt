@@ -1,0 +1,58 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:deploy/process.py:replace_running",
+    "name": "replace_running",
+    "kind": "Function",
+    "filePath": "deploy/process.py",
+    "startLine": 470,
+    "endLine": 485
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "File:bot.py",
+        "name": "bot.py",
+        "filePath": "bot.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:preflight_for_foreground_start",
+        "name": "preflight_for_foreground_start",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:start_detached",
+        "name": "start_detached",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:tests/test_deploy_process.py:test_replace_running_no_instance",
+        "name": "test_replace_running_no_instance",
+        "filePath": "tests/test_deploy_process.py"
+      },
+      {
+        "uid": "Function:tests/test_deploy_process.py:test_replace_running_stops_identified_instance",
+        "name": "test_replace_running_stops_identified_instance",
+        "filePath": "tests/test_deploy_process.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:deploy/process.py:_graceful_stop_pid",
+        "name": "_graceful_stop_pid",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:_identify_running",
+        "name": "_identify_running",
+        "filePath": "deploy/process.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

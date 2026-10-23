@@ -2,16 +2,24 @@
 
 ## Current State
 
-**Last Updated:** 2026-10-22 (Asia/Shanghai)
-**Active Feature:** WEBUI-STARTUP-BUILD: rebuild Dashboard from source startup and include current assets in release images.
-**Inherited Feature:** PR #117 is merged at `main@08dbbb0` with hosted CI and Docker Publish green; real QQ reply verification remains pending. TEST-REPO-SYNC is blocked pending Linux/Windows test-checkout access. Gravitas test-host asset verification remains external.
-**Scope:** On `codex/auto-build-dashboard-on-source-start`, rebuild and sync Dashboard before source `bot.py` serves requests, preserve release-time frontend assets, repair Docker image asset propagation, and update bilingual deployment guidance.
+**Last Updated:** 2026-10-23 (Asia/Shanghai)
+**Active Feature:** CORONA-PLAN — GitNexus-backed Corona/Nucleus process separation plan; business implementation has not started.
+**Inherited Feature:** WEBUI-STARTUP-BUILD implementation evidence is preserved; PR #118 and external startup/image/test-host acceptance were not rechecked this session and remain pending in the inherited record. Other blocked acceptance remains unchanged.
+**Scope:** Planning documents, source/route/configuration inventories, isolated probes, GitNexus evidence, bilingual archive navigation, and restartable task state. No business source changes, commit, deployment, or production Bot startup.
 
-**What's Done:** Source startup rebuilds and syncs the locked Dashboard before serving and aborts on failure. Windows release assets are already built by Release; Docker now builds Dashboard assets in a Node stage. Isolated pnpm 11.25 install/build/sync passed. Ruff, py_compile, docs and diff checks passed. This machine has no Docker daemon, so the image build remains for hosted CI.
+**What's Done:** Drafted 12 sequential work packages and contracts for configuration snapshots, one supervisor/core, bounded shutdown, recovery, internal authentication, WebUI/API/adapter proxy, and launcher/package migration. Inventory covers 199 source candidates, 133 static WebUI routes (21 control / 111 business / 1 split), 426 literal/derived configuration keys, and 34 acceptance scenarios. Existing isolated regression: 83 passed; real settings and NoneBot 2.5.0 synthetic probes passed. Planning gates passed: DAG/routes/fingerprints/archive links/77 evidence hashes, evidence Ruff/reproduction, docs (119/1259/577/0), diff, and complete structured GitNexus all/compare. CORONA-PLAN is done.
 
-**Files:** `bot.py`, `webui/source_build.py`, `deploy/process.py`, Dashboard pnpm configuration, Dockerfile/ignore/workflow, bilingual Docker deployment guides, `feature_list.json`, `progress.md`, and `session-handoff.md`.
+**Files:** [Plan](docs/plans/2026-10-23-corona-nucleus-engineering-plan.md), [inventory](docs/plans/2026-10-23-corona-nucleus-inventory.json), [evidence](docs/reports/evidence/corona-nucleus-20261023/README.md), bilingual history navigation and task state.
 
-**What's Next:** PR [#118](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/118) is open against `main@08dbbb0`; hosted CI and Docker build/smoke are running. Direct source startup on Linux/Windows and test-host verification remain external; TEST-REPO-SYNC acceptance also remains pending.
+**What's Next:** Planning is complete. The next implementation task begins CORONA-IMPL/CN00: rebind HEAD and upstream impact, formalize the probes, validate snapshot-only NoneBot Driver initialization. New-architecture runtime/live/VM/release acceptance remains NOT READY.
+
+## 2026-10-23 — Corona / Nucleus engineering planning
+
+- Baseline: clean `c1713e3dfb0854e1a7b746e0ef1e5c82ed9a8485`; created `codex/corona-nucleus-plan` from the existing Dashboard branch without changing business code. GitNexus 1.6.12/PDG content matched the target; 814 inferred flows are a bounded graph snapshot.
+- Upstream impact: settings file CRITICAL / 278 impacted / 76 direct; config entry CRITICAL / 205 / 69; spaces.reload CRITICAL / 13 / 2 / 7 flows. Warnings were reported before any prospective business edit. State files LOW and history navigation MEDIUM were checked before edits; new dated plan UNKNOWN was supplemented with source/reference checks.
+- Decisions: Python Corona owns core lifecycle and public ingress; Nucleus retains business rules, databases and workers. Existing Rust runtime-manager binary only implements init/status/validate; it is not an existing long-lived supervisor. Same-version configuration restore is distinct from program/database rollback.
+- Probes: inherited parent environment retains LLM_TIMEOUT=11 after `.env` changes to 22; fresh bootstrap sees 22, delete resets 90, external environment wins base file at 44, selected prod overlay wins at 33. NoneBot init(None) still reads default dotenv; explicit Env/Config no-file sources were verified in isolation. No production file contents, credentials, models or platform connections were used.
+- Verification: eight existing lifecycle/deploy/WebUI test files passed (83 / 37.20s); planning consistency (12/199/133/426/34, 30 archive links, 77 evidence hashes and cycle rejection), evidence Ruff/reproduction, docs (119/1259/577/0) and diff passed. Structured GitNexus all 5 files/10 symbols/0 flows/LOW; compare main 26/47/0/LOW including inherited work, with complete lists and no partial/truncated. New archives were verified separately. Incremental Markdown mapping briefly dropped to zero without flags; that result was rejected, a forced rebuild restored mapping and final complete checks passed. CORONA-PLAN done; CORONA-IMPL planned / NOT READY.
 
 ## 2026-10-22 — Source Dashboard startup rebuild and release audit
 

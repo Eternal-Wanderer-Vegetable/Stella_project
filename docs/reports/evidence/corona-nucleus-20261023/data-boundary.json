@@ -1,0 +1,6 @@
+{
+  "environment_STELLA_HOME": null,
+  "resolved_home": "/home/vegetable/repos/StellaData",
+  "source": "新建数据目录 /home/vegetable/repos/StellaData",
+  "policy": "Production files not opened; all probes/tests use temporary STELLA_HOME."
+}

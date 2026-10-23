@@ -1,0 +1,113 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:deploy/process.py:start_detached",
+    "name": "start_detached",
+    "kind": "Function",
+    "filePath": "deploy/process.py",
+    "startLine": 191,
+    "endLine": 281
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:deploy/__main__.py:_cmd_start",
+        "name": "_cmd_start",
+        "filePath": "deploy/__main__.py"
+      },
+      {
+        "uid": "Function:tests/test_deploy_process.py:test_start_detached_cleans_up_process_after_startup_probe_failure",
+        "name": "test_start_detached_cleans_up_process_after_startup_probe_failure",
+        "filePath": "tests/test_deploy_process.py"
+      },
+      {
+        "uid": "Function:tests/test_deploy_process.py:test_start_detached_replaces_running_instance_and_transfers_ownership",
+        "name": "test_start_detached_replaces_running_instance_and_transfers_ownership",
+        "filePath": "tests/test_deploy_process.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:config/instance.py:manifest_for",
+        "name": "manifest_for",
+        "filePath": "config/instance.py"
+      },
+      {
+        "uid": "Function:config/instance.py:new_launch_token",
+        "name": "new_launch_token",
+        "filePath": "config/instance.py"
+      },
+      {
+        "uid": "Function:config/instance.py:write_manifest",
+        "name": "write_manifest",
+        "filePath": "config/instance.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:_cleanup_failed_start",
+        "name": "_cleanup_failed_start",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:_service_port_in_use",
+        "name": "_service_port_in_use",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:clear_manifest",
+        "name": "clear_manifest",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:clear_pid",
+        "name": "clear_pid",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:is_alive",
+        "name": "is_alive",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:read_pid",
+        "name": "read_pid",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:replace_running",
+        "name": "replace_running",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:wait_for_startup",
+        "name": "wait_for_startup",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:write_pid",
+        "name": "write_pid",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:update_component",
+        "name": "update_component",
+        "filePath": "deploy/runtime.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:update_component",
+        "name": "update_component",
+        "filePath": "deploy/runtime.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:update_component",
+        "name": "update_component",
+        "filePath": "deploy/runtime.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

@@ -1,0 +1,255 @@
+{
+  "processes": [
+    {
+      "id": "proc_179_run",
+      "summary": "Run → Trace",
+      "priority": 0.092,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_180_run",
+      "summary": "Run → Is_valid_tree",
+      "priority": 0.092,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_181_run",
+      "summary": "Run → Parse_version",
+      "priority": 0.092,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_453_enumeration_sorts_ne",
+      "summary": "Enumeration_sorts_newest_first_and_drops_incomplete → Trace",
+      "priority": 0.092,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_454_enumeration_sorts_ne",
+      "summary": "Enumeration_sorts_newest_first_and_drops_incomplete → Is_valid_tree",
+      "priority": 0.092,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_455_enumeration_sorts_ne",
+      "summary": "Enumeration_sorts_newest_first_and_drops_incomplete → Parse_version",
+      "priority": 0.092,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_265_main",
+      "summary": "Main → _ensure_epoch",
+      "priority": 0.091,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_266_main",
+      "summary": "Main → _key_state",
+      "priority": 0.091,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_267_main",
+      "summary": "Main → Now",
+      "priority": 0.091,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_433_main",
+      "summary": "Main → _number",
+      "priority": 0.091,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:desktop/launcher/src/main.rs:enumerate_trees",
+      "name": "enumerate_trees",
+      "filePath": "desktop/launcher/src/main.rs",
+      "startLine": 178,
+      "endLine": 225,
+      "module": "Cluster_465",
+      "process_id": "proc_179_run",
+      "step_index": 3
+    },
+    {
+      "id": "Method:core/runtime/facade.py:RuntimeFacade.submit_turn#5",
+      "name": "submit_turn",
+      "filePath": "core/runtime/facade.py",
+      "startLine": 269,
+      "endLine": 601,
+      "module": "Runtime",
+      "process_id": "proc_265_main",
+      "step_index": 2
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/webui/test_webui_auth.py:test_login_rate_limit",
+      "name": "test_login_rate_limit",
+      "filePath": "tests/webui/test_webui_auth.py",
+      "startLine": 159,
+      "endLine": 166
+    },
+    {
+      "id": "Function:tests/webui/test_webui_auth.py:create_webui_app_from_settings",
+      "name": "create_webui_app_from_settings",
+      "filePath": "tests/webui/test_webui_auth.py",
+      "startLine": 169,
+      "endLine": 172,
+      "module": "Webui"
+    },
+    {
+      "id": "File:tests/webui/test_webui_auth.py",
+      "name": "test_webui_auth.py",
+      "filePath": "tests/webui/test_webui_auth.py"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_mount.py:test_mount_adds_root_catchup_and_is_idempotent",
+      "name": "test_mount_adds_root_catchup_and_is_idempotent",
+      "filePath": "tests/webui/test_webui_mount.py",
+      "startLine": 50,
+      "endLine": 62,
+      "module": "Webui"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_mount.py:test_four_path_classes_coexist",
+      "name": "test_four_path_classes_coexist",
+      "filePath": "tests/webui/test_webui_mount.py",
+      "startLine": 91,
+      "endLine": 111,
+      "module": "Webui"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_mount.py:test_spa_hosting",
+      "name": "test_spa_hosting",
+      "filePath": "tests/webui/test_webui_mount.py",
+      "startLine": 114,
+      "endLine": 145,
+      "module": "Webui"
+    },
+    {
+      "id": "Function:webui/mount.py:mount_webui",
+      "name": "mount_webui",
+      "filePath": "webui/mount.py",
+      "startLine": 21,
+      "endLine": 36,
+      "module": "Webui"
+    },
+    {
+      "id": "Function:webui/mount.py:setup_webui",
+      "name": "setup_webui",
+      "filePath": "webui/mount.py",
+      "startLine": 60,
+      "endLine": 76
+    },
+    {
+      "id": "File:webui/mount.py",
+      "name": "mount.py",
+      "filePath": "webui/mount.py"
+    },
+    {
+      "id": "Function:tests/webui/conftest.py:client",
+      "name": "client",
+      "filePath": "tests/webui/conftest.py",
+      "startLine": 39,
+      "endLine": 42
+    },
+    {
+      "id": "Function:tests/webui/conftest.py:make_dist._make@48:4",
+      "name": "_make",
+      "filePath": "tests/webui/conftest.py",
+      "startLine": 49,
+      "endLine": 54
+    },
+    {
+      "id": "File:tests/webui/conftest.py",
+      "name": "conftest.py",
+      "filePath": "tests/webui/conftest.py"
+    },
+    {
+      "id": "Class:tests/observability/test_message_flow_integrity.py:TestSchemaMigration",
+      "name": "TestSchemaMigration",
+      "filePath": "tests/observability/test_message_flow_integrity.py",
+      "startLine": 389,
+      "endLine": 423
+    },
+    {
+      "id": "Method:tests/observability/test_message_flow_integrity.py:TestSchemaMigration.test_v1_database_migrates_additively#1",
+      "name": "test_v1_database_migrates_additively",
+      "filePath": "tests/observability/test_message_flow_integrity.py",
+      "startLine": 390,
+      "endLine": 423,
+      "module": "Observability"
+    },
+    {
+      "id": "File:tests/observability/test_message_flow_integrity.py",
+      "name": "test_message_flow_integrity.py",
+      "filePath": "tests/observability/test_message_flow_integrity.py"
+    },
+    {
+      "id": "File:webui/routers/chat.py",
+      "name": "chat.py",
+      "filePath": "webui/routers/chat.py"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_redaction.py:_client_with_stubbed_status",
+      "name": "_client_with_stubbed_status",
+      "filePath": "tests/webui/test_webui_redaction.py",
+      "startLine": 45,
+      "endLine": 58,
+      "module": "Webui"
+    },
+    {
+      "id": "File:tests/webui/test_webui_redaction.py",
+      "name": "test_webui_redaction.py",
+      "filePath": "tests/webui/test_webui_redaction.py"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_chat.py:test_run_turn_records_and_uses_pipeline",
+      "name": "test_run_turn_records_and_uses_pipeline",
+      "filePath": "tests/webui/test_webui_chat.py",
+      "startLine": 46,
+      "endLine": 111
+    },
+    {
+      "id": "Function:tests/webui/test_webui_chat.py:test_chat_endpoints_sse_and_history",
+      "name": "test_chat_endpoints_sse_and_history",
+      "filePath": "tests/webui/test_webui_chat.py",
+      "startLine": 114,
+      "endLine": 177,
+      "module": "Runtime"
+    }
+  ],
+  "timing": {
+    "vector": 7.7,
+    "bm25": 1477.1,
+    "merge": 0.3,
+    "symbol_lookup": 96.9,
+    "ranking": 0.1,
+    "formatting": 0.2,
+    "wall": 1576
+  }
+}
+
+  GitNexus Query (1.6.12)

@@ -1,0 +1,217 @@
+{
+  "target": {
+    "id": "File:docs/reports/evidence/corona-nucleus-20261023/config_probe.py",
+    "name": "config_probe.py",
+    "type": "File",
+    "filePath": "docs/reports/evidence/corona-nucleus-20261023/config_probe.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 19,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 5,
+    "3": 13
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:docs/reports/evidence/corona-nucleus-20261023/README.md",
+        "name": "README.md",
+        "filePath": "docs/reports/evidence/corona-nucleus-20261023/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:docs/history/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/history/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/history/README.md",
+        "name": "README.md",
+        "filePath": "docs/history/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+        "name": "2026-10-23-corona-nucleus-engineering-plan.md",
+        "filePath": "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:progress.md",
+        "name": "progress.md",
+        "filePath": "progress.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:session-handoff.md",
+        "name": "session-handoff.md",
+        "filePath": "session-handoff.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/README.md",
+        "name": "README.md",
+        "filePath": "docs/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/workflow.md",
+        "name": "workflow.md",
+        "filePath": "docs/agent/workflow.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/architecture/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/README.md",
+        "name": "README.md",
+        "filePath": "docs/architecture/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/development/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/README.md",
+        "name": "README.md",
+        "filePath": "docs/development/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/guides/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/README.md",
+        "name": "README.md",
+        "filePath": "docs/guides/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/reference/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/README.md",
+        "name": "README.md",
+        "filePath": "docs/reference/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reports/2026-10-10-documentation-restructure.md",
+        "name": "2026-10-10-documentation-restructure.md",
+        "filePath": "docs/reports/2026-10-10-documentation-restructure.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ]
+  }
+}

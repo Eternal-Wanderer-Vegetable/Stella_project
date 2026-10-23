@@ -1,0 +1,14 @@
+
+  Indexed Repositories (1)
+
+  Stella_project
+    Path:    /home/vegetable/repos/Stella
+    Indexed: 10/23/2026, 9:36:02 AM
+    Commit:  c1713e3
+    Branch:  codex/auto-build-dashboard-on-source-start
+    Stats:   1830 files, 105600 symbols, 263624 edges
+    Clusters:   1119
+    Processes:  814
+
+
+  GitNexus List (1.6.12)

@@ -1,0 +1,157 @@
+{
+  "processes": [],
+  "process_symbols": [],
+  "definitions": [
+    {
+      "id": "Class:cometa/runtime.py:CometaRuntime",
+      "name": "CometaRuntime",
+      "filePath": "cometa/runtime.py",
+      "startLine": 45,
+      "endLine": 316
+    },
+    {
+      "id": "Method:cometa/runtime.py:CometaRuntime.stop#1",
+      "name": "stop",
+      "filePath": "cometa/runtime.py",
+      "startLine": 261,
+      "endLine": 316,
+      "module": "Cometa"
+    },
+    {
+      "id": "File:cometa/runtime.py",
+      "name": "runtime.py",
+      "filePath": "cometa/runtime.py"
+    },
+    {
+      "id": "Class:stella_project/plugins/bot_main/scheduling/runtime.py:SchedulerRuntime",
+      "name": "SchedulerRuntime",
+      "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py",
+      "startLine": 67,
+      "endLine": 450
+    },
+    {
+      "id": "Method:stella_project/plugins/bot_main/scheduling/runtime.py:SchedulerRuntime.stop#0",
+      "name": "stop",
+      "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py",
+      "startLine": 119,
+      "endLine": 137,
+      "module": "Scheduling"
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/scheduling/runtime.py",
+      "name": "runtime.py",
+      "filePath": "stella_project/plugins/bot_main/scheduling/runtime.py"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_build_scheduling_stack",
+      "name": "_build_scheduling_stack",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 3453,
+      "endLine": 3503
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_graceful_shutdown",
+      "name": "_graceful_shutdown",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 5482,
+      "endLine": 5516,
+      "module": "Bot_main"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_graceful_shutdown_body",
+      "name": "_graceful_shutdown_body",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 5519,
+      "endLine": 5606,
+      "module": "Observability"
+    },
+    {
+      "id": "Class:tests/cometa/test_worker.py:TestSingleOwner",
+      "name": "TestSingleOwner",
+      "filePath": "tests/cometa/test_worker.py",
+      "startLine": 90,
+      "endLine": 133
+    },
+    {
+      "id": "Method:tests/cometa/test_worker.py:TestSingleOwner.test_shutdown_cancels_inflight_and_frees_quota#2",
+      "name": "test_shutdown_cancels_inflight_and_frees_quota",
+      "filePath": "tests/cometa/test_worker.py",
+      "startLine": 113,
+      "endLine": 133,
+      "module": "Cometa"
+    },
+    {
+      "id": "File:tests/cometa/test_worker.py",
+      "name": "test_worker.py",
+      "filePath": "tests/cometa/test_worker.py"
+    },
+    {
+      "id": "Class:cometa/worker.py:CometaWorker",
+      "name": "CometaWorker",
+      "filePath": "cometa/worker.py",
+      "startLine": 53,
+      "endLine": 305
+    },
+    {
+      "id": "Function:cometa/worker.py:main",
+      "name": "main",
+      "filePath": "cometa/worker.py",
+      "startLine": 324,
+      "endLine": 383,
+      "module": "Cometa"
+    },
+    {
+      "id": "File:cometa/worker.py",
+      "name": "worker.py",
+      "filePath": "cometa/worker.py"
+    },
+    {
+      "id": "Function:tests/scheduling/test_scheduling_runtime.py:test_standby_worker_does_not_claim",
+      "name": "test_standby_worker_does_not_claim",
+      "filePath": "tests/scheduling/test_scheduling_runtime.py",
+      "startLine": 288,
+      "endLine": 294,
+      "module": "Scheduling"
+    },
+    {
+      "id": "Function:tests/scheduling/test_scheduling_runtime.py:test_stop_releases_worker_lease",
+      "name": "test_stop_releases_worker_lease",
+      "filePath": "tests/scheduling/test_scheduling_runtime.py",
+      "startLine": 297,
+      "endLine": 309,
+      "module": "Scheduling"
+    },
+    {
+      "id": "File:tests/scheduling/test_scheduling_runtime.py",
+      "name": "test_scheduling_runtime.py",
+      "filePath": "tests/scheduling/test_scheduling_runtime.py"
+    },
+    {
+      "id": "Class:memory/capture_gate.py:CaptureGate",
+      "name": "CaptureGate",
+      "filePath": "memory/capture_gate.py",
+      "startLine": 98,
+      "endLine": 389,
+      "module": "Tests"
+    },
+    {
+      "id": "Method:memory/capture_gate.py:CaptureGate.stop#0",
+      "name": "stop",
+      "filePath": "memory/capture_gate.py",
+      "startLine": 194,
+      "endLine": 204,
+      "module": "Memory"
+    }
+  ],
+  "timing": {
+    "vector": 7.2,
+    "bm25": 1362.2,
+    "merge": 0.2,
+    "symbol_lookup": 86.4,
+    "ranking": 0,
+    "formatting": 0,
+    "wall": 1450
+  }
+}
+
+  GitNexus Query (1.6.12)

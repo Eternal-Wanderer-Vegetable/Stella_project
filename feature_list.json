@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-22",
-  "active_feature": "WEBUI-STARTUP-BUILD",
+  "updated_at": "2026-10-23",
+  "active_feature": "CORONA-PLAN",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -864,7 +864,7 @@
       "id": "WEBUI-STARTUP-BUILD",
       "name": "源码启动自动重建 Dashboard 与发布资源完整性",
       "description": "修复源码 bot.py 启动复用旧 WebUI dist 的问题，并保证 Docker 与 Windows 发布资产携带当前 Dashboard。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [],
       "scope": [
         "bot.py",
@@ -907,6 +907,82 @@
         {
           "command": "GitHub PR #118 status on head fc202b9",
           "result": "PR https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/118 is open against main@08dbbb0 and mergeable. Hosted CI, Dashboard CI, and Docker Publish checks are pending on the latest PR head."
+        },
+        {
+          "command": "2026-10-23 task handoff for Corona/Nucleus planning",
+          "result": "Implementation evidence preserved. Hosted PR #118, test-host, Windows/Linux source startup and image acceptance were not rechecked in this planning task; external acceptance remains pending. Current active scope moves to CORONA-PLAN."
+        }
+      ]
+    },
+    {
+      "id": "CORONA-PLAN",
+      "name": "Corona / Nucleus 双进程工程计划",
+      "description": "使用 GitNexus 与源码/隔离探针，形成独立控制面、可重启业务核心的实施计划；本轮不改业务代码。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+        "docs/plans/2026-10-23-corona-nucleus-inventory.json",
+        "docs/reports/evidence/corona-nucleus-20261023/",
+        "docs/history/README.md and README.en.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "计划绑定目标 HEAD 与 GitNexus query/context/upstream impact，风险与图限制可复核",
+        "12 工作包有依赖、候选文件、退出条件、配置/协议/生命周期/代理/迁移回退合同",
+        "静态路由全量归属、配置来源与动态补查边界、34 项验收矩阵齐备",
+        "隔离配置与框架探针、既有专项基线、文档/归档链接/DAG/源指纹/证据摘要/图变更门禁完成",
+        "状态与交接可恢复，明确业务实施和 live/VM/release NOT READY"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus 1.6.12 list/status + 6 topic query groups + 12 contexts + upstream file/symbol impacts + process/source audit",
+          "result": "Bound c1713e3; config/settings CRITICAL 278/76, config entry CRITICAL 205/69, spaces.reload CRITICAL 13/2/7. Initial partial/output-incomplete attempts were rerun. Limits and dynamic/cross-language omissions retained. Planning evidence scripts were separately impacted and checked before formatting; raw CRITICAL retained.",
+          "report": "docs/reports/evidence/corona-nucleus-20261023/README.md"
+        },
+        {
+          "command": "Isolated real config.settings and NoneBot 2.5.0 probes; .venv/bin/python -m pytest on 8 existing lifecycle/deploy/WebUI files",
+          "result": "Stale inherited environment and NoneBot secondary dotenv source reproduced; fresh/delete/external/overlay cases verified. Existing regression 83 passed / 37.20s. No production files, Bot, platform or model used."
+        },
+        {
+          "command": "verify_plan.py; evidence Ruff; python3 scripts/check_docs.py; git diff --check; full structured GitNexus detect_changes all and compare main",
+          "result": "12-package DAG, 199 fingerprints, 133 routes, 426 keys, 34 scenarios, 30 archive links and 77 evidence hashes passed; dependency-cycle negative rejected. Evidence Ruff and reproduction passed. Docs 119/1259/577/0 errors; diff passed. Graph all 5 files/10 symbols/0 flows/LOW, compare main 26/47/0/LOW; structured lists complete, partial=false/truncated=false. New archives checked separately. Incremental Markdown mapping zero was rejected; forced full rebuild restored complete symbol mapping, with before/after raw evidence preserved.",
+          "report": "docs/reports/evidence/corona-nucleus-20261023/verification.json"
+        },
+        {
+          "report": "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+          "command": "Planning completion / implementation handoff",
+          "result": "Plan delivered only. CORONA-IMPL remains planned; new architecture, live model/QQ/WebChat, Windows/Linux clean VM, Docker and release acceptance NOT READY. Start CN00 with actual HEAD/GitNexus binding and snapshot-only Driver spike."
+        }
+      ]
+    },
+    {
+      "id": "CORONA-IMPL",
+      "name": "Corona / Nucleus 双进程实施",
+      "description": "依工程计划执行 CN00–CN11，按阶段验收并切换默认入口；规划不等于实现。",
+      "status": "planned",
+      "dependencies": [
+        "CORONA-PLAN"
+      ],
+      "scope": [
+        "stella_bootstrap/ and stella_contracts/",
+        "corona/ and nucleus/",
+        "bot.py / config / webui / deploy",
+        "Dashboard / CLI / desktop / runtime-manager",
+        "Docker / release payload / tests / bilingual docs"
+      ],
+      "done_criteria": [
+        "CN00–CN11 各包退出条件均有绑定目标提交的验证证据",
+        "单一配置版本、单活动核心/监管、独立管理面、故障恢复与鉴权/代理边界通过",
+        "34 场景 L0/L1/L2 验收与全量 Python/Dashboard/Rust 门禁完成",
+        "必要 QQ/WebChat/模型 live、Windows/Linux clean VM、容器和六类 final 产品验收完成",
+        "默认切换和 legacy 兼容回退有证据，用户数据与业务库合同不被隐式回滚"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+          "command": "Planning handoff only",
+          "result": "Implementation not started. Begin CN00 by rebinding HEAD/GitNexus, formalizing isolated probes and validating snapshot-only NoneBot Driver bootstrap. Runtime/release NOT READY."
         }
       ]
     }

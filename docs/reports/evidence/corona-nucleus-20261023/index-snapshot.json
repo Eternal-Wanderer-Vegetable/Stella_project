@@ -1,0 +1,48 @@
+{
+  "repoPath": "/home/vegetable/repos/Stella",
+  "lastCommit": "c1713e3dfb0854e1a7b746e0ef1e5c82ed9a8485",
+  "indexedAt": "2026-10-23T01:36:02.910Z",
+  "branch": "codex/auto-build-dashboard-on-source-start",
+  "stats": {
+    "files": 1830,
+    "nodes": 105600,
+    "edges": 263624,
+    "communities": 1119,
+    "processes": 814,
+    "embeddings": 0
+  },
+  "pdg": {
+    "maxFunctionLines": 2000,
+    "maxEdgesPerFunction": 5000,
+    "maxReachingDefEdgesPerFunction": 4000,
+    "maxCdgEdgesPerFunction": 5000,
+    "maxTaintFindingsPerFunction": 200,
+    "maxTaintHops": 32,
+    "maxInterprocFindings": 2000,
+    "maxInterprocHops": 32,
+    "maxInterprocEdges": 1000,
+    "taintModelVersion": "249bce0bbcd8",
+    "reachingDefSolver": "ssa-sparse-v1",
+    "hasCallSummary": true
+  },
+  "capabilities": {
+    "graph": {
+      "provider": "ladybugdb",
+      "status": "available"
+    },
+    "fts": {
+      "provider": "ladybugdb-fts",
+      "status": "available"
+    },
+    "vectorSearch": {
+      "provider": "ladybugdb-vector",
+      "status": "unavailable",
+      "exactScanLimit": 10000
+    }
+  },
+  "indexCoverage": {
+    "maxFileSizeBytes": 524288,
+    "dirtyPaths": []
+  },
+  "scopeExtractionReceipt": 1
+}

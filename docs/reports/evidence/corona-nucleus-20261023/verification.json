@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-23",
+  "baseline_commit": "c1713e3dfb0854e1a7b746e0ef1e5c82ed9a8485",
+  "planning_status": "complete",
+  "implementation_status": "not_started_not_ready",
+  "existing_regression": {
+    "passed": 83,
+    "seconds": 37.2,
+    "scope": "8 existing files in isolated STELLA_HOME"
+  },
+  "inventory": {
+    "work_packages": 12,
+    "source_fingerprints": 199,
+    "webui_routes": 133,
+    "configuration_keys": 426,
+    "acceptance_scenarios": 34,
+    "archive_links": 30,
+    "evidence_hashes": 77,
+    "negative_dependency_cycle_rejected": true
+  },
+  "documentation": {
+    "files": 119,
+    "links": 1259,
+    "migration_anchors": 577,
+    "errors": 0
+  },
+  "evidence_ruff": "passed",
+  "formatted_probe_reproduction": "passed",
+  "git_diff_check": "passed",
+  "gitnexus": {
+    "all": {
+      "changed_files": 5,
+      "changed_symbols": 10,
+      "affected_processes": 0,
+      "risk": "low",
+      "partial": false,
+      "truncated": false
+    },
+    "compare_main": {
+      "changed_files": 26,
+      "changed_symbols": 47,
+      "affected_processes": 0,
+      "risk": "low",
+      "partial": false,
+      "truncated": false
+    },
+    "raw_final_output": ".gitnexus/verification/corona-nucleus-20261023/",
+    "coverage": "tracked documentation/state diff; compare includes inherited branch changes; new archives validated separately",
+    "incremental_mapping_anomaly": {
+      "observed": "all changed_files=5, changed_symbols=0; compare changed_files=26, changed_symbols=2; no partial/truncated flags",
+      "disposition": "rejected as clean; forced full rebuild restored 10/47 symbol mappings",
+      "evidence": [
+        "detect-incremental-zero-all.json",
+        "detect-incremental-zero-compare.json",
+        "detect-final-all.json",
+        "detect-final-compare.json"
+      ]
+    }
+  },
+  "not_run": [
+    "new architecture implementation/L0-L4",
+    "full Python suite",
+    "Dashboard build/test",
+    "Rust build/test",
+    "live model/QQ/WebChat",
+    "Windows/Linux clean VM",
+    "Docker/final release products"
+  ],
+  "data_boundary": "No production config contents, chat or database read/writes; synthetic probes and baseline used temporary homes."
+}

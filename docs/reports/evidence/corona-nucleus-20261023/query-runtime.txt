@@ -1,0 +1,286 @@
+{
+  "processes": [
+    {
+      "id": "proc_510_start_bot",
+      "summary": "Start_bot → Args",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 10
+    },
+    {
+      "id": "proc_672_start_bot",
+      "summary": "Start_bot → Sha256_hex",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 9
+    },
+    {
+      "id": "proc_673_start_bot",
+      "summary": "Start_bot → Emit_progress",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 9
+    },
+    {
+      "id": "proc_674_start_bot",
+      "summary": "Start_bot → Profile_marker_matches",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 9
+    },
+    {
+      "id": "proc_678_start_bot",
+      "summary": "Start_bot → Profile_id",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 8
+    },
+    {
+      "id": "proc_679_start_bot",
+      "summary": "Start_bot → Rust_wheel",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 8
+    },
+    {
+      "id": "proc_680_start_bot",
+      "summary": "Start_bot → Activation_tree_from",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 7
+    },
+    {
+      "id": "proc_137_is_addressing_comman",
+      "summary": "Is_addressing_command → _mean_vector",
+      "priority": 0.084,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_138_is_addressing_comman",
+      "summary": "Is_addressing_command → Reset_prototype_cache",
+      "priority": 0.084,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_205_is_addressing_comman",
+      "summary": "Is_addressing_command → Cosine_similarity",
+      "priority": 0.084,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 4
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:desktop/src-tauri/src/commands.rs:start_bot",
+      "name": "start_bot",
+      "filePath": "desktop/src-tauri/src/commands.rs",
+      "startLine": 172,
+      "endLine": 207,
+      "module": "Cluster_474",
+      "process_id": "proc_510_start_bot",
+      "step_index": 1
+    },
+    {
+      "id": "Function:desktop/src-tauri/src/python.rs:run_runtime_operation",
+      "name": "run_runtime_operation",
+      "filePath": "desktop/src-tauri/src/python.rs",
+      "startLine": 1473,
+      "endLine": 1495,
+      "module": "Cluster_476",
+      "process_id": "proc_510_start_bot",
+      "step_index": 3
+    },
+    {
+      "id": "Function:desktop/src-tauri/src/python.rs:run_deploy_inner",
+      "name": "run_deploy_inner",
+      "filePath": "desktop/src-tauri/src/python.rs",
+      "startLine": 1497,
+      "endLine": 1538,
+      "module": "Cluster_476",
+      "process_id": "proc_510_start_bot",
+      "step_index": 4
+    },
+    {
+      "id": "Function:memory/addressing_intent.py:_semantic_match",
+      "name": "_semantic_match",
+      "filePath": "memory/addressing_intent.py",
+      "startLine": 198,
+      "endLine": 217,
+      "module": "Memory",
+      "process_id": "proc_137_is_addressing_comman",
+      "step_index": 3
+    },
+    {
+      "id": "Function:memory/addressing_intent.py:classify_addressing",
+      "name": "classify_addressing",
+      "filePath": "memory/addressing_intent.py",
+      "startLine": 220,
+      "endLine": 285,
+      "module": "Memory",
+      "process_id": "proc_137_is_addressing_comman",
+      "step_index": 2
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Property:runtime-manager/src/lib.rs:OperationRequest.operation",
+      "name": "operation",
+      "filePath": "runtime-manager/src/lib.rs",
+      "startLine": 162,
+      "endLine": 162
+    },
+    {
+      "id": "Function:runtime-manager/src/lib.rs:tests.command_parameters_are_rejected",
+      "name": "command_parameters_are_rejected",
+      "filePath": "runtime-manager/src/lib.rs",
+      "startLine": 406,
+      "endLine": 415
+    },
+    {
+      "id": "File:runtime-manager/src/lib.rs",
+      "name": "lib.rs",
+      "filePath": "runtime-manager/src/lib.rs"
+    },
+    {
+      "id": "Function:tests/test_runtime_contract.py:test_operation_request_rejects_shell_and_redacts_secrets",
+      "name": "test_operation_request_rejects_shell_and_redacts_secrets",
+      "filePath": "tests/test_runtime_contract.py",
+      "startLine": 109,
+      "endLine": 121,
+      "module": "Deploy"
+    },
+    {
+      "id": "Function:tests/test_runtime_contract.py:test_execute_rejects_unconfigured_llama_component",
+      "name": "test_execute_rejects_unconfigured_llama_component",
+      "filePath": "tests/test_runtime_contract.py",
+      "startLine": 211,
+      "endLine": 215
+    },
+    {
+      "id": "Function:tests/test_runtime_contract.py:test_execute_start_captures_legacy_output",
+      "name": "test_execute_start_captures_legacy_output",
+      "filePath": "tests/test_runtime_contract.py",
+      "startLine": 218,
+      "endLine": 231
+    },
+    {
+      "id": "Variable:deploy/runtime.py:OPERATIONS",
+      "name": "OPERATIONS",
+      "filePath": "deploy/runtime.py",
+      "startLine": 27,
+      "endLine": 27
+    },
+    {
+      "id": "File:deploy/runtime.py",
+      "name": "runtime.py",
+      "filePath": "deploy/runtime.py"
+    },
+    {
+      "id": "Function:gravitas/model_calls.py:execute_model_operation",
+      "name": "execute_model_operation",
+      "filePath": "gravitas/model_calls.py",
+      "startLine": 472,
+      "endLine": 519,
+      "module": "Gravitas"
+    },
+    {
+      "id": "Function:gravitas/model_calls.py:execute_model_stream",
+      "name": "execute_model_stream",
+      "filePath": "gravitas/model_calls.py",
+      "startLine": 522,
+      "endLine": 573,
+      "module": "Gravitas"
+    },
+    {
+      "id": "File:gravitas/model_calls.py",
+      "name": "model_calls.py",
+      "filePath": "gravitas/model_calls.py"
+    },
+    {
+      "id": "Function:desktop/src-tauri/src/commands.rs:desktop_session_secret",
+      "name": "desktop_session_secret",
+      "filePath": "desktop/src-tauri/src/commands.rs",
+      "startLine": 63,
+      "endLine": 67
+    },
+    {
+      "id": "Function:desktop/src-tauri/src/commands.rs:tests.runtime_message_prefers_legacy_compatible_message",
+      "name": "runtime_message_prefers_legacy_compatible_message",
+      "filePath": "desktop/src-tauri/src/commands.rs",
+      "startLine": 1146,
+      "endLine": 1153
+    },
+    {
+      "id": "Function:deploy/__main__.py:_cmd_start",
+      "name": "_cmd_start",
+      "filePath": "deploy/__main__.py",
+      "startLine": 137,
+      "endLine": 159,
+      "module": "Deploy"
+    },
+    {
+      "id": "Function:deploy/__main__.py:_cmd_runtime",
+      "name": "_cmd_runtime",
+      "filePath": "deploy/__main__.py",
+      "startLine": 739,
+      "endLine": 761,
+      "module": "Deploy"
+    },
+    {
+      "id": "File:deploy/__main__.py",
+      "name": "__main__.py",
+      "filePath": "deploy/__main__.py"
+    },
+    {
+      "id": "Function:desktop/src-tauri/src/lib.rs:desktop_session_secret",
+      "name": "desktop_session_secret",
+      "filePath": "desktop/src-tauri/src/lib.rs",
+      "startLine": 11,
+      "endLine": 24,
+      "module": "Cluster_476"
+    },
+    {
+      "id": "Function:desktop/src-tauri/src/lib.rs:run",
+      "name": "run",
+      "filePath": "desktop/src-tauri/src/lib.rs",
+      "startLine": 27,
+      "endLine": 71
+    },
+    {
+      "id": "File:desktop/src-tauri/src/lib.rs",
+      "name": "lib.rs",
+      "filePath": "desktop/src-tauri/src/lib.rs"
+    },
+    {
+      "id": "Function:stella-installer/src-tauri/src/commands.rs:start_bot",
+      "name": "start_bot",
+      "filePath": "stella-installer/src-tauri/src/commands.rs",
+      "startLine": 92,
+      "endLine": 129,
+      "module": "Cluster_767"
+    }
+  ],
+  "timing": {
+    "vector": 7.2,
+    "bm25": 1441.4,
+    "merge": 0.3,
+    "symbol_lookup": 100.3,
+    "ranking": 0.2,
+    "formatting": 0.1,
+    "wall": 1543.8
+  }
+}
+
+  GitNexus Query (1.6.12)

@@ -1,0 +1,1450 @@
+[
+  {
+    "name": "repos",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "list"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.87,
+    "output": "repos.txt"
+  },
+  {
+    "name": "status",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "status"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.0,
+    "output": "status.txt",
+    "summary": {}
+  },
+  {
+    "name": "query-restart",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "query",
+      "system restart spawn_successor stop watcher",
+      "--limit",
+      "10",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.38,
+    "output": "query-restart.txt",
+    "summary": {}
+  },
+  {
+    "name": "query-startup",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "query",
+      "start_detached register_self replace_running startup ownership",
+      "--limit",
+      "10",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 3.3,
+    "output": "query-startup.txt",
+    "summary": {
+      "partial": true
+    },
+    "needs_rerun": true,
+    "superseded_by": "query-startup-retry"
+  },
+  {
+    "name": "query-webui",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "query",
+      "create_webui_app status_source chat run_turn",
+      "--limit",
+      "10",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.46,
+    "output": "query-webui.txt",
+    "summary": {}
+  },
+  {
+    "name": "query-background",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "query",
+      "CometaRuntime stop worker lease scheduling shutdown",
+      "--limit",
+      "10",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.34,
+    "output": "query-background.txt",
+    "summary": {}
+  },
+  {
+    "name": "query-configuration",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "query",
+      "config settings env_file update_endpoints spaces reload",
+      "--limit",
+      "10",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.39,
+    "output": "query-configuration.txt",
+    "summary": {}
+  },
+  {
+    "name": "query-runtime",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "query",
+      "execute_operation RuntimeStore desktop start_bot",
+      "--limit",
+      "10",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.35,
+    "output": "query-runtime.txt",
+    "summary": {}
+  },
+  {
+    "name": "context-spawn_successor-self_restart",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "spawn_successor",
+      "--file",
+      "core/self_restart.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.86,
+    "output": "context-spawn_successor-self_restart.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-restart-system",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "restart",
+      "--file",
+      "webui/services/system.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.91,
+    "output": "context-restart-system.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-start_detached-process",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "start_detached",
+      "--file",
+      "deploy/process.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.94,
+    "output": "context-start_detached-process.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-replace_running-process",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "replace_running",
+      "--file",
+      "deploy/process.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.03,
+    "output": "context-replace_running-process.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-wait_for_startup-process",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "wait_for_startup",
+      "--file",
+      "deploy/process.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.13,
+    "output": "context-wait_for_startup-process.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-execute_operation-runtime",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "execute_operation",
+      "--file",
+      "deploy/runtime.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.17,
+    "output": "context-execute_operation-runtime.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-create_webui_app-app",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "create_webui_app",
+      "--file",
+      "webui/app.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.01,
+    "output": "context-create_webui_app-app.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-setup_webui-mount",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "setup_webui",
+      "--file",
+      "webui/mount.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.99,
+    "output": "context-setup_webui-mount.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-run_turn-chat_ingress",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "run_turn",
+      "--file",
+      "webui/chat_ingress.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.06,
+    "output": "context-run_turn-chat_ingress.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-_graceful_shutdown-ai_gateway",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "_graceful_shutdown",
+      "--file",
+      "stella_project/plugins/bot_main/ai_gateway.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.08,
+    "output": "context-_graceful_shutdown-ai_gateway.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-stop-runtime",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "stop",
+      "--file",
+      "cometa/runtime.py",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.08,
+    "output": "context-stop-runtime.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "context-start_bot-commands",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "context",
+      "start_bot",
+      "--file",
+      "desktop/src-tauri/src/commands.rs",
+      "--limit",
+      "1000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.01,
+    "output": "context-start_bot-commands.txt",
+    "summary": {
+      "status": "found"
+    }
+  },
+  {
+    "name": "impact-00-config_settings.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "config/settings.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.56,
+    "output": "impact-00-config_settings.py.txt",
+    "summary": {},
+    "superseded_by": "impact-00-config_settings.py-output-retry",
+    "output_complete": false
+  },
+  {
+    "name": "impact-01-config___init__.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "config/__init__.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.41,
+    "output": "impact-01-config___init__.py.txt",
+    "summary": {
+      "risk": "CRITICAL",
+      "impactedCount": 205,
+      "summary": {
+        "direct": 69,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-02-bot.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "bot.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 26.34,
+    "output": "impact-02-bot.py.txt",
+    "summary": {
+      "risk": "UNKNOWN",
+      "impactedCount": 0,
+      "summary": {
+        "direct": 0,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-03-webui_app.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "webui/app.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": -22.45,
+    "output": "impact-03-webui_app.py.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 3,
+      "summary": {
+        "direct": 2,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-04-webui_security.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "webui/security.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.08,
+    "output": "impact-04-webui_security.py.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 22,
+      "summary": {
+        "direct": 4,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-05-webui_services_envfile.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "webui/services/envfile.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.01,
+    "output": "impact-05-webui_services_envfile.py.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 10,
+      "summary": {
+        "direct": 4,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-06-webui_chat_ingress.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "webui/chat_ingress.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.92,
+    "output": "impact-06-webui_chat_ingress.py.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 6,
+      "summary": {
+        "direct": 2,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-07-deploy_process.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "deploy/process.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.85,
+    "output": "impact-07-deploy_process.py.txt",
+    "summary": {
+      "risk": "MEDIUM",
+      "impactedCount": 40,
+      "summary": {
+        "direct": 6,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-08-deploy_runtime.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "deploy/runtime.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.85,
+    "output": "impact-08-deploy_runtime.py.txt",
+    "summary": {
+      "risk": "MEDIUM",
+      "impactedCount": 54,
+      "summary": {
+        "direct": 7,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-09-runtime-manager_src_main.rs",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "runtime-manager/src/main.rs",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.75,
+    "output": "impact-09-runtime-manager_src_main.rs.txt",
+    "summary": {
+      "risk": "UNKNOWN",
+      "impactedCount": 0,
+      "summary": {
+        "direct": 0,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-10-desktop_src-tauri_src_commands.rs",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "desktop/src-tauri/src/commands.rs",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 26.22,
+    "output": "impact-10-desktop_src-tauri_src_commands.rs.txt",
+    "summary": {
+      "risk": "UNKNOWN",
+      "impactedCount": 0,
+      "summary": {
+        "direct": 0,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-11-core_runtime_facade.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "core/runtime/facade.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": -22.56,
+    "output": "impact-11-core_runtime_facade.py.txt",
+    "summary": {
+      "risk": "MEDIUM",
+      "impactedCount": 18,
+      "summary": {
+        "direct": 5,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-12-cometa_runtime.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "cometa/runtime.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.78,
+    "output": "impact-12-cometa_runtime.py.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 10,
+      "summary": {
+        "direct": 4,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-13-webui_source_build.py",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "webui/source_build.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.86,
+    "output": "impact-13-webui_source_build.py.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 1,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-14-feature_list.json",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "feature_list.json",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.8,
+    "output": "impact-14-feature_list.json.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 19,
+      "summary": {
+        "direct": 2,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-15-progress.md",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "progress.md",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.85,
+    "output": "impact-15-progress.md.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 26,
+      "summary": {
+        "direct": 3,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-16-session-handoff.md",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "session-handoff.md",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.87,
+    "output": "impact-16-session-handoff.md.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 19,
+      "summary": {
+        "direct": 2,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-17-docs_history_README.md",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "docs/history/README.md",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.01,
+    "output": "impact-17-docs_history_README.md.txt",
+    "summary": {
+      "risk": "MEDIUM",
+      "impactedCount": 98,
+      "summary": {
+        "direct": 7,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-18-docs_history_README.en.md",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "docs/history/README.en.md",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 26.36,
+    "output": "impact-18-docs_history_README.en.md.txt",
+    "summary": {
+      "risk": "MEDIUM",
+      "impactedCount": 94,
+      "summary": {
+        "direct": 6,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "impact-19-docs_plans_2026-10-23-corona-nucleus-engineering-plan.md",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": -22.79,
+    "output": "impact-19-docs_plans_2026-10-23-corona-nucleus-engineering-plan.md.txt",
+    "summary": {
+      "risk": "UNKNOWN",
+      "impactedCount": null,
+      "error": "Target 'docs/plans/2026-10-23-corona-nucleus-engineering-plan.md' not found"
+    },
+    "expected_failure": "New dated plan has no indexed node; text reference search confirmed no existing references before creation."
+  },
+  {
+    "name": "processes",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id, p.label AS label, p.entryPointId AS entry, p.stepCount AS steps ORDER BY p.id",
+      "--limit",
+      "2000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.72,
+    "output": "processes.txt",
+    "superseded_by": "processes-output-retry",
+    "output_complete": false
+  },
+  {
+    "name": "query-startup-retry",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "query",
+      "start_detached register_self replace_running ownership",
+      "--limit",
+      "10",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.98,
+    "output": "query-startup-retry.txt",
+    "summary": {}
+  },
+  {
+    "name": "impact-symbol-spawn_successor-self_restart",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "spawn_successor",
+      "--file",
+      "core/self_restart.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.47,
+    "output": "impact-symbol-spawn_successor-self_restart.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 2,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 1,
+        "modules_affected": 1
+      }
+    }
+  },
+  {
+    "name": "impact-symbol-_trigger_shutdown-ai_gateway",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "_trigger_shutdown",
+      "--file",
+      "stella_project/plugins/bot_main/ai_gateway.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.56,
+    "output": "impact-symbol-_trigger_shutdown-ai_gateway.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 2,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 0,
+        "modules_affected": 1
+      }
+    }
+  },
+  {
+    "name": "impact-symbol-_graceful_shutdown-ai_gateway",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "_graceful_shutdown",
+      "--file",
+      "stella_project/plugins/bot_main/ai_gateway.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.47,
+    "output": "impact-symbol-_graceful_shutdown-ai_gateway.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 3,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 0,
+        "modules_affected": 1
+      }
+    }
+  },
+  {
+    "name": "impact-symbol-submit_turn-facade",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "submit_turn",
+      "--file",
+      "core/runtime/facade.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.69,
+    "output": "impact-symbol-submit_turn-facade.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 3,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 1,
+        "modules_affected": 1
+      }
+    }
+  },
+  {
+    "name": "impact-symbol-execute_operation-runtime",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "execute_operation",
+      "--file",
+      "deploy/runtime.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.57,
+    "output": "impact-symbol-execute_operation-runtime.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 1,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 0,
+        "modules_affected": 1
+      }
+    }
+  },
+  {
+    "name": "impact-symbol-set_bindings-groups",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "set_bindings",
+      "--file",
+      "webui/services/groups.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.52,
+    "output": "impact-symbol-set_bindings-groups.txt",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 1,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 1,
+        "modules_affected": 1
+      }
+    }
+  },
+  {
+    "name": "impact-symbol-reload-spaces",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "reload",
+      "--file",
+      "config/spaces.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.52,
+    "output": "impact-symbol-reload-spaces.txt",
+    "summary": {
+      "risk": "CRITICAL",
+      "impactedCount": 13,
+      "summary": {
+        "direct": 2,
+        "processes_affected": 7,
+        "modules_affected": 3
+      }
+    }
+  },
+  {
+    "name": "impact-symbol-stop-runtime",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "stop",
+      "--file",
+      "cometa/runtime.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.24,
+    "output": "impact-symbol-stop-runtime.txt",
+    "summary": {
+      "risk": "UNKNOWN",
+      "impactedCount": 0,
+      "summary": {
+        "direct": 0,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    }
+  },
+  {
+    "name": "selected-process-steps",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "cypher",
+      "MATCH (n)-[r]->(p:Process) WHERE p.id IN ['proc_146_system_restart','proc_225_system_restart','proc_581_config_update','proc_484_system_restart'] RETURN p.id AS process, n.id AS symbol, r",
+      "--limit",
+      "2000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.06,
+    "output": "selected-process-steps.txt",
+    "summary": {
+      "row_count": 20
+    }
+  },
+  {
+    "name": "impact-00-config_settings.py-output-retry",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "impact",
+      "config/settings.py",
+      "--direction",
+      "upstream",
+      "--limit",
+      "10000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.85,
+    "output": "impact-00-config_settings.py-output-retry.txt",
+    "stderr": "impact-00-config_settings.py-output-retry.stderr.txt",
+    "summary": {
+      "risk": "CRITICAL",
+      "impactedCount": 278,
+      "summary": {
+        "direct": 76,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    },
+    "output_complete": true
+  },
+  {
+    "name": "processes-output-retry",
+    "command": [
+      "node",
+      ".gitnexus/run.cjs",
+      "cypher",
+      "MATCH (p:Process) RETURN p.id AS id, p.label AS label, p.entryPointId AS entry, p.stepCount AS steps ORDER BY p.id",
+      "--limit",
+      "2000",
+      "--repo",
+      "Stella_project"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.45,
+    "output": "processes-output-retry.txt",
+    "stderr": "processes-output-retry.stderr.txt",
+    "summary": {
+      "row_count": 814
+    },
+    "output_complete": true
+  },
+  {
+    "name": "impact-evidence-config_probe.py",
+    "command": [
+      "node",
+      ".gitnexus/verification/corona-nucleus-20261023/evidence-impact.mjs"
+    ],
+    "backend_call": {
+      "tool": "impact",
+      "target": "docs/reports/evidence/corona-nucleus-20261023/config_probe.py",
+      "direction": "upstream",
+      "repo": "Stella_project"
+    },
+    "exit_code": 0,
+    "output": "impact-evidence-config_probe.py.json",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 19,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 0,
+        "modules_affected": 0
+      }
+    },
+    "source_supplement": "README links and explicit shell invocations; standalone planning probes/verifier, no production caller assumed."
+  },
+  {
+    "name": "impact-evidence-framework_probe.py",
+    "command": [
+      "node",
+      ".gitnexus/verification/corona-nucleus-20261023/evidence-impact.mjs"
+    ],
+    "backend_call": {
+      "tool": "impact",
+      "target": "docs/reports/evidence/corona-nucleus-20261023/framework_probe.py",
+      "direction": "upstream",
+      "repo": "Stella_project"
+    },
+    "exit_code": 0,
+    "output": "impact-evidence-framework_probe.py.json",
+    "summary": {
+      "risk": "CRITICAL",
+      "impactedCount": 391,
+      "summary": {
+        "direct": 2,
+        "processes_affected": 179,
+        "modules_affected": 20
+      }
+    },
+    "source_supplement": "README links and explicit shell invocations; standalone planning probes/verifier, no production caller assumed."
+  },
+  {
+    "name": "impact-evidence-build_inventory.py",
+    "command": [
+      "node",
+      ".gitnexus/verification/corona-nucleus-20261023/evidence-impact.mjs"
+    ],
+    "backend_call": {
+      "tool": "impact",
+      "target": "docs/reports/evidence/corona-nucleus-20261023/build_inventory.py",
+      "direction": "upstream",
+      "repo": "Stella_project"
+    },
+    "exit_code": 0,
+    "output": "impact-evidence-build_inventory.py.json",
+    "summary": {
+      "risk": "LOW",
+      "impactedCount": 19,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 0,
+        "modules_affected": 1
+      }
+    },
+    "source_supplement": "README links and explicit shell invocations; standalone planning probes/verifier, no production caller assumed."
+  },
+  {
+    "name": "impact-evidence-verify_plan.py",
+    "command": [
+      "node",
+      ".gitnexus/verification/corona-nucleus-20261023/evidence-impact.mjs"
+    ],
+    "backend_call": {
+      "tool": "impact",
+      "target": "docs/reports/evidence/corona-nucleus-20261023/verify_plan.py",
+      "direction": "upstream",
+      "repo": "Stella_project"
+    },
+    "exit_code": 0,
+    "output": "impact-evidence-verify_plan.py.json",
+    "summary": {
+      "risk": "CRITICAL",
+      "impactedCount": 331,
+      "summary": {
+        "direct": 1,
+        "processes_affected": 179,
+        "modules_affected": 20
+      }
+    },
+    "source_supplement": "README links and explicit shell invocations; standalone planning probes/verifier, no production caller assumed."
+  },
+  {
+    "name": "detect-final-all",
+    "command": [
+      "node",
+      ".gitnexus/verification/corona-nucleus-20261023/detect-full.mjs"
+    ],
+    "backend_call": {
+      "tool": "detect_changes",
+      "scope": "all",
+      "repo": "Stella_project",
+      "base_ref": null
+    },
+    "exit_code": 0,
+    "output": "detect-final-all.json",
+    "summary": {
+      "summary": {
+        "changed_count": 10,
+        "affected_count": 0,
+        "changed_files": 5,
+        "risk_level": "low"
+      }
+    },
+    "output_complete": true
+  },
+  {
+    "name": "detect-incremental-zero-all",
+    "command": [
+      "node",
+      ".gitnexus/verification/corona-nucleus-20261023/detect-full.mjs"
+    ],
+    "backend_call": {
+      "tool": "detect_changes",
+      "scope": "all",
+      "repo": "Stella_project",
+      "base_ref": null
+    },
+    "exit_code": 0,
+    "output": "detect-incremental-zero-all.json",
+    "summary": {
+      "summary": {
+        "changed_count": 0,
+        "affected_count": 0,
+        "changed_files": 5,
+        "risk_level": "low"
+      }
+    },
+    "output_complete": true,
+    "observed_degradation": "Incremental index lost Markdown symbol mapping without partial/truncated; not accepted as clean.",
+    "superseded_by": "detect-final-all"
+  },
+  {
+    "name": "detect-final-compare",
+    "command": [
+      "node",
+      ".gitnexus/verification/corona-nucleus-20261023/detect-full.mjs"
+    ],
+    "backend_call": {
+      "tool": "detect_changes",
+      "scope": "compare",
+      "repo": "Stella_project",
+      "base_ref": "main"
+    },
+    "exit_code": 0,
+    "output": "detect-final-compare.json",
+    "summary": {
+      "summary": {
+        "changed_count": 47,
+        "affected_count": 0,
+        "changed_files": 26,
+        "risk_level": "low"
+      }
+    },
+    "output_complete": true
+  },
+  {
+    "name": "detect-incremental-zero-compare",
+    "command": [
+      "node",
+      ".gitnexus/verification/corona-nucleus-20261023/detect-full.mjs"
+    ],
+    "backend_call": {
+      "tool": "detect_changes",
+      "scope": "compare",
+      "repo": "Stella_project",
+      "base_ref": "main"
+    },
+    "exit_code": 0,
+    "output": "detect-incremental-zero-compare.json",
+    "summary": {
+      "summary": {
+        "changed_count": 2,
+        "affected_count": 0,
+        "changed_files": 26,
+        "risk_level": "low"
+      }
+    },
+    "output_complete": true,
+    "observed_degradation": "Incremental index lost Markdown symbol mapping without partial/truncated; not accepted as clean.",
+    "superseded_by": "detect-final-compare"
+  }
+]

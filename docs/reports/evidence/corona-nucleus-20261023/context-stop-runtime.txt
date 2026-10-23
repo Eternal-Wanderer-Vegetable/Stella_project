@@ -1,0 +1,85 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Method:cometa/runtime.py:CometaRuntime.stop#1",
+    "name": "stop",
+    "kind": "Method",
+    "filePath": "cometa/runtime.py",
+    "startLine": 261,
+    "endLine": 316
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "has_method": [
+      {
+        "uid": "Class:cometa/runtime.py:CometaRuntime",
+        "name": "CometaRuntime",
+        "filePath": "cometa/runtime.py"
+      }
+    ],
+    "calls": [
+      {
+        "uid": "Method:tests/cometa/test_g09_policy_runtime.py:TestRealWorkerPolicyTransport.test_subprocess_ack_pauses_claim_then_allows_fake_task_once#2",
+        "name": "test_subprocess_ack_pauses_claim_then_allows_fake_task_once",
+        "filePath": "tests/cometa/test_g09_policy_runtime.py"
+      },
+      {
+        "uid": "Method:tests/cometa/test_g09_policy_runtime.py:TestRealWorkerRestart.test_real_worker_process_restarts_after_owner_lease_expires#2",
+        "name": "test_real_worker_process_restarts_after_owner_lease_expires",
+        "filePath": "tests/cometa/test_g09_policy_runtime.py"
+      },
+      {
+        "uid": "Method:tests/cometa/test_runtime_assembly.py:TestAssembly.test_pump_delivers_submitted_ack#1",
+        "name": "test_pump_delivers_submitted_ack",
+        "filePath": "tests/cometa/test_runtime_assembly.py"
+      },
+      {
+        "uid": "Method:tests/cometa/test_runtime_assembly.py:TestAssembly.test_start_and_stop_with_real_pump#1",
+        "name": "test_start_and_stop_with_real_pump",
+        "filePath": "tests/cometa/test_runtime_assembly.py"
+      },
+      {
+        "uid": "Method:tests/cometa/test_runtime_assembly.py:TestShutdownInjection.test_stop_cancels_inflight_via_store#1",
+        "name": "test_stop_cancels_inflight_via_store",
+        "filePath": "tests/cometa/test_runtime_assembly.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Method:cometa/policy_transport.py:CometaPolicyPublisher.publish_once#1",
+        "name": "publish_once",
+        "filePath": "cometa/policy_transport.py"
+      },
+      {
+        "uid": "Method:cometa/runtime.py:CometaRuntime._cancel_inflight_for_shutdown#0",
+        "name": "_cancel_inflight_for_shutdown",
+        "filePath": "cometa/runtime.py"
+      },
+      {
+        "uid": "Method:cometa/runtime.py:CometaRuntime._record_policy_ack#0",
+        "name": "_record_policy_ack",
+        "filePath": "cometa/runtime.py"
+      },
+      {
+        "uid": "Method:cometa/supervisor.py:WorkerSupervisor.is_running#0",
+        "name": "is_running",
+        "filePath": "cometa/supervisor.py"
+      },
+      {
+        "uid": "Method:cometa/supervisor.py:WorkerSupervisor.is_running#0",
+        "name": "is_running",
+        "filePath": "cometa/supervisor.py"
+      },
+      {
+        "uid": "Method:cometa/supervisor.py:WorkerSupervisor.stop#1",
+        "name": "stop",
+        "filePath": "cometa/supervisor.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

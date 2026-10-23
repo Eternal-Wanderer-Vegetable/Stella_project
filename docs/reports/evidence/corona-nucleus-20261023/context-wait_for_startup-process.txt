@@ -1,0 +1,58 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:deploy/process.py:wait_for_startup",
+    "name": "wait_for_startup",
+    "kind": "Function",
+    "filePath": "deploy/process.py",
+    "startLine": 298,
+    "endLine": 336
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:deploy/process.py:start_detached",
+        "name": "start_detached",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:tests/test_deploy_process.py:test_wait_for_startup_accepts_alive_process_when_status_api_disabled",
+        "name": "test_wait_for_startup_accepts_alive_process_when_status_api_disabled",
+        "filePath": "tests/test_deploy_process.py"
+      },
+      {
+        "uid": "Function:tests/test_deploy_process.py:test_wait_for_startup_accepts_matching_healthy_instance",
+        "name": "test_wait_for_startup_accepts_matching_healthy_instance",
+        "filePath": "tests/test_deploy_process.py"
+      },
+      {
+        "uid": "Function:tests/test_deploy_process.py:test_wait_for_startup_does_not_accept_foreign_pid",
+        "name": "test_wait_for_startup_does_not_accept_foreign_pid",
+        "filePath": "tests/test_deploy_process.py"
+      },
+      {
+        "uid": "Function:tests/test_deploy_process.py:test_wait_for_startup_reports_early_exit",
+        "name": "test_wait_for_startup_reports_early_exit",
+        "filePath": "tests/test_deploy_process.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:deploy/process.py:_fetch_live_status",
+        "name": "_fetch_live_status",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:is_alive",
+        "name": "is_alive",
+        "filePath": "deploy/process.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

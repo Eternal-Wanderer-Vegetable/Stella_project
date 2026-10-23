@@ -1,0 +1,296 @@
+{
+  "processes": [
+    {
+      "id": "proc_146_system_restart",
+      "summary": "System_restart → Bot_entry",
+      "priority": 0.128,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_225_system_restart",
+      "summary": "System_restart → _sentinel_path",
+      "priority": 0.115,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_484_system_restart",
+      "summary": "System_restart → Desktop_session_secret",
+      "priority": 0.105,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_224_system_doctor",
+      "summary": "System_doctor → _recount_summary",
+      "priority": 0.098,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_93_system_doctor",
+      "summary": "System_doctor → _project_version",
+      "priority": 0.098,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_369_get_personas",
+      "summary": "Get_personas → Sha256_hex",
+      "priority": 0.085,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 10
+    },
+    {
+      "id": "proc_370_get_personas",
+      "summary": "Get_personas → Emit_progress",
+      "priority": 0.085,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 10
+    },
+    {
+      "id": "proc_371_get_personas",
+      "summary": "Get_personas → Profile_marker_matches",
+      "priority": 0.085,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 10
+    },
+    {
+      "id": "proc_372_get_personas",
+      "summary": "Get_personas → Run_command",
+      "priority": 0.085,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 10
+    },
+    {
+      "id": "proc_384_get_personas",
+      "summary": "Get_personas → Profile_id",
+      "priority": 0.085,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 9
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/services/system.py:restart",
+      "name": "restart",
+      "filePath": "webui/services/system.py",
+      "startLine": 30,
+      "endLine": 46,
+      "module": "Webui",
+      "process_id": "proc_146_system_restart",
+      "step_index": 2
+    },
+    {
+      "id": "Function:core/self_restart.py:spawn_successor",
+      "name": "spawn_successor",
+      "filePath": "core/self_restart.py",
+      "startLine": 53,
+      "endLine": 84,
+      "module": "Cluster_284",
+      "process_id": "proc_146_system_restart",
+      "step_index": 3
+    },
+    {
+      "id": "Function:webui/routers/config.py:system_restart",
+      "name": "system_restart",
+      "filePath": "webui/routers/config.py",
+      "startLine": 204,
+      "endLine": 207,
+      "module": "Webui",
+      "process_id": "proc_146_system_restart",
+      "step_index": 1
+    },
+    {
+      "id": "Function:core/stop_signal.py:request_stop",
+      "name": "request_stop",
+      "filePath": "core/stop_signal.py",
+      "startLine": 31,
+      "endLine": 54,
+      "module": "Tests",
+      "process_id": "proc_225_system_restart",
+      "step_index": 3
+    },
+    {
+      "id": "Function:webui/routers/config.py:system_doctor",
+      "name": "system_doctor",
+      "filePath": "webui/routers/config.py",
+      "startLine": 211,
+      "endLine": 214,
+      "module": "Routers",
+      "process_id": "proc_224_system_doctor",
+      "step_index": 1
+    },
+    {
+      "id": "Function:stella-installer/src-tauri/src/commands.rs:get_personas",
+      "name": "get_personas",
+      "filePath": "stella-installer/src-tauri/src/commands.rs",
+      "startLine": 400,
+      "endLine": 447,
+      "module": "Cluster_766",
+      "process_id": "proc_369_get_personas",
+      "step_index": 1
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/webui/test_webui_restart.py:test_restart_shellless_spawns_successor_then_sentinel",
+      "name": "test_restart_shellless_spawns_successor_then_sentinel",
+      "filePath": "tests/webui/test_webui_restart.py",
+      "startLine": 39,
+      "endLine": 67,
+      "module": "Webui"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_restart.py:test_restart_spawn_failure_keeps_bot_running",
+      "name": "test_restart_spawn_failure_keeps_bot_running",
+      "filePath": "tests/webui/test_webui_restart.py",
+      "startLine": 70,
+      "endLine": 89,
+      "module": "Webui"
+    },
+    {
+      "id": "File:tests/webui/test_webui_restart.py",
+      "name": "test_webui_restart.py",
+      "filePath": "tests/webui/test_webui_restart.py"
+    },
+    {
+      "id": "File:webui/services/system.py",
+      "name": "system.py",
+      "filePath": "webui/services/system.py"
+    },
+    {
+      "id": "Function:tests/test_self_restart.py:test_wait_consumes_env_even_when_pid_invalid",
+      "name": "test_wait_consumes_env_even_when_pid_invalid",
+      "filePath": "tests/test_self_restart.py",
+      "startLine": 24,
+      "endLine": 30
+    },
+    {
+      "id": "Function:tests/test_self_restart.py:test_spawn_successor_refuses_non_bot_entry",
+      "name": "test_spawn_successor_refuses_non_bot_entry",
+      "filePath": "tests/test_self_restart.py",
+      "startLine": 75,
+      "endLine": 81
+    },
+    {
+      "id": "File:tests/test_self_restart.py",
+      "name": "test_self_restart.py",
+      "filePath": "tests/test_self_restart.py"
+    },
+    {
+      "id": "Property:stella_project/plugins/bot_main/ai_gateway.py:_stop_watcher_task",
+      "name": "_stop_watcher_task",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 5341,
+      "endLine": 5341
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_start_stop_watcher",
+      "name": "_start_stop_watcher",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 5357,
+      "endLine": 5367,
+      "module": "Bot_main"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:watch_stop_request",
+      "name": "watch_stop_request",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 5370,
+      "endLine": 5389,
+      "module": "Bot_main"
+    },
+    {
+      "id": "Variable:core/self_restart.py:PARENT_PID_ENV",
+      "name": "PARENT_PID_ENV",
+      "filePath": "core/self_restart.py",
+      "startLine": 32,
+      "endLine": 32
+    },
+    {
+      "id": "File:core/self_restart.py",
+      "name": "self_restart.py",
+      "filePath": "core/self_restart.py"
+    },
+    {
+      "id": "Class:tests/cometa/test_g09_policy_runtime.py:TestOptionalRestart",
+      "name": "TestOptionalRestart",
+      "filePath": "tests/cometa/test_g09_policy_runtime.py",
+      "startLine": 255,
+      "endLine": 395
+    },
+    {
+      "id": "Method:tests/cometa/test_g09_policy_runtime.py:TestOptionalRestart.test_auto_restart_is_off_by_default#2",
+      "name": "test_auto_restart_is_off_by_default",
+      "filePath": "tests/cometa/test_g09_policy_runtime.py",
+      "startLine": 295,
+      "endLine": 306,
+      "module": "Cometa"
+    },
+    {
+      "id": "Method:tests/cometa/test_g09_policy_runtime.py:TestOptionalRestart.test_active_owner_lease_blocks_optional_restart#2",
+      "name": "test_active_owner_lease_blocks_optional_restart",
+      "filePath": "tests/cometa/test_g09_policy_runtime.py",
+      "startLine": 360,
+      "endLine": 373,
+      "module": "Cometa"
+    },
+    {
+      "id": "Class:cometa/runtime.py:CometaRuntime",
+      "name": "CometaRuntime",
+      "filePath": "cometa/runtime.py",
+      "startLine": 45,
+      "endLine": 316
+    },
+    {
+      "id": "Method:cometa/runtime.py:CometaRuntime._watch_worker#0",
+      "name": "_watch_worker",
+      "filePath": "cometa/runtime.py",
+      "startLine": 103,
+      "endLine": 177,
+      "module": "Cometa"
+    },
+    {
+      "id": "File:cometa/runtime.py",
+      "name": "runtime.py",
+      "filePath": "cometa/runtime.py"
+    },
+    {
+      "id": "Function:tests/webui/test_webui_config.py:test_system_restart_writes_sentinel",
+      "name": "test_system_restart_writes_sentinel",
+      "filePath": "tests/webui/test_webui_config.py",
+      "startLine": 222,
+      "endLine": 237
+    },
+    {
+      "id": "Function:tests/webui/test_webui_config.py:test_write_endpoints_require_auth",
+      "name": "test_write_endpoints_require_auth",
+      "filePath": "tests/webui/test_webui_config.py",
+      "startLine": 240,
+      "endLine": 249
+    }
+  ],
+  "timing": {
+    "vector": 7.4,
+    "bm25": 1433.6,
+    "merge": 0.2,
+    "symbol_lookup": 91.4,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 1526.4
+  }
+}
+
+  GitNexus Query (1.6.12)

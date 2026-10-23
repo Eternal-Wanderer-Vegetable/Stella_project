@@ -1,0 +1,33 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:webui/mount.py:setup_webui",
+    "name": "setup_webui",
+    "kind": "Function",
+    "filePath": "webui/mount.py",
+    "startLine": 60,
+    "endLine": 76
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "File:bot.py",
+        "name": "bot.py",
+        "filePath": "bot.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:webui/status_source.py:set_status_source",
+        "name": "set_status_source",
+        "filePath": "webui/status_source.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

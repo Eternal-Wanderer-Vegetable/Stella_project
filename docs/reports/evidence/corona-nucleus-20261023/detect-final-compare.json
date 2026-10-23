@@ -1,0 +1,340 @@
+{
+  "summary": {
+    "changed_count": 47,
+    "affected_count": 0,
+    "changed_files": 26,
+    "risk_level": "low"
+  },
+  "changed_symbols": [
+    {
+      "id": "Variable:deploy/process.py:STARTUP_TIMEOUT_SECONDS",
+      "name": "STARTUP_TIMEOUT_SECONDS",
+      "type": "Variable",
+      "filePath": "deploy/process.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/development/ci.en.md:L1:CI",
+      "name": "CI",
+      "type": "Section",
+      "filePath": "docs/development/ci.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/development/ci.md:L1:CI",
+      "name": "CI",
+      "type": "Section",
+      "filePath": "docs/development/ci.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/guides/deployment-docker.en.md:L142:Restore = unpack over StellaData/, then up -d",
+      "name": "Restore = unpack over StellaData/, then up -d",
+      "type": "Section",
+      "filePath": "docs/guides/deployment-docker.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/guides/deployment-docker.en.md:L145:Syncing a test checkout (Linux / Windows)",
+      "name": "Syncing a test checkout (Linux / Windows)",
+      "type": "Section",
+      "filePath": "docs/guides/deployment-docker.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/guides/deployment-docker.en.md:L152:Linux",
+      "name": "Linux",
+      "type": "Section",
+      "filePath": "docs/guides/deployment-docker.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/guides/deployment-docker.en.md:L157:Windows PowerShell 5.1 or newer",
+      "name": "Windows PowerShell 5.1 or newer",
+      "type": "Section",
+      "filePath": "docs/guides/deployment-docker.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/guides/deployment-docker.md:L130:恢复 = 解包覆盖 StellaData/ 后 up -d",
+      "name": "恢复 = 解包覆盖 StellaData/ 后 up -d",
+      "type": "Section",
+      "filePath": "docs/guides/deployment-docker.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/guides/deployment-docker.md:L133:测试环境同步源码（Linux / Windows）",
+      "name": "测试环境同步源码（Linux / Windows）",
+      "type": "Section",
+      "filePath": "docs/guides/deployment-docker.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/guides/deployment-docker.md:L139:Linux",
+      "name": "Linux",
+      "type": "Section",
+      "filePath": "docs/guides/deployment-docker.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/guides/deployment-docker.md:L144:Windows PowerShell 5.1 或更新版本",
+      "name": "Windows PowerShell 5.1 或更新版本",
+      "type": "Section",
+      "filePath": "docs/guides/deployment-docker.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/history/README.en.md:L1:Historical archives",
+      "name": "Historical archives",
+      "type": "Section",
+      "filePath": "docs/history/README.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/history/README.en.md:L15:Topics",
+      "name": "Topics",
+      "type": "Section",
+      "filePath": "docs/history/README.en.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/history/README.md:L1:历史档案导航",
+      "name": "历史档案导航",
+      "type": "Section",
+      "filePath": "docs/history/README.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/history/README.md:L15:按主题查证",
+      "name": "按主题查证",
+      "type": "Section",
+      "filePath": "docs/history/README.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L1:Session Progress Log",
+      "name": "Session Progress Log",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L3:Current State",
+      "name": "Current State",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L16:2026-10-23 — Corona / Nucleus engineering planning",
+      "name": "2026-10-23 — Corona / Nucleus engineering planning",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L24:2026-10-22 — Source Dashboard startup rebuild and release audit",
+      "name": "2026-10-22 — Source Dashboard startup rebuild and release audit",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L33:2026-10-22 — Gravitas test UI diagnosis",
+      "name": "2026-10-22 — Gravitas test UI diagnosis",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L41:2026-10-22 — Default OneBot v11 Alconna dependency",
+      "name": "2026-10-22 — Default OneBot v11 Alconna dependency",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L50:2026-10-22 — Cross-platform test checkout sync",
+      "name": "2026-10-22 — Cross-platform test checkout sync",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L58:2026-10-22 — Social worker CI isolation and PR documentation reconciliation",
+      "name": "2026-10-22 — Social worker CI isolation and PR documentation reconciliation",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:progress.md:L69:2026-10-22 — LinkMonitor lifecycle hooks and Gravitas deployment diagnosis",
+      "name": "2026-10-22 — LinkMonitor lifecycle hooks and Gravitas deployment diagnosis",
+      "type": "Section",
+      "filePath": "progress.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Class:scripts/sync_test_repo.py:SyncError",
+      "name": "SyncError",
+      "type": "Class",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:_git",
+      "name": "_git",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:_git_text",
+      "name": "_git_text",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:_repo_root",
+      "name": "_repo_root",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:_ensure_no_operation",
+      "name": "_ensure_no_operation",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:_ensure_clean",
+      "name": "_ensure_clean",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:_paths_overlap",
+      "name": "_paths_overlap",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:_ensure_no_ignored_path_conflicts",
+      "name": "_ensure_no_ignored_path_conflicts",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:sync",
+      "name": "sync",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:scripts/sync_test_repo.py:main",
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L1:Session Handoff",
+      "name": "Session Handoff",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L3:Current Session — Corona / Nucleus engineering plan",
+      "name": "Current Session — Corona / Nucleus engineering plan",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L25:Inherited Session — Source Dashboard startup rebuild and release audit",
+      "name": "Inherited Session — Source Dashboard startup rebuild and release audit",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L38:Previous Session — Gravitas Dashboard test-environment diagnosis",
+      "name": "Previous Session — Gravitas Dashboard test-environment diagnosis",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L46:Previous Session — OneBot v11 Alconna dependency fix (PR #117)",
+      "name": "Previous Session — OneBot v11 Alconna dependency fix (PR #117)",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L57:Current Session — PR #116 CI repair and documentation conflict resolution",
+      "name": "Current Session — PR #116 CI repair and documentation conflict resolution",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L69:Inherited Session — LinkMonitor and Gravitas follow-up",
+      "name": "Inherited Session — LinkMonitor and Gravitas follow-up",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:session-handoff.md:L73:Completed Session — PR #113 CI repair",
+      "name": "Completed Session — PR #113 CI repair",
+      "type": "Section",
+      "filePath": "session-handoff.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:tests/observability/test_background_flow_roots.py:flow_db",
+      "name": "flow_db",
+      "type": "Function",
+      "filePath": "tests/observability/test_background_flow_roots.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:tests/runtime/test_facade_turns.py:test_prepare_timeout_is_control_signal_and_cancels_hook",
+      "name": "test_prepare_timeout_is_control_signal_and_cancels_hook",
+      "type": "Function",
+      "filePath": "tests/runtime/test_facade_turns.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:webui/source_build.py:_run_command",
+      "name": "_run_command",
+      "type": "Function",
+      "filePath": "webui/source_build.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:webui/source_build.py:_pnpm_prefix",
+      "name": "_pnpm_prefix",
+      "type": "Function",
+      "filePath": "webui/source_build.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:webui/source_build.py:rebuild_source_dashboard",
+      "name": "rebuild_source_dashboard",
+      "type": "Function",
+      "filePath": "webui/source_build.py",
+      "change_type": "touched"
+    }
+  ],
+  "affected_processes": []
+}

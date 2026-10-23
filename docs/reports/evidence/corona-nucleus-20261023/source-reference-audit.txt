@@ -1,0 +1,37 @@
+stella_project/plugins/bot_main/ai_gateway.py:3676:        await _cometa_runtime_instance.stop(grace_seconds=10.0)
+stella_project/plugins/bot_main/ai_gateway.py:5393:    """从 bot 模块取 uvicorn Server 实例（bot.py 自持，Driver 不落地）。
+stella_project/plugins/bot_main/ai_gateway.py:5395:    ``python bot.py`` 时模块名为 ``__main__``，``python -m bot`` 或被
+core/self_restart.py:8:（终端直启 ``python bot.py``、浏览器访问 WebUI）过去只能提示用户手动重启，
+core/self_restart.py:13:- 派生侧 [`spawn_successor`]：以同样的解释器 + bot.py 入口起一个分离进程，
+core/self_restart.py:15:- 接任侧 [`wait_for_parent_exit`]：bot.py 启动极早期调用——上一任还占着
+core/self_restart.py:20:只服务 ``python bot.py`` 直启形态：入口不是 bot.py（测试、uvicorn 托管、
+core/self_restart.py:42:    return PROJECT_ROOT / "bot.py"
+core/self_restart.py:46:    """当前进程是否由 ``python bot.py`` 直接启动（判定依据：入口脚本路径）。"""
+core/self_restart.py:53:def spawn_successor() -> dict:
+core/self_restart.py:55:    info: dict = {"spawned": False, "entry": "bot.py"}
+core/self_restart.py:58:            f"当前入口不是 bot.py（{sys.argv[0]}），无法自动派生接任进程，请手动重启"
+webui/services/system.py:9:- **桌面壳**（注入了 ``STELLA_DESKTOP_SESSION_SECRET``）：壳监听退出自动
+webui/services/system.py:11:- **无壳 + 自重启**（``python bot.py`` 直启）：先派接任进程
+webui/services/system.py:12:  （``core.self_restart.spawn_successor``，环境变量指认父进程）再写哨兵，
+webui/services/system.py:13:  接任方在 bot.py 启动极早期等上一任退出后接管端口——2026-09-24 之前
+webui/services/system.py:37:    spawn = self_restart.spawn_successor()
+webui/services/system.py:89:    繁忙期可能错过）与 deploy 的 PID 文件（``python bot.py`` 直启时根本不
+deploy/runtime.py:755:        # replace_running：认状态接口的身份证明（手工启动的实例也接管），
+deploy/runtime.py:758:        stopped, stop_output = _captured_call(process.replace_running)
+deploy/process.py:57:BOT_ENTRY = PROJECT_ROOT / "bot.py"
+deploy/process.py:192:    """后台启动 bot.py，写 PID 文件并等待当前实例真正就绪。
+deploy/process.py:202:    replace_running()  # 内部自带「发现实例」提示与停止链
+deploy/process.py:415:    函数无法定位并停止它，返回 False（自动接管场景请走 `replace_running`，
+deploy/process.py:450:       ``python bot.py`` 直启也满足，这是最强的身份证明；
+deploy/process.py:470:def replace_running(grace_seconds: float = SHUTDOWN_GRACE_SECONDS) -> tuple[bool, str]:
+deploy/process.py:488:def register_self() -> bool:
+deploy/process.py:491:    「python bot.py」直启的实例由此获得与 ``deploy start`` 启动实例同等的
+deploy/process.py:493:    环境里已有 launch token（bot.py 在 config import 前兜底生成；deploy
+deploy/process.py:528:    _, note = replace_running()
+deploy/process.py:605:    ``python bot.py`` 或 ``deploy start``（前台）启动时没有 PID 文件，
+bot.py:15:# deploy start --detach 会注入该变量，这里只兜底「python bot.py」直启形态。
+bot.py:67:    from deploy.process import register_self, replace_running
+bot.py:69:    replace_running()
+bot.py:70:    register_self()
+desktop/src-tauri/src/lib.rs:21:        std::env::set_var("STELLA_DESKTOP_SESSION_SECRET", &secret);
+desktop/src-tauri/src/lib.rs:52:        .invoke_handler(tauri::generate_handler![

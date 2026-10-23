@@ -1,6 +1,28 @@
 # Session Handoff
 
-## Current Session — Source Dashboard startup rebuild and release audit
+## Current Session — Corona / Nucleus engineering plan
+
+**Current Objective:** CORONA-PLAN, planning only. Branch `codex/corona-nucleus-plan`, source baseline `c1713e3dfb0854e1a7b746e0ef1e5c82ed9a8485`. No business implementation, commit/push, deployment or production Bot startup. Planning is complete and the planning-only handoff can be archived; CORONA-IMPL remains planned.
+
+**Files:** [Engineering plan](docs/plans/2026-10-23-corona-nucleus-engineering-plan.md), [machine inventory](docs/plans/2026-10-23-corona-nucleus-inventory.json), [evidence and verifier](docs/reports/evidence/corona-nucleus-20261023/README.md), bilingual archive navigation and three task-state files.
+
+**Deliverables:** 12 ordered work packages CN00–CN11; 199 source fingerprints, 133 static routes, 426 literal/derived configuration keys, 34 acceptance scenarios. Contracts cover immutable configuration, bounded single-core lifecycle, persistent apply/recovery operations, private authenticated API, HTTP/SSE/WS proxy, business ownership, launchers, final products and rollback boundaries.
+
+**Verification Evidence:** GitNexus query/context/upstream impacts plus source supplement; settings/config entry/spaces.reload CRITICAL were reported. Initial partial startup query and two incomplete CLI pipe captures were rerun to complete outputs, preserving diagnostic attempts. Isolated existing tests: 83 passed / 37.20s. Actual settings and NoneBot 2.5.0 file-source probes passed. Archive/DAG/source/77 hashes and negative cycle check passed; evidence Ruff/probe reproduction passed; docs 119/1259/577/0 errors and diff passed. Structured GitNexus all 5 files/10 symbols/0 flows/LOW; compare main 26/47/0/LOW (includes inherited branch work), complete lists with partial=false/truncated=false. New archives validated separately. An incremental Markdown mapping zero was rejected and resolved with a forced rebuild; before/after evidence is preserved. Final raw checks are under `.gitnexus/verification/corona-nucleus-20261023/`.
+
+**Blockers / Acceptance Boundary:** No planning blocker identified. New architecture is not implemented; L0–L4, platform live, real model behavior, Windows/Linux clean VM, Docker and final release products remain NOT READY. Inherited WEBUI-STARTUP-BUILD evidence/status remains preserved as blocked pending external acceptance; PR #118 was not rechecked.
+
+**Recommended Next Step:** Planning is done. The next implementation task begins CN00: rebind target HEAD/index and upstream impact; turn synthetic probes into formal tests; prove a snapshot-only real NoneBot Driver bootstrap while preserving project cwd/plugin compatibility. Do not start with directory moves or the old successor mechanism.
+
+Minimal resume commands:
+
+```bash
+git status --short
+python3 docs/reports/evidence/corona-nucleus-20261023/verify_plan.py
+node .gitnexus/run.cjs status
+```
+
+## Inherited Session — Source Dashboard startup rebuild and release audit
 
 The blank test UI came from a stale `webui/dist`. This branch now rebuilds the Dashboard when `bot.py` is run from a source checkout or source archive, before serving requests; a failed build stops the new process rather than serving stale assets. Release products with a version-marked frontend skip this runtime path.
 

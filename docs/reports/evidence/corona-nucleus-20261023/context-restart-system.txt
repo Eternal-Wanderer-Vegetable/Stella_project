@@ -1,0 +1,82 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:webui/services/system.py:restart",
+    "name": "restart",
+    "kind": "Function",
+    "filePath": "webui/services/system.py",
+    "startLine": 30,
+    "endLine": 46
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:tests/webui/test_webui_restart.py:test_restart_desktop_mode_writes_sentinel",
+        "name": "test_restart_desktop_mode_writes_sentinel",
+        "filePath": "tests/webui/test_webui_restart.py"
+      },
+      {
+        "uid": "Function:tests/webui/test_webui_restart.py:test_restart_shellless_spawns_successor_then_sentinel",
+        "name": "test_restart_shellless_spawns_successor_then_sentinel",
+        "filePath": "tests/webui/test_webui_restart.py"
+      },
+      {
+        "uid": "Function:tests/webui/test_webui_restart.py:test_restart_spawn_failure_keeps_bot_running",
+        "name": "test_restart_spawn_failure_keeps_bot_running",
+        "filePath": "tests/webui/test_webui_restart.py"
+      },
+      {
+        "uid": "Function:webui/routers/config.py:system_restart",
+        "name": "system_restart",
+        "filePath": "webui/routers/config.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/self_restart.py:spawn_successor",
+        "name": "spawn_successor",
+        "filePath": "core/self_restart.py"
+      },
+      {
+        "uid": "Function:core/stop_signal.py:request_stop",
+        "name": "request_stop",
+        "filePath": "core/stop_signal.py"
+      },
+      {
+        "uid": "Function:core/stop_signal.py:request_stop",
+        "name": "request_stop",
+        "filePath": "core/stop_signal.py"
+      },
+      {
+        "uid": "Function:webui/security.py:desktop_session_secret",
+        "name": "desktop_session_secret",
+        "filePath": "webui/security.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_146_system_restart",
+      "name": "System_restart → Bot_entry",
+      "step_index": 2,
+      "step_count": 5
+    },
+    {
+      "id": "proc_225_system_restart",
+      "name": "System_restart → _sentinel_path",
+      "step_index": 2,
+      "step_count": 4
+    },
+    {
+      "id": "proc_484_system_restart",
+      "name": "System_restart → Desktop_session_secret",
+      "step_index": 2,
+      "step_count": 3
+    }
+  ]
+}
+
+  GitNexus Context (1.6.12)
