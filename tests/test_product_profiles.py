@@ -128,7 +128,7 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         "memory",
         "system_prompts",
         "runtime-manager",
-        "stella_project",
+        "stella_bootstrap", "stella_contracts", "stella_project",
         "knowledge",
         "skills",
         "assets",
@@ -224,7 +224,7 @@ def test_stager_prunes_output_inside_desktop_dir(tmp_path):
         "memory",
         "system_prompts",
         "runtime-manager",
-        "stella_project",
+        "stella_bootstrap", "stella_contracts", "stella_project",
         "knowledge",
         "skills",
         "assets",
@@ -280,7 +280,7 @@ def test_stager_falls_back_to_shell_dashboard_dist(tmp_path):
     for directory in (
         "astrbot_compat", "capability", "config", "core", "deploy", "extensions", "gravitas",
         "knowledge", "memory", "skills", "system_prompts", "runtime-manager",
-        "stella_project", "assets", "webui",
+        "stella_bootstrap", "stella_contracts", "stella_project", "assets", "webui",
     ):
         path = source / directory / "__init__.py"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -350,7 +350,7 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         "memory",
         "system_prompts",
         "runtime-manager",
-        "stella_project",
+        "stella_bootstrap", "stella_contracts", "stella_project",
         "knowledge",
         "skills",
         "assets",
@@ -379,6 +379,8 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
     )
     assert (output / "astrbot_compat" / "__init__.py").exists()
     assert (output / "capability" / "__init__.py").exists()
+    assert (output / "stella_bootstrap" / "__init__.py").exists()
+    assert (output / "stella_contracts" / "__init__.py").exists()
     assert (output / "stella_project" / "__init__.py").exists()
     assert (output / "deploy" / "__init__.py").exists()
     assert (output / "release_assets" / "product-profiles" / "oneclick-rust.json").exists()
@@ -419,7 +421,7 @@ def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
         "memory",
         "system_prompts",
         "runtime-manager",
-        "stella_project",
+        "stella_bootstrap", "stella_contracts", "stella_project",
         "knowledge",
         "skills",
         "assets",
@@ -493,7 +495,7 @@ def test_stage_installer_resources_fails_hard_without_webui_dist(tmp_path):
         "memory",
         "system_prompts",
         "runtime-manager",
-        "stella_project",
+        "stella_bootstrap", "stella_contracts", "stella_project",
         "knowledge",
         "skills",
         "assets",
@@ -554,7 +556,7 @@ def test_oneclick_rust_stages_memory_rust_python_half(tmp_path):
     for directory in (
         "astrbot_compat", "capability", "config", "core", "deploy",
         "extensions", "gravitas", "memory", "system_prompts", "runtime-manager",
-        "stella_project", "knowledge", "skills", "assets", "webui",
+        "stella_bootstrap", "stella_contracts", "stella_project", "knowledge", "skills", "assets", "webui",
         "desktop",
     ):
         path = source / directory / "__init__.py"

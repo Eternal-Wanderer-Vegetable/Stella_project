@@ -19,12 +19,15 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import config.settings as settings
 from webui.responses import ApiError
 
 
 def env_file() -> Path:
-    return Path(settings.STELLA_HOME) / ".env"
+    # Keep legacy settings lazy: importing this leaf service must not initialize
+    # config.settings before a management process has selected its revision.
+    from config.settings import STELLA_HOME
+
+    return Path(STELLA_HOME) / ".env"
 
 
 def read_values() -> dict[str, str]:

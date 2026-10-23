@@ -2,9 +2,9 @@
 
 ## Current Session — Corona / Nucleus implementation
 
-**Current Objective:** CORONA-IMPL, execute CN00–CN11 sequentially with a commit per completed package. Branch `codex/corona-nucleus-implementation`. Plan/evidence baseline commit `864c08f`; CN00 is complete and CN01 is next. Overall implementation remains in progress / NOT READY.
+**Current Objective:** CORONA-IMPL, execute CN00–CN11 sequentially with a commit per completed package. Branch `codex/corona-nucleus-implementation`. Plan/evidence baseline commit `864c08f`; CN00 (`f9d6920`) and CN01 are complete; CN02 is next. Overall implementation remains in progress / NOT READY.
 
-**Files:** [Engineering plan](docs/plans/2026-10-23-corona-nucleus-engineering-plan.md), [machine inventory](docs/plans/2026-10-23-corona-nucleus-inventory.json), [CN00 implementation record](docs/reports/2026-10-23-corona-nucleus-cn00.md), [planning evidence and verifier](docs/reports/evidence/corona-nucleus-20261023/README.md), `tests/corona/`, `tests/nucleus/`, and the three task-state files.
+**Files:** [Engineering plan](docs/plans/2026-10-23-corona-nucleus-engineering-plan.md), [machine inventory](docs/plans/2026-10-23-corona-nucleus-inventory.json), [CN00 report](docs/reports/2026-10-23-corona-nucleus-cn00.md), [CN01 report](docs/reports/2026-10-23-corona-nucleus-cn01.md), [planning evidence and verifier](docs/reports/evidence/corona-nucleus-20261023/README.md), `stella_bootstrap/`, `stella_contracts/`, and the task-state files.
 
 **CN00 Done:** Re-ran the eight-file existing lifecycle/deploy/WebUI baseline in a temporary `STELLA_HOME` (83 passed / 35.75s), added config source ordering / legacy entry order / NoneBot snapshot Driver tests (3 passed / 0.86s), and Ruff passed. The plan verifier reconfirmed 199 source fingerprints, 133 routes, 426 keys, 34 scenarios and 77 hashes; docs passed (119/1266/577/0). Pre-commit GitNexus all: 9 files / 27 symbols / LOW; compare main: 112 files / 141 symbols / LOW. A parallel compare was PARTIAL, discarded, and rerun alone successfully. The real NoneBot 2.5.0 FastAPI Driver was initialized in a synthetic project cwd with explicit no-file `Env/Config`; `nonebot.init(None)`'s dotenv read was reproduced. No real Bot, server, model, platform or production DB was used.
 
@@ -12,9 +12,11 @@
 
 **Frozen for CN01+:** Managed framework bridge is tested only with locked NoneBot 2.5.0; keep `PROJECT_ROOT` as cwd, immutable configuration snapshots as the only managed source, and confine private Driver resolver/registry access to `nucleus/framework.py`. V1 identity, operation/error envelope, single shutdown deadline, and OS-handle lock semantics are recorded in the CN00 report.
 
-**Blockers / Acceptance Boundary:** CN01–CN11 remain unimplemented. No new architecture process has been started; live model/QQ/WebChat, Linux/Windows clean VM, Docker and final release acceptance remain NOT READY. Existing WEBUI-STARTUP-BUILD evidence/status remains preserved; PR #118 was not rechecked.
+**CN01 Done:** Added pure `stella_bootstrap` home/identity/parsing/schema/config sources and immutable `stella_contracts.ConfigRevision`; legacy APIs remain compatibility exports and managed config is opt-in. POSIX writes are private, atomic and directory-synced; release payloads include the two new packages. Focused config/home/identity/merge/schema/adapter/WebUI/release plus CN00 regressions: **148 passed / 3.12s** under isolated `STELLA_HOME`; repository Ruff and compileall passed. Two full-suite attempts had changing failures (4027 passed/29 skipped/2 failed; then 4028 passed/29 skipped/1 failed); the three distinct failing tests each passed alone. Root cause is unconfirmed, so the full suite remains NOT GREEN. Windows ACL behavior was not tested. See CN01 report for impacts, graph limits and final change gates.
 
-**Recommended Next Step:** Begin CN01 by analyzing actual configuration/home/envfile/schema paths, then create the side-effect-free bootstrap and immutable revision contract while preserving legacy behavior. Keep managed framework glue centralized; do not begin CN02 until a production `nucleus/framework.py` bridge passes the CN00 Driver test.
+**Blockers / Acceptance Boundary:** CN02–CN11 remain unimplemented. No new managed Nucleus process has been started; live model/QQ/WebChat, Linux/Windows clean VM, Docker and final release acceptance remain NOT READY. Existing WEBUI-STARTUP-BUILD evidence/status remains preserved; PR #118 was not rechecked.
+
+**Recommended Next Step:** Start CN02 from the CN00 snapshot Driver contract and CN01 managed revision API. Analyze `bot.py`/shutdown/facade/Cometa and subprocess ownership before edits; implement the managed adapter in `nucleus/framework.py`, then prove the child process reaches ready and drains/exits under one bounded deadline. Keep default launch on legacy until CN11.
 
 Minimal resume commands:
 

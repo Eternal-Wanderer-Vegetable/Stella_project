@@ -155,7 +155,7 @@ def _source_tree(tmp_path: Path) -> Path:
     for directory in (
         "astrbot_compat", "capability", "config", "core", "deploy",
         "extensions", "gravitas", "memory", "system_prompts", "runtime-manager",
-        "stella_project", "knowledge", "skills", "assets", "webui",
+        "stella_bootstrap", "stella_contracts", "stella_project", "knowledge", "skills", "assets", "webui",
         "desktop",
     ):
         path = source / directory / "__init__.py"

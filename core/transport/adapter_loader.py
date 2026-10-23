@@ -6,38 +6,24 @@
 from __future__ import annotations
 
 import importlib
-import re
 from typing import Any
 
-DEFAULT_ADAPTER_MODULES = ("nonebot.adapters.onebot.v11",)
-_DISABLED_VALUES = {"disabled", "none", "off"}
-_MODULE_NAME = re.compile(r"^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$")
+from stella_bootstrap.adapter_names import (
+    DEFAULT_ADAPTER_MODULES,
+    parse_adapter_modules,
+)
 
 
 class AdapterRegistrationError(RuntimeError):
     """An enabled adapter cannot be imported or registered on the active driver."""
 
 
-def parse_adapter_modules(raw: str | None) -> tuple[str, ...]:
-    """Parse comma-separated import paths; an explicit blank or ``none`` disables all."""
-    if raw is None:
-        return DEFAULT_ADAPTER_MODULES
-    value = raw.strip()
-    if not value or value.casefold() in _DISABLED_VALUES:
-        return ()
-
-    modules = tuple(part.strip() for part in value.split(",") if part.strip())
-    if not modules:
-        return ()
-    if len(set(modules)) != len(modules):
-        raise ValueError("STELLA_ADAPTER_MODULES contains a duplicate module path")
-    invalid = [module for module in modules if not _MODULE_NAME.fullmatch(module)]
-    if invalid:
-        raise ValueError(
-            "STELLA_ADAPTER_MODULES entries must be valid Python module paths; "
-            f"invalid: {', '.join(invalid)}"
-        )
-    return modules
+__all__ = [
+    "DEFAULT_ADAPTER_MODULES",
+    "AdapterRegistrationError",
+    "parse_adapter_modules",
+    "register_enabled_adapters",
+]
 
 
 def register_enabled_adapters(driver: Any, module_paths: tuple[str, ...]) -> tuple[str, ...]:

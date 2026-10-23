@@ -53,6 +53,8 @@ COMMON_DIRS = (
     "skills",
     "system_prompts",
     "runtime-manager",
+    "stella_bootstrap",
+    "stella_contracts",
     "stella_project",
     # 内置技能在 assets/skills 下（SKILLS_BUILTIN_DIR 默认指这里）
     "assets",
