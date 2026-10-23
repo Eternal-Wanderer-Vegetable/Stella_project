@@ -1,25 +1,27 @@
 # Session Handoff
 
-## Current Session — Corona / Nucleus engineering plan
+## Current Session — Corona / Nucleus implementation
 
-**Current Objective:** CORONA-PLAN, planning only. Branch `codex/corona-nucleus-plan`, source baseline `c1713e3dfb0854e1a7b746e0ef1e5c82ed9a8485`. No business implementation, commit/push, deployment or production Bot startup. Planning is complete and the planning-only handoff can be archived; CORONA-IMPL remains planned.
+**Current Objective:** CORONA-IMPL, execute CN00–CN11 sequentially with a commit per completed package. Branch `codex/corona-nucleus-implementation`. Plan/evidence baseline commit `864c08f`; CN00 is complete and CN01 is next. Overall implementation remains in progress / NOT READY.
 
-**Files:** [Engineering plan](docs/plans/2026-10-23-corona-nucleus-engineering-plan.md), [machine inventory](docs/plans/2026-10-23-corona-nucleus-inventory.json), [evidence and verifier](docs/reports/evidence/corona-nucleus-20261023/README.md), bilingual archive navigation and three task-state files.
+**Files:** [Engineering plan](docs/plans/2026-10-23-corona-nucleus-engineering-plan.md), [machine inventory](docs/plans/2026-10-23-corona-nucleus-inventory.json), [CN00 implementation record](docs/reports/2026-10-23-corona-nucleus-cn00.md), [planning evidence and verifier](docs/reports/evidence/corona-nucleus-20261023/README.md), `tests/corona/`, `tests/nucleus/`, and the three task-state files.
 
-**Deliverables:** 12 ordered work packages CN00–CN11; 199 source fingerprints, 133 static routes, 426 literal/derived configuration keys, 34 acceptance scenarios. Contracts cover immutable configuration, bounded single-core lifecycle, persistent apply/recovery operations, private authenticated API, HTTP/SSE/WS proxy, business ownership, launchers, final products and rollback boundaries.
+**CN00 Done:** Re-ran the eight-file existing lifecycle/deploy/WebUI baseline in a temporary `STELLA_HOME` (83 passed / 35.75s), added config source ordering / legacy entry order / NoneBot snapshot Driver tests (3 passed / 0.86s), and Ruff passed. The plan verifier reconfirmed 199 source fingerprints, 133 routes, 426 keys, 34 scenarios and 77 hashes; docs passed (119/1266/577/0). Pre-commit GitNexus all: 9 files / 27 symbols / LOW; compare main: 112 files / 141 symbols / LOW. A parallel compare was PARTIAL, discarded, and rerun alone successfully. The real NoneBot 2.5.0 FastAPI Driver was initialized in a synthetic project cwd with explicit no-file `Env/Config`; `nonebot.init(None)`'s dotenv read was reproduced. No real Bot, server, model, platform or production DB was used.
 
-**Verification Evidence:** GitNexus query/context/upstream impacts plus source supplement; settings/config entry/spaces.reload CRITICAL were reported. Initial partial startup query and two incomplete CLI pipe captures were rerun to complete outputs, preserving diagnostic attempts. Isolated existing tests: 83 passed / 37.20s. Actual settings and NoneBot 2.5.0 file-source probes passed. Archive/DAG/source/77 hashes and negative cycle check passed; evidence Ruff/probe reproduction passed; docs 119/1259/577/0 errors and diff passed. Structured GitNexus all 5 files/10 symbols/0 flows/LOW; compare main 26/47/0/LOW (includes inherited branch work), complete lists with partial=false/truncated=false. New archives validated separately. An incremental Markdown mapping zero was rejected and resolved with a forced rebuild; before/after evidence is preserved. Final raw checks are under `.gitnexus/verification/corona-nucleus-20261023/`.
+**GitNexus:** Bound to `864c08f`, status up-to-date after forced full rebuild. `config/settings.py` CRITICAL 278/76; `bot.py` UNKNOWN/0 plus shell/deploy/desktop/installer source-reference confirmation; `register_enabled_adapters` LOW/1. FTS repair first failed and forced rebuild succeeded. Graph extraction limits remain and are detailed in the CN00 report.
 
-**Blockers / Acceptance Boundary:** No planning blocker identified. New architecture is not implemented; L0–L4, platform live, real model behavior, Windows/Linux clean VM, Docker and final release products remain NOT READY. Inherited WEBUI-STARTUP-BUILD evidence/status remains preserved as blocked pending external acceptance; PR #118 was not rechecked.
+**Frozen for CN01+:** Managed framework bridge is tested only with locked NoneBot 2.5.0; keep `PROJECT_ROOT` as cwd, immutable configuration snapshots as the only managed source, and confine private Driver resolver/registry access to `nucleus/framework.py`. V1 identity, operation/error envelope, single shutdown deadline, and OS-handle lock semantics are recorded in the CN00 report.
 
-**Recommended Next Step:** Planning is done. The next implementation task begins CN00: rebind target HEAD/index and upstream impact; turn synthetic probes into formal tests; prove a snapshot-only real NoneBot Driver bootstrap while preserving project cwd/plugin compatibility. Do not start with directory moves or the old successor mechanism.
+**Blockers / Acceptance Boundary:** CN01–CN11 remain unimplemented. No new architecture process has been started; live model/QQ/WebChat, Linux/Windows clean VM, Docker and final release acceptance remain NOT READY. Existing WEBUI-STARTUP-BUILD evidence/status remains preserved; PR #118 was not rechecked.
+
+**Recommended Next Step:** Begin CN01 by analyzing actual configuration/home/envfile/schema paths, then create the side-effect-free bootstrap and immutable revision contract while preserving legacy behavior. Keep managed framework glue centralized; do not begin CN02 until a production `nucleus/framework.py` bridge passes the CN00 Driver test.
 
 Minimal resume commands:
 
 ```bash
 git status --short
-python3 docs/reports/evidence/corona-nucleus-20261023/verify_plan.py
 node .gitnexus/run.cjs status
+.venv/bin/python -m pytest tests/corona/test_config_source_snapshot.py tests/nucleus/test_snapshot_driver.py -q
 ```
 
 ## Inherited Session — Source Dashboard startup rebuild and release audit

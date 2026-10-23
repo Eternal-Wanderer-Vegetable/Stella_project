@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-23",
-  "active_feature": "CORONA-PLAN",
+  "active_feature": "CORONA-IMPL",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -960,7 +960,7 @@
       "id": "CORONA-IMPL",
       "name": "Corona / Nucleus 双进程实施",
       "description": "依工程计划执行 CN00–CN11，按阶段验收并切换默认入口；规划不等于实现。",
-      "status": "planned",
+      "status": "in_progress",
       "dependencies": [
         "CORONA-PLAN"
       ],
@@ -982,7 +982,12 @@
         {
           "report": "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
           "command": "Planning handoff only",
-          "result": "Implementation not started. Begin CN00 by rebinding HEAD/GitNexus, formalizing isolated probes and validating snapshot-only NoneBot Driver bootstrap. Runtime/release NOT READY."
+          "result": "Planning baseline at c1713e3. CN00 implementation starts on codex/corona-nucleus-implementation after preserving the plan/evidence commit; runtime/release remain NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn00.md",
+          "command": "CN00: GitNexus rebind/impact + isolated baseline and framework tests + Ruff + detect-changes all/compare",
+          "result": "At HEAD 864c08f, GitNexus status is up-to-date; config/settings.py CRITICAL 278/76, bot.py UNKNOWN/0 with source callers confirmed, adapter registration LOW/1. Isolated existing baseline 83 passed/35.75s; new source/Driver contracts 3 passed/0.86s; Ruff passed. Plan verifier reconfirmed 199 source fingerprints, 133 routes, 426 keys, 34 scenarios and 77 hashes. Docs 119/1266/577/0 errors. Detect-changes all: 9 files / 27 symbols / 0 processes / LOW; compare main: 112 files / 141 symbols / 0 processes / LOW. One parallel compare returned PARTIAL and was discarded; standalone rerun completed. NoneBot 2.5.0 snapshot Driver spike preserves cwd and rejects dotenv rereads. No live Bot or user database. CN00 complete; CN01 next; overall CORONA-IMPL NOT READY."
         }
       ]
     }
