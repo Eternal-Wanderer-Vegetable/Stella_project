@@ -79,13 +79,13 @@ import os
 import sys
 import threading
 import time
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 mode = sys.argv[1]
 writer_lock = None
 if mode.startswith("exclusive_"):
     import fcntl
-    from pathlib import Path
 
     lock_path = Path(os.environ["STELLA_HOME"]) / "cn10-core-writer.lock"
     writer_lock = lock_path.open("a+")
@@ -98,7 +98,7 @@ if mode.startswith("exclusive_"):
     mode = {
         "exclusive_ready": "ready",
         "exclusive_crash": "crash",
-        "exclusive_crash_after_ready": "crash_after_ready",
+        "exclusive_crash_after_ready": "crash_after_ready_triggered",
     }[mode]
 if mode == "import_error":
     raise RuntimeError("synthetic import error")
@@ -168,6 +168,20 @@ class Handler(BaseHTTPRequestHandler):
 server = HTTPServer((os.environ["STELLA_INTERNAL_HOST"], int(os.environ["STELLA_INTERNAL_PORT"])), Handler)
 if mode == "crash_after_ready":
     threading.Timer(0.1, lambda: os._exit(41)).start()
+if mode == "crash_after_ready_triggered":
+    crash_marker = (
+        Path(os.environ["STELLA_HOME"])
+        / f"cn10-crash-after-ready-{identity['generation_id']}"
+    )
+
+    def wait_for_crash_trigger():
+        deadline = time.monotonic() + 30
+        while not crash_marker.is_file() and time.monotonic() < deadline:
+            time.sleep(0.005)
+        if crash_marker.is_file():
+            os._exit(41)
+
+    threading.Thread(target=wait_for_crash_trigger, daemon=True).start()
 server.serve_forever()
 """
 
@@ -238,7 +252,7 @@ async def test_linux_real_core_100_cycles_do_not_leak_or_overlap(
     selected_mode = ["exclusive_ready"]
     supervisor = CoreSupervisor(
         bootstrap,
-        readiness_timeout=2,
+        readiness_timeout=5,
         poll_interval=0.02,
         backoff_base=0.01,
         max_attempts=1,
@@ -287,8 +301,14 @@ async def test_linux_real_core_100_cycles_do_not_leak_or_overlap(
             else:
                 assert snapshot.phase == "ready"
                 assert snapshot.pid is not None
+                assert snapshot.generation_id is not None
                 ready_pids.append(snapshot.pid)
-                deadline = time.monotonic() + 2
+                crash_marker = (
+                    Path(bootstrap.stella_home)
+                    / f"cn10-crash-after-ready-{snapshot.generation_id}"
+                )
+                crash_marker.touch()
+                deadline = time.monotonic() + 5
                 while supervisor.snapshot.phase != "failed" and time.monotonic() < deadline:
                     await asyncio.sleep(0.01)
                 assert supervisor.snapshot.phase == "failed"

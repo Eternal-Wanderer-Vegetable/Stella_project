@@ -127,7 +127,9 @@ class TestDeliverLines:
         from gravitas.contracts import Deadline
 
         clock = system_control_clock()
-        deadline = Deadline(clock.now() + 0.03, clock.clock_id)
+        # Leave enough time for plan persistence and test-runner scheduling;
+        # the send still blocks long enough to exercise the deadline path.
+        deadline = Deadline(clock.now() + 2.0, clock.clock_id)
         plan = _sealed_plan(
             ["may have arrived", "must not start"], "t-send-deadline", "tn-send-deadline"
         )
@@ -135,7 +137,7 @@ class TestDeliverLines:
 
         async def send(line, part_index):
             attempts.append((line, part_index))
-            await asyncio.sleep(1)
+            await asyncio.sleep(3)
             return {"message_id": 123}
 
         receipts = await deliver_lines(
