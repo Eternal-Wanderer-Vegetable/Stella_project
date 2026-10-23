@@ -1,6 +1,6 @@
 # Session Handoff
 
-## Current Session — NoneBot adapter picker, preinstall, documentation forms, and visual polish
+## Current Session — NoneBot platform configuration and responsive sidebar
 
 用户要求平台页支持全部 NoneBot 适配器，按需添加，并将可用适配器作为依赖随安装包预装；后续要求按各适配器项目文档预设运行时配置表单。用户决定：Walle-Q 与 NTChat 已缺乏维护，直接屏蔽并记录原因。当前分支 `codex/frontend-ui-polish` 从同步后的 `main@9de22e696f60a14fefa91f17024dd45bdef21cde` 创建。同步前的旧本地改动留在 `stash@{0}`，本任务未触碰。`PLATFORM-ADAPTER-PREINSTALL` 和 `PLATFORM-ADAPTER-FORM-PRESETS` 均完成各自记录的源码/本地验证范围。
 
@@ -19,6 +19,7 @@
 - 最新 picker 验证：Dashboard build 和资源同步成功；dashboard / webui / desktop 的入口 HTML SHA-256 一致；文档 121 files / 1262 links / 577 anchors / 0 errors；双语 locale 和 feature JSON parse、diff check 通过。`saveAdapters` upstream UNKNOWN / 0；最终 detect all 与 compare/main 均为 20 files / 98 symbols / 15 affected processes / HIGH aggregate，无 partial/truncated（包含此前平台改动）。未运行测试，也未在浏览器里交互检查加号卡片、tooltip 或保存/readback。
 - 最新 UI follow-up：目录选择卡片勾选框移到右上角，标题与主页适配器卡片左对齐；NoneBot 全局 `DRIVER`、共享范围提示、进程环境覆盖提示和远程平台建议放入每个已选适配器的运行时配置弹窗。Driver 仍通过原有 `/platform/adapters` 保存字段提交，页面底部保留统一保存按钮。中英文指南已说明 `DRIVER` 是全局设置。当前源码构建、资源同步、文档和 locale/feature JSON 检查通过；最终 GitNexus all / compare main 结果见 progress.md。未运行测试或浏览器交互验收，也未保存配置或连接真实平台。
 - 最新首页调整：删除平台首页顶部安装包说明与“当前进程生效”行；保存/重启提示以完整草稿快照比较，仅在配置发生变化时显示，保存后重读基线，恢复原配置时自动隐藏。连接状态入口收进“已添加的平台”卡片标题旁的单一图标，点击打开连接详情表；表格按运行中的适配器连接记录展示，健康度保留 OneBot 心跳/探活差异，其他适配器仍显示未知。“连接引用”使用表格正文的统一字体，并已在浏览器中目视确认。Dashboard 构建、`sync:webui`、文档与 locale JSON 检查通过；GitNexus 最终结果记入 progress.md。浏览器确认首页布局并打开连接状态弹窗；当前旧后端 API 不兼容，页面禁用保存，因此未验证新后端保存/回读，亦未连接真实平台；测试未运行。
+- 最新侧栏修正：基线浏览器测得 Agent 标题 scrollHeight 18px、clientHeight/line-height 16px；修为 20px 标题行框，并保留高于 comfortable 的 default 行密度。72px rail 图标现居中于 x=36px。菜单按钮在所有宽度都可用；>1280px 默认展开，≤1280px 默认折叠，窄屏展开以 256px 临时抽屉覆盖主界面，保留 72px rail 的主内容占位；点页面遮罩回到 rail。Dashboard build/sync、docs、JSON、diff 通过；1600px、1200px、850px、390px 浏览器检查通过；850px/390px 无横向溢出。没有运行测试套件，改动尚未提交。
 - 当前运行边界：浏览器显示 32 项、30 可选和 2 个屏蔽项，但 `127.0.0.1:8080` 服务仍是旧后端，所以 UI 警告 API 不兼容并禁用保存。未保存任何配置、未重启服务、未输入凭据、未尝试真实连接；也没有构建最终安装器工件。源码与依赖变更已完成，当前 backend save/readback、实际 release installer 与平台 live 验收仍未确认。
 - 下一步：如要做 UI 运行验收，在新版 WebUI backend 和 Dashboard 一起运行时检查 picker 交互与 API save/readback；如要宣称发布安装器验收，则需实际构建并检查安装器/离线 wheelhouse。不要将依赖 dry-run 等同于构建工件或真实平台兼容性。
 

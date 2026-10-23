@@ -14,7 +14,9 @@
       "groups": "Groups",
       "settings": "Settings",
       "cometa": "Agent Tasks",
-      "gravitas": "Gravitas Status"
+      "gravitas": "Gravitas Status",
+      "expandMenu": "Expand navigation sidebar",
+      "collapseMenu": "Collapse navigation sidebar"
     },
     "common": {
       "save": "Save",

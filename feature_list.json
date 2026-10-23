@@ -1277,6 +1277,49 @@
           "result": "浏览器确认首页已移除安装包说明和进程生效行、未变更时不显示保存提示、状态图标可打开适配器连接详情弹窗，连接引用已统一为表格正文字体。当前旧后端 API 不兼容并禁用保存，未验证新后端保存/回读或连接真实平台；测试套件未运行。"
         }
       ]
+    },
+    {
+      "id": "SIDEBAR-RESPONSIVE-NAV",
+      "name": "响应式侧栏与导航行高",
+      "description": "修复侧栏导航文字下沿裁切并居中折叠图标；提供手动展开/折叠，按视口宽度选择默认状态，窄屏展开使用不挤压主内容的覆盖抽屉。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "dashboard/src/layouts/FullLayout.vue",
+        "dashboard/src/i18n/locales/zh-CN.json",
+        "dashboard/src/i18n/locales/en-US.json",
+        "dashboard/dist/",
+        "webui/dist/",
+        "desktop/dashboard-dist/",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "导航保留高于 comfortable 的 default 行密度，并使用足以容纳字体下伸部的标题行高；‘外部 Agent 任务’文本容器高度覆盖实际文本高度。",
+        "72px rail 中图标水平居中，点击菜单按钮可在所有视口宽度手动切换展开与折叠。",
+        "宽度大于 1280px 默认展开；宽度不超过 1280px 默认折叠，展开时以 256px 覆盖抽屉显示，点击主界面遮罩后回到 rail，主内容宽度保持不变。",
+        "中英文展开/折叠辅助标签匹配当前状态；Dashboard 构建、静态资源同步、JSON、文档与 diff 检查通过。",
+        "浏览器检查 1600px、1200px、850px 与 390px 下的默认状态、手动切换、遮罩关闭与横向溢出。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus upstream impact and source reference search",
+          "result": "FullLayout.vue 文件级 upstream UNKNOWN / 0；rg 确认 dashboard/src/router/index.ts 导入并将其注册为主布局。索引刷新提示流程集合截断，影响边界以源码调用引用为准。"
+        },
+        {
+          "command": "pnpm --dir dashboard build",
+          "result": "vue-tsc 与 Vite 构建通过；保留既有 mixed static/dynamic import 与大于 500 KB chunk warnings。"
+        },
+        {
+          "command": "pnpm --dir dashboard sync:webui; python scripts/check_docs.py; locale/feature JSON parse; git diff --check",
+          "result": "资源同步至 webui/dist 与 desktop/dashboard-dist；文档检查为 121 files / 1262 local links / 577 migration anchors / 0 errors，locale/feature JSON 与 diff 检查通过。"
+        },
+        {
+          "command": "Browser responsive layout review",
+          "result": "基线测得 Agent 标题 scrollHeight 18px、clientHeight/line-height 16px，确有裁切；修复后为 20px/20px/20px。1600px 默认展开 256px 且支持手动折叠/展开。1200px、850px、390px 默认 72px rail，图标中心与侧栏中心均为 x=36px；展开后覆盖抽屉从 x=0 起、宽 256px，主内容左边界仍为 72px；在 1200px 与 850px 点击主页面遮罩返回 rail，主内容几何不变。390px 与 850px documentElement.scrollWidth 等于 clientWidth。动态调整宽度跨过 1280px 断点会应用相应默认状态，视口覆盖已重置。"
+        }
+      ]
     }
   ]
 }

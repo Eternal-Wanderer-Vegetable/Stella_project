@@ -14,7 +14,9 @@
       "groups": "群组",
       "settings": "设置",
       "cometa": "外部 Agent 任务",
-      "gravitas": "Gravitas 状态"
+      "gravitas": "Gravitas 状态",
+      "expandMenu": "展开侧边栏",
+      "collapseMenu": "折叠侧边栏"
     },
     "common": {
       "save": "保存",
