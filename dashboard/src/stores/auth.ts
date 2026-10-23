@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 
 import { api, clearToken, getToken, setToken, unwrap } from '@/api/http';
+import { isTauri, tauriBridge } from '@/api/tauri';
 
 export interface SessionData {
   token: string;
@@ -35,6 +36,21 @@ export const useAuthStore = defineStore('auth', {
         this.backend = 'online';
       } catch {
         this.backend = 'offline';
+      }
+      if (this.backend === 'online' && !this.setupRequired && !this.token && isTauri()) {
+        try {
+          const secret = await tauriBridge.desktopSessionSecret();
+          if (secret) {
+            const session = await unwrap<SessionData>(
+              api.post('/auth/desktop-session', null, {
+                headers: { 'X-Stella-Desktop-Session': secret },
+              }),
+            );
+            this._adopt(session);
+          }
+        } catch {
+          // Desktop exchange is an optional login convenience; keep the normal login route.
+        }
       }
       return this.backend;
     },

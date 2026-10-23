@@ -106,8 +106,8 @@ impl Ctx {
 
     /// 构造统一 Runtime 操作命令。
     ///
-    /// Runtime 不可用时，调用方应回退到对应的 legacy deploy 命令；这样旧
-    /// 发布包和旧 Docker 镜像仍能被同一版 CLI 控制。
+    /// 构造 Runtime 操作命令。受管的 stella 生命周期操作必须 fail closed，
+    /// 不能在 Corona 控制协议不可用时回退并派生第二个 legacy 核心。
     pub fn runtime_cmd(&self, operation: &str) -> Vec<String> {
         self.runtime_cmd_with_force(operation, false)
     }
@@ -123,42 +123,40 @@ impl Ctx {
     }
 }
 
-/// 执行 Runtime 生命周期操作；旧版本不识别 Runtime envelope 时回退 legacy。
+/// 执行 Runtime 生命周期操作。无法验证响应时 fail closed，不能启动 legacy 核心。
 pub fn run_runtime_or_legacy(
     ctx: &Ctx,
     operation: &str,
-    legacy_sub: &[&str],
+    _legacy_sub: &[&str],
     force: bool,
     out: &mut dyn Write,
 ) -> Result<i32> {
     let runtime_cmd = ctx.runtime_cmd_with_force(operation, force);
-    if let Ok(process) = run_output(&runtime_cmd, &ctx.root) {
-        let code = process.status.code().unwrap_or(1);
-        let stdout = String::from_utf8_lossy(&process.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&process.stderr).into_owned();
-        if let Some(envelope) = parse_json_output(&stdout)
-            .filter(|value| value.get("operation").and_then(Value::as_str) == Some(operation))
-        {
-            if let Some(message) = envelope.get("message").and_then(Value::as_str) {
-                writeln!(out, "{message}")?;
-            } else if let Some(error) = envelope
-                .get("error")
-                .and_then(|value| value.get("message"))
-                .and_then(Value::as_str)
-            {
-                writeln!(out, "错误：{error}")?;
-            } else if let Some(data) = envelope.get("data") {
-                writeln!(out, "{}", serde_json::to_string_pretty(data)?)?;
-            } else if !stdout.trim().is_empty() {
-                write!(out, "{stdout}")?;
-            }
-            if !stderr.trim().is_empty() {
-                writeln!(out, "{stderr}")?;
-            }
-            return Ok(code);
-        }
+    let process = run_output(&runtime_cmd, &ctx.root)
+        .context("Runtime 生命周期命令无法执行；为避免启动第二个核心，已拒绝 legacy 回退")?;
+    let code = process.status.code().unwrap_or(1);
+    let stdout = String::from_utf8_lossy(&process.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&process.stderr).into_owned();
+    let envelope = parse_json_output(&stdout)
+        .filter(|value| value.get("operation").and_then(Value::as_str) == Some(operation))
+        .context("Runtime 生命周期响应无效或协议不匹配；已拒绝 legacy 回退")?;
+    if let Some(message) = envelope.get("message").and_then(Value::as_str) {
+        writeln!(out, "{message}")?;
+    } else if let Some(error) = envelope
+        .get("error")
+        .and_then(|value| value.get("message"))
+        .and_then(Value::as_str)
+    {
+        writeln!(out, "错误：{error}")?;
+    } else if let Some(data) = envelope.get("data") {
+        writeln!(out, "{}", serde_json::to_string_pretty(data)?)?;
+    } else if !stdout.trim().is_empty() {
+        write!(out, "{stdout}")?;
     }
-    run_passthrough(&ctx.domain_cmd(legacy_sub, true), &ctx.root)
+    if !stderr.trim().is_empty() {
+        writeln!(out, "{stderr}")?;
+    }
+    Ok(code)
 }
 
 fn parse_json_output(stdout: &str) -> Option<Value> {
@@ -169,7 +167,7 @@ fn parse_json_output(stdout: &str) -> Option<Value> {
     })
 }
 
-/// 优先读取 Runtime envelope 的 data，无法识别时回退 legacy JSON 命令。
+/// Runtime 状态必须是已识别的 schema-v1 envelope；不探测旧 Bot 端口作回退。
 pub fn capture_runtime_or_legacy_json(
     ctx: &Ctx,
     operation: &str,
@@ -177,6 +175,21 @@ pub fn capture_runtime_or_legacy_json(
     what: &str,
 ) -> Result<(Value, String, i32)> {
     let runtime_cmd = ctx.runtime_cmd(operation);
+    if operation == "status" {
+        let out = run_output(&runtime_cmd, &ctx.root)
+            .context("Runtime status 命令无法执行；拒绝查询 legacy Bot 端口")?;
+        let code = out.status.code().unwrap_or(1);
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        let envelope = parse_json_output(&stdout)
+            .filter(|value| value.get("operation").and_then(Value::as_str) == Some(operation))
+            .context("Runtime status 响应无效或协议不匹配；拒绝查询 legacy Bot 端口")?;
+        let data = envelope.get("data").cloned().with_context(|| {
+            format!("{what} 的 Runtime envelope 缺少 data（退出码 {code}）。\nstderr: {stderr}")
+        })?;
+        let raw = serde_json::to_string_pretty(&data)?;
+        return Ok((data, raw, code));
+    }
     if let Ok(out) = run_output(&runtime_cmd, &ctx.root) {
         let code = out.status.code().unwrap_or(1);
         let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
@@ -250,5 +263,12 @@ mod tests {
                 "stella"
             ]
         );
+    }
+
+    #[test]
+    fn runtime_response_parser_rejects_non_json() {
+        assert!(parse_json_output("not json").is_none());
+        let value = parse_json_output(r#"{"operation":"stop","ok":true}"#).unwrap();
+        assert_eq!(value["operation"], "stop");
     }
 }

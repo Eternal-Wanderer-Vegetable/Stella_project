@@ -11,10 +11,9 @@ Desktop 同构（方案 §4 D1/D5、§11）。
 - 移除/替换的部分：
   - 页面级 invoke（用量/插件/人格渲染层）→ 由 dashboard 接管；
   - `list_models`（Rust 直连 /v1/models）→ 改走 `/api/v1/providers/models`；
-  - 新增 `desktop_session_secret` 命令：壳启动时生成 ≥48 字符随机秘钥，
-    `start_bot` 时注入子进程环境变量 `STELLA_DESKTOP_SESSION_SECRET`；
-    dashboard 在 tauri 源下经 invoke 取秘钥换发正式 JWT（回环 + 恒定时间
-    比较，webui/routers 的 desktop-session 端点）。
+  - `desktop_session_secret` 提供 ≥48 字符随机会话 capability；仅 `start_bot`
+    将 `STELLA_DESKTOP_SESSION_SECRET` 传给 Corona。Corona 不把它写入配置 revision，
+    也不会传给 Nucleus；dashboard 可在 tauri 源下经 invoke 换发正式 JWT。
 - 关窗语义：CloseRequested → 安全关闭遮罩（dashboard 经 `close-requested`
   事件自绘）→ stop → destroy。stop **不带**「Bot 是否由本 GUI 进程启动」的
   门卫——上次会话留下的 Bot 同样会被停止（否则关窗留孤儿占住服务端口，

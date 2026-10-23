@@ -29,18 +29,45 @@ import subprocess
 import sys
 from pathlib import Path
 
-from config import PROJECT_ROOT, STELLA_HOME, STELLA_HOME_SOURCE, home
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from .control_client import RUNTIME_COMPONENTS, RUNTIME_OPERATIONS
 
-from . import checks, env_merge, env_schema, migrate, probe, process, report, runtime
-from .init_wizard import (
-    load_answers,
-    managed_keys,
-    print_next_steps,
-    render_env,
-    run_interactive,
-    save_answers,
-    validate_answers,
-)
+
+def _load_legacy_modules() -> None:
+    """Load business settings only for commands outside the pure control path."""
+    global STELLA_HOME, STELLA_HOME_SOURCE, home
+    global checks, env_merge, env_schema, migrate, probe, process, report, runtime
+    global load_answers, managed_keys, print_next_steps, render_env, run_interactive
+    global save_answers, validate_answers
+
+    from config import (
+        PROJECT_ROOT,
+        STELLA_HOME,
+        STELLA_HOME_SOURCE,
+        home,
+    )
+
+    from . import (
+        checks,
+        env_merge,
+        env_schema,
+        migrate,
+        probe,
+        process,
+        report,
+        runtime,
+    )
+    from .init_wizard import (
+        load_answers,
+        managed_keys,
+        print_next_steps,
+        render_env,
+        run_interactive,
+        save_answers,
+        validate_answers,
+    )
+
+    globals()["PROJECT_ROOT"] = PROJECT_ROOT
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -135,28 +162,22 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_start(args: argparse.Namespace) -> int:
-    optional = runtime.prepare_optional_runtime()
-    optional_message = str(optional.get("message") or "").strip()
-    if optional_message and optional.get("source") != "unavailable":
-        print(("" if optional.get("ok") else "[警告] ") + optional_message)
-    snapshot = probe.collect()
-    results = checks.run_all(snapshot)
-    if report.has_blocking(results):
-        if not args.force:
-            print(report.to_terminal(results))
-            print("存在阻塞性问题。确认原因后可用 python -m deploy start --force 忽略。")
-            return 1
-        print("[跳过] 发现阻塞性问题，但 --force 已指定，继续启动。")
-    if args.detach:
-        return process.start_detached()
-    bot_path = PROJECT_ROOT / "bot.py"
-    if not bot_path.exists():
-        print(f"缺少入口 {bot_path}，无法启动。")
-        return 1
-    if not process.preflight_for_foreground_start():
-        return 1
-    print(f"启动 Stella：{sys.executable} bot.py")
-    return subprocess.call([sys.executable, str(bot_path)])
+    from . import control_client
+
+    def report_ready(data: dict) -> None:
+        phase = (data.get("core") or {}).get("phase", "unknown")
+        print(f"Corona 控制面已就绪；Nucleus 阶段：{phase}", flush=True)
+
+    result = control_client.start(
+        detach=args.detach,
+        force=args.force,
+        on_ready=None if args.detach else report_ready,
+    )
+    if not result.get("ok"):
+        error = result.get("error") or {}
+        print(f"启动失败：{error.get('message', 'Corona 启动失败。')}")
+        return int(result.get("exit_code", 1))
+    return int(result.get("exit_code", 0))
 
 
 def _fmt_secs(value: float | None) -> str:
@@ -240,54 +261,42 @@ def _print_gravitas_status(gravitas: dict | None) -> None:
 
 
 def _cmd_status(args: argparse.Namespace) -> int:
-    data = process.status()
+    from . import control_client
+
+    data = control_client.status()
     if args.json:
         print(json.dumps(data, ensure_ascii=False, indent=2))
     else:
-        if data["alive"]:
-            pid_txt = f"（PID {data['pid']}）" if data.get("pid") else ""
-            print(f"Stella 正在运行{pid_txt}。")
-            if not data.get("api_reachable"):
-                # PID 文件说活着但接口不可达：仍在启动中，或状态接口被关闭
-                print("  状态接口不可达 —— 可能仍在启动，或 STELLA_STATUS_API_ENABLED=false。")
-            elif not data.get("pid_file_present"):
-                # 接口可达但无 PID 文件：不是 deploy start --detach 启动的
-                print("  未找到 PID 文件 —— 该进程可能是手工启动的（deploy stop 无法停止它）。")
-            link = data.get("link")
-            if link:
-                if not link.get("enabled"):
-                    print("  链路监测已关闭（LINK_MONITOR_ENABLED=false）。")
-                elif link.get("connected"):
-                    print(
-                        f"  链路：{'健康' if link.get('healthy') else '异常'}"
-                        f"（QQ {link.get('bot_self_id') or '?'}，"
-                        f"已连接 {_fmt_secs(link.get('connected_seconds'))}，"
-                        f"最近事件 {_fmt_secs(link.get('last_event_seconds_ago'))}前）"
-                    )
-                else:
-                    # 进程活着但协议端没连上来：最常见的是 NapCat 未启动或未登录
-                    print("  链路：协议端未连接 —— 检查 NapCat 是否运行并已登录。")
-            sched = data.get("scheduler") or {}
-            for name, s in sched.items():
-                if s.get("waiting"):
-                    print(f"  资源 {name}：排队 {s['waiting']} 个"
-                          f"（持有者 {s.get('holder') or '—'}）")
-            _print_usage(data.get("usage"))
-            _print_gravitas_status(data.get("gravitas"))
+        if data.get("controller_reachable"):
+            pid_txt = f"（Corona PID {data['pid']}）" if data.get("pid") else ""
+            core = data.get("core") or {}
+            phase = core.get("phase", "unknown")
+            print(f"Corona 管理面在线{pid_txt}；Nucleus 阶段：{phase}。")
+            if data.get("public_base_url"):
+                print(f"  管理面地址：{data['public_base_url']}")
+            if not data.get("webui_enabled"):
+                print("  浏览器管理面已关闭；本机 deploy 控制仍可用。")
+            if core.get("error"):
+                print(f"  Nucleus 诊断：{core['error']}")
+        elif data.get("controller_failed"):
+            error = data.get("error") or {}
+            print(f"Corona 控制器状态不可用：{error.get('message', '未知错误')}")
         else:
-            print("Stella 未在运行。")
-        if data["recent_log"]:
-            recent = data["recent_log"]
-            print(f"最近日志 [{recent.get('level', '?')}] {recent.get('message', '')[:120]}")
-        print(
-            "提示：link/scheduler/usage 来自 Bot 进程内的状态接口，接口不可达时无法显示；"
-            "能力清单见 python -m deploy capabilities。"
-        )
-    return 0
+            print("Corona 与 Nucleus 均未运行。")
+    return 0 if data.get("ok") else 1
 
 
 def _cmd_stop(args: argparse.Namespace) -> int:
-    return 0 if process.stop() else 1
+    del args
+    from . import control_client
+
+    result = control_client.stop()
+    if not result.get("ok"):
+        error = result.get("error") or {}
+        print(f"停止失败：{error.get('message', 'Corona 停止未获确认。')}")
+        return int(result.get("exit_code", 1))
+    print("Corona 与受管 Nucleus 已停止。")
+    return 0
 
 
 def _cmd_config_schema(args: argparse.Namespace) -> int:
@@ -738,6 +747,20 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
 
 def _cmd_runtime(args: argparse.Namespace) -> int:
     """Execute one Runtime operation and print the shared JSON envelope."""
+    if args.component == "stella" and args.operation in {"start", "stop", "restart", "status"}:
+        from . import control_client
+
+        result = control_client.runtime_operation(
+            args.operation,
+            args.component,
+            {
+                key: value
+                for key, value in (("tail", args.tail), ("force", args.force))
+                if value is not None
+            },
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return int(result.get("exit_code", 0 if result.get("ok") else 1))
     try:
         result = runtime.execute_operation(
             args.operation,
@@ -790,16 +813,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_init.set_defaults(func=_cmd_init)
 
-    p_start = sub.add_parser("start", help="启动（先跑 doctor）")
-    p_start.add_argument("--force", action="store_true", help="忽略阻塞问题继续启动")
-    p_start.add_argument("--detach", action="store_true", help="后台启动并写 PID 文件")
+    p_start = sub.add_parser("start", help="启动 Corona 控制面与受管 Nucleus")
+    p_start.add_argument(
+        "--force",
+        action="store_true",
+        help="兼容旧命令；不会绕过 Corona ownership 或协议校验",
+    )
+    p_start.add_argument("--detach", action="store_true", help="后台启动 Corona 并返回")
     p_start.set_defaults(func=_cmd_start)
 
     p_status = sub.add_parser("status", help="查看进程状态")
     p_status.add_argument("--json", action="store_true", help="输出 JSON（供 GUI 使用）")
     p_status.set_defaults(func=_cmd_status)
 
-    p_stop = sub.add_parser("stop", help="优雅停止（等后台任务收尾后强杀）")
+    p_stop = sub.add_parser("stop", help="停止本实例 Corona 与整棵受管进程树")
     p_stop.set_defaults(func=_cmd_stop)
 
     p_schema = sub.add_parser("config-schema", help="输出 settings.py 的配置 schema（供 GUI 使用）")
@@ -1000,13 +1027,13 @@ def main(argv: list[str] | None = None) -> int:
     p_runtime = sub.add_parser("runtime", help="查看/校验 Runtime Contract")
     p_runtime.add_argument(
         "operation",
-        choices=runtime.OPERATIONS,
-        help="Runtime 操作（当前只执行 status，其余用于契约校验）",
+        choices=RUNTIME_OPERATIONS,
+        help="Runtime 操作（stella start/stop/restart/status 由 Corona 控制面拥有）",
     )
     p_runtime.add_argument(
         "--component",
         default="stella",
-        choices=runtime.COMPONENTS,
+        choices=RUNTIME_COMPONENTS,
         help="组件名",
     )
     p_runtime.add_argument(
@@ -1029,6 +1056,13 @@ def main(argv: list[str] | None = None) -> int:
     p_paths.set_defaults(func=_cmd_paths)
 
     args = parser.parse_args(argv)
+    pure_control = args.command in {"start", "status", "stop"} or (
+        args.command == "runtime"
+        and args.component == "stella"
+        and args.operation in {"start", "stop", "restart", "status"}
+    )
+    if not pure_control:
+        _load_legacy_modules()
     return args.func(args)
 
 

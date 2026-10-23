@@ -6,20 +6,17 @@ use tauri::Emitter;
 
 static CLOSE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
-/// 桌面壳持有的会话秘钥：start_bot 时注入子进程环境变量，
-/// WebUI 侧经 `POST /api/v1/auth/desktop-session`（回环 + 秘钥头）免登录。
+/// Session capability for the desktop WebView; it is passed to Corona only.
 pub fn desktop_session_secret() -> &'static str {
     use std::sync::OnceLock;
     static SECRET: OnceLock<String> = OnceLock::new();
     SECRET.get_or_init(|| {
         use rand::Rng;
-        let secret: String = rand::thread_rng()
+        rand::thread_rng()
             .sample_iter(rand::distributions::Alphanumeric)
             .take(48)
             .map(char::from)
-            .collect();
-        std::env::set_var("STELLA_DESKTOP_SESSION_SECRET", &secret);
-        secret
+            .collect()
     })
 }
 
@@ -36,11 +33,8 @@ pub fn run() {
                 let _ = window.emit("close-requested", ());
                 let window = window.clone();
                 tauri::async_runtime::spawn(async move {
-                    // 停止失败也照常关窗：stop_bot 的失败分支几乎总是「Bot 本
-                    // 就不归本安装管」（别的安装 / 手工启动，deploy stop 的
-                    // ownership 校验拒绝），扣住窗口只会让用户以为关不掉；
-                    // 本安装的 Bot 走哨兵→信号→硬杀四级链，真停不下来属异常，
-                    // 细节留在 close-failed 事件与日志里。
+                    // 停止失败仍照常关窗；控制器身份/协议异常会通过 close-failed
+                    // 事件报告，窗口关闭不会再尝试按端口或 PID 猜测并杀进程。
                     if let Err(e) = commands::stop_bot().await {
                         eprintln!("关闭时停止 Bot 失败（照常关窗）：{e}");
                         let _ = window.emit("close-failed", e);

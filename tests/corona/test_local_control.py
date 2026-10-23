@@ -24,6 +24,7 @@ from corona.local_control import (
     LocalControlClient,
     local_control_record_path,
 )
+from deploy import control_client
 from stella_bootstrap.config import build_config_revision, write_revision
 from webui.security import reset_auth_runtime
 
@@ -118,6 +119,9 @@ def test_local_control_api_remains_online_when_browser_webui_is_disabled(tmp_pat
         assert status.status_code == 200
         assert status.json()["webui_enabled"] is False
         assert status.json()["core"]["phase"] == "failed"
+        assert status.json()["controller_pid"] == os.getpid()
+        assert status.json()["public_host"] == "127.0.0.1"
+        assert status.json()["public_port"] == bootstrap.public_port
         assert record.capability not in status.text
 
         with TestClient(app.state.local_control_app, client=("192.0.2.1", 123)) as remote:
@@ -142,7 +146,9 @@ def test_local_control_api_remains_online_when_browser_webui_is_disabled(tmp_pat
         assert supervisor.stopped
 
 
-def test_published_local_control_record_drives_the_no_redirect_client(tmp_path: Path) -> None:
+def test_published_local_control_record_drives_the_no_redirect_client(
+    tmp_path: Path, monkeypatch
+) -> None:
     bootstrap = _bootstrap(tmp_path)
     supervisor = _StubSupervisor()
     app = create_corona_app(bootstrap, supervisor)
@@ -166,6 +172,24 @@ def test_published_local_control_record_drives_the_no_redirect_client(tmp_path: 
         assert server.started
         client = LocalControlClient.from_record_file(record_path)
         assert client.status()["webui_enabled"] is False
+        env = {
+            "STELLA_HOME": str(bootstrap.stella_home),
+            "STELLA_INSTANCE_ID": bootstrap.instance_id,
+            "PORT": "19999",
+        }
+        live_status = control_client.status(environ=env)
+        assert live_status["controller_reachable"] is True
+        assert live_status["public_base_url"] == f"http://127.0.0.1:{bootstrap.public_port}"
+        monkeypatch.setattr(
+            control_client,
+            "_spawn_corona",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("existing Corona must be reused")
+            ),
+        )
+        existing = control_client.start(environ=env)
+        assert existing["ok"] is True
+        assert existing["phase"] == "already_running"
         stopped = client.stop("deploy-client-stop-0001")
         assert stopped["operation_id"] == "deploy-client-stop-0001"
         deadline = time.monotonic() + 1
