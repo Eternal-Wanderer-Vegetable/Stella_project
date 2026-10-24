@@ -331,8 +331,13 @@ def test_probe_render_recognizes_offline_browsers(tmp_path, monkeypatch):
     不可见，所以 _probe_render 必须单独认 offline/playwright-browsers 目录。
     """
     pytest.importorskip("playwright")
+    revision = probe._playwright_chromium_revision()
+    assert revision is not None
     installed = (
-        tmp_path / "offline" / "playwright-browsers" / "chromium_headless_shell-1187"
+        tmp_path
+        / "offline"
+        / "playwright-browsers"
+        / f"chromium_headless_shell-{revision}"
     )
     installed.mkdir(parents=True)
     (installed / "INSTALLATION_COMPLETE").write_text("", encoding="utf-8")
