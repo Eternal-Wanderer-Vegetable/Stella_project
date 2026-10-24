@@ -75,35 +75,40 @@ def mount_nucleus_business_routes(application: Any) -> None:
 
 
 def _clone_route(route: APIRoute, app: FastAPI, methods: set[str]) -> APIRoute:
-    return APIRoute(
-        path=route.path,
-        endpoint=route.endpoint,
-        response_model=route.response_model,
-        status_code=route.status_code,
-        tags=route.tags,
-        dependencies=route.dependencies,
-        summary=route.summary,
-        description=route.description,
-        response_description=route.response_description,
-        responses=route.responses,
-        deprecated=route.deprecated,
-        name=route.name,
-        methods=methods,
-        operation_id=route.operation_id,
-        response_model_include=route.response_model_include,
-        response_model_exclude=route.response_model_exclude,
-        response_model_by_alias=route.response_model_by_alias,
-        response_model_exclude_unset=route.response_model_exclude_unset,
-        response_model_exclude_defaults=route.response_model_exclude_defaults,
-        response_model_exclude_none=route.response_model_exclude_none,
-        include_in_schema=route.include_in_schema,
-        response_class=route.response_class,
-        dependency_overrides_provider=app,
-        callbacks=route.callbacks,
-        openapi_extra=route.openapi_extra,
-        generate_unique_id_function=route.generate_unique_id_function,
-        strict_content_type=route.strict_content_type,
-    )
+    route_options = {
+        "path": route.path,
+        "endpoint": route.endpoint,
+        "response_model": route.response_model,
+        "status_code": route.status_code,
+        "tags": route.tags,
+        "dependencies": route.dependencies,
+        "summary": route.summary,
+        "description": route.description,
+        "response_description": route.response_description,
+        "responses": route.responses,
+        "deprecated": route.deprecated,
+        "name": route.name,
+        "methods": methods,
+        "operation_id": route.operation_id,
+        "response_model_include": route.response_model_include,
+        "response_model_exclude": route.response_model_exclude,
+        "response_model_by_alias": route.response_model_by_alias,
+        "response_model_exclude_unset": route.response_model_exclude_unset,
+        "response_model_exclude_defaults": route.response_model_exclude_defaults,
+        "response_model_exclude_none": route.response_model_exclude_none,
+        "include_in_schema": route.include_in_schema,
+        "response_class": route.response_class,
+        "dependency_overrides_provider": app,
+        "callbacks": route.callbacks,
+        "openapi_extra": route.openapi_extra,
+        "generate_unique_id_function": route.generate_unique_id_function,
+    }
+    # FastAPI added this option after the versions currently supported by
+    # NoneBot's FastAPI extra. Preserve it when both source routes and the
+    # installed APIRoute implementation expose it.
+    if hasattr(route, "strict_content_type"):
+        route_options["strict_content_type"] = route.strict_content_type
+    return APIRoute(**route_options)
 
 
 def _private_group_bindings_router(store: GroupBindingsStore) -> APIRouter:

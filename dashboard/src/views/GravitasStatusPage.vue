@@ -23,7 +23,7 @@ async function refresh(): Promise<void> {
   loading.value = true;
   loadError.value = '';
   try {
-    const payload = await unwrap<StatusPayload>(api.get('/status'));
+    const payload = await unwrap<StatusPayload>(api.get('/gravitas/status'));
     status.value = payload.gravitas ?? null;
   } catch (error) {
     loadError.value = (error as Error).message;

@@ -1072,6 +1072,51 @@
           "report": "docs/reports/2026-10-24-pr120-windows-validation.md",
           "command": "PR #120 follow-up: align version 6.3.0, repair GitNexus process attribution, build/install the real Windows NSIS EXE in Windows Sandbox, then build and run the Docker image; defer QQ acceptance until after merge to main",
           "result": "Version sources are 6.3.0; DB schema 19, Rust API 3, and legacy default remain unchanged. GitNexus 1.6.12 forced full reindex: 3,230 Method nodes / 0 empty IDs; both target __call__ symbols now have empty process lists. Final all-scope: 18 files/35 symbols/0 processes/LOW. Against baseline 2d1eb736: 35 files/73 symbols/12 processes/HIGH; compare main: 292 files/1,945 symbols/165 affected processes/CRITICAL cumulative, listing capped. Windows Sandbox NSIS install harness passed for oneclick-python online payload; EXE is unsigned and GUI first boot, catalog/bootstrap, upgrade, and rollback remain open. Docker image built and ran with a dedicated named volume; container health is healthy, JSON-aware healthcheck rejects SPA HTML false positives, and status JSON reports 6.3.0. No QQ adapter, token, or live model was connected. Clean VM lifecycle, Compose deployment, model/WebChat, and post-merge QQ acceptance remain open; CORONA-IMPL stays in_progress / NOT READY. Postcommit forced GitNexus rebuild at 4422804 is up-to-date (114608 nodes/288477 edges/796 flows; 3230 Methods/0 empty IDs); direct contexts for both affected __call__ methods have no process memberships. Clean indexed all-scope reports no changes; fresh compare main is 294/1945/165 CRITICAL with capped listing. Latest hosted run 40051788830 passed 12/12 jobs; Docker Publish 40051788823 and Dashboard CI 40051788829 passed."
+        },
+        {
+          "report": "progress.md#2026-10-24--local-corona--nucleus-activation-and-health-route-fix",
+          "command": "Local managed-runtime activation on main@3825f99; deploy status; HTTP health/status probes; tests/corona/test_corona_app.py; Ruff; py_compile; git diff --check",
+          "result": "Stopped the verified legacy PID and activated Corona → corona._exec_tree → Nucleus. Final deploy status is online/ready; /_corona/v1/health returns JSON 200 with core_phase=ready and the expected instance ID; /stella/status returns 200, version 6.3.0, PID 36360. Fixed static catch-all ordering after the health route. Targeted tests: 4 passed/1 warning; Ruff, py_compile and diff check passed. No live QQ/OneBot, WebChat/model, clean-VM, Compose or six-product acceptance was run; feature remains in_progress / NOT READY."
+        },
+        {
+          "report": "progress.md#2026-10-24--corona-nucleus-console-flash-fix",
+          "command": "GitNexus upstream impact + source trace; Windows CREATE_NO_WINDOW regression tests; managed runtime restart and health probes",
+          "result": "Added CREATE_NO_WINDOW to the Windows managed wrapper and Nucleus child, explicitly routing child stdin/stdout/stderr so process logging remains intact. Regression evidence: tests/corona/test_supervisor_processes.py and tests/windows/test_process_tree.py: 15 passed / 3 skipped; changed-file Ruff passed. GitNexus upstream spawn impact is lower-bound CRITICAL (74 impacted / 57 direct with one unresolved caller); repeated detect-changes all/compare report 9 files / 9 symbols / CRITICAL, with affected-process counts varying 776–790 due generic spawn/Markdown Section fan-out and 3200/3400 graph entry candidates omitted. Restarted only managed instance root-aea0d0133a3c01e2 after verifying port ownership; deploy status reports Corona alive, API reachable, Nucleus ready on attempt 1; /_corona/v1/health is JSON 200. Descendant conhost processes have no main window handle/title. Post-fix manual page-switch visual acceptance remains unverified. Separate startup warning APIRoute.strict_content_type remains outside this fix; CORONA-IMPL remains in_progress / NOT READY."
+        },
+        {
+          "report": "progress.md#2026-10-24--corona-webui-navigation-console-flash-follow-up",
+          "command": "GitNexus file impact + source trace; Windows ACL/config pytest; Ruff; managed deploy status; authorized 45-second process/window capture during a WebUI page switch",
+          "result": "The earlier CREATE_NO_WINDOW process-boundary fix did not address the remaining flash. The capture tied repeated whoami.exe launches to Corona PID 41532. Source tracing found stella_bootstrap/config.py::_current_windows_sid spawning whoami.exe for each Windows ACL check during config revision reads. Replaced it with a cached pywin32 process-token SID lookup. GitNexus file-level upstream impact before editing was CRITICAL (236 impacted, 9 direct imports); source import/call-site audit supplemented the graph. Focused ACL/config tests: 9 passed/2 skipped; changed-file Ruff passed. Restarted the same managed instance: Corona PID 38740, Nucleus PID 39376, API reachable, core ready on attempt 1. The post-fix 45-second capture during the user's page switch recorded no new whoami.exe, OpenConsole.exe or Windows Terminal window; the user confirmed no console flashes appeared. Other release and live-platform acceptance remains open; CORONA-IMPL stays in_progress/NOT READY. Final GitNexus detect-changes all and compare main each reported 11 files/11 symbols/783 affected processes/CRITICAL; the symbol list omits this SID helper and the displayed flow list is capped (773 additional). Retain the pre-edit file impact and source audit; no CRITICAL result is waived. Documentation check passed: 121 files/1312 local links/577 anchors/0 errors; feature JSON and git diff --check passed."
+        },
+        {
+          "report": "progress.md#2026-10-24--providers-page-500-diagnosis-and-source-repair",
+          "command": "FastAPI 0.114.2 reproduction; GitNexus ProxyResponse upstream impact; targeted Nucleus assembly and FastAPI proxy-response regressions",
+          "result": "Reproduced the missing APIRoute.strict_content_type failure in the managed Windows environment and existing route-assembly test, which prevented Nucleus business routes from mounting. Runtime logs showed Nucleus 404s for providers/runtime and providers/models; Corona ProxyResponse missing background then caused FastAPI AttributeError and HTTP 500. Route cloning now conditionally preserves strict_content_type; ProxyResponse exposes and runs background work after upstream close. GitNexus ProxyResponse impact LOW (18 impacted / 2 direct); Nucleus route builder symbols UNKNOWN, supplemented by source/test references. Post-fix regressions: 2 passed / 1 existing warning. Restarted only matching instance root-aea0d0133a3c01e2 through deploy CLI: new Nucleus PID 40276, generation 615ae9ea00614eafbc71f2b03c3f4a9f, API reachable/core ready; startup log reports successful WebUI mount with no failures. Authenticated providers/runtime returned 200 at 15:44:46 and repeatedly at 17:09:57–17:10:17. The user confirmed the provider page error is gone and its data displays normally, and reports other pages now look basically normal. Providers/endpoints, providers/roles, and providers/models were not separately inspected; CORONA-IMPL remains in_progress / NOT READY."
+        },
+        {
+          "report": "progress.md#2026-10-24--welcome-page-bound-group-count-repair",
+          "command": "GitNexus upstream impacts; sanitized STELLA_HOME binding-count probe; Dashboard build/sync; served static asset HTTP checks",
+          "result": "The Corona-owned managed /api/v1/status response has no legacy allowed_group_count; WelcomePage treated it as zero and omitted the metric in its managed status card. Read-only active-data counts found four spaces with bindings, four unique bound QQ groups, and five allowlisted groups; no identifiers were emitted. WelcomePage now counts unique qq_groups from the Nucleus-owned /api/v1/spaces route, uses the result for onboarding step 2, and displays it in managed and legacy layouts; lookup failure remains unknown rather than zero. GitNexus WelcomePage file impact was UNKNOWN / 0 edges with Vue/API references supplemented from source; webui/routers/status.py was LOW (5 impacted / 1 direct); corona/config_api.py was HIGH (115 impacted / 182 processes) and left unchanged. Dashboard vue-tsc/Vite build and static sync passed with bundler warnings; all 48 files match across dashboard/WebUI/desktop, and the served root and Welcome JS return HTTP 200 with /spaces present. No tests were added or run; Computer Use URL safety stopped visual confirmation, so the broader GUI audit remains open. CORONA-IMPL remains in_progress / NOT READY."
+        },
+        {
+          "report": "progress.md#2026-10-24--gravitas-status-route-repair",
+          "command": "GitNexus upstream impacts + source routing audit; pnpm --dir dashboard build; pnpm --dir dashboard sync:webui; Python py_compile; managed deploy stop/start; status and HTTP probes; python scripts/check_docs.py; feature JSON parse; git diff --check; GitNexus detect-changes all/compare",
+          "result": "GravitasStatusPage previously requested the Corona-owned managed /api/v1/status, whose control-plane payload has no Gravitas DTO; the Nucleus bootstrap still injects GravitasRuntime.status_snapshot into its status source. Added authenticated Nucleus GET /api/v1/gravitas/status returning only that DTO, registered route ownership and shared WebUI router, changed the Dashboard request, updated OpenAPI and the existing route-matrix contract assertion to 112 Nucleus routes. GitNexus at 3825f99: status_source LOW (8 dependants), webui/app.py LOW (5 direct dependants/180 inferred process hits), corona/routes.py LOW (10 dependants/3 direct); Gravitas page UNKNOWN/0 supplemented by source references; ambiguous webui/routers/status.py HIGH/CRITICAL candidates were avoided. Dashboard typecheck/build and static sync passed with existing bundler warnings; all 48 files match in dashboard/dist, webui/dist, and desktop/dashboard-dist; served root and Gravitas JS/CSS returned HTTP 200 and the chunk references /gravitas/status. Python py_compile and diff check passed; no tests were added or run. Restarted matching instance root-aea0d0133a3c01e2: Corona 11940, Nucleus 46052, generation ca28b90852c94d40966226ef933572c2, ready; health 200 and anonymous endpoint 401. Authenticated page response was not inspected, so browser-rendered data remains unconfirmed and broader feature status stays in_progress/NOT READY. Documentation check passed (121 files/1,312 links/577 anchors/0 errors); feature JSON parsed and diff check passed. GitNexus all and compare-main both reported 21 files/9 indexed symbols/0 affected processes/LOW without partial/truncated output; counts include the pre-existing local changes and Vue references were source-audited."
+        },
+        {
+          "report": "progress.md#2026-10-24--chat-composer-visibility-repair",
+          "command": "GitNexus file upstream impacts + route source audit; pnpm --dir dashboard build; pnpm --dir dashboard sync:webui; asset hash parity; HTTP checks for root and chat assets; docs, JSON, diff, and GitNexus all/compare gates",
+          "result": "The user screenshot showed the chat header and history but no composer. ChatPage viewport height was calculated after v-main top padding and SystemBanner, displacing the footer. The chat route now uses viewport-bounded column flex and ChatPage fills its remaining height. GitNexus FullLayout.vue and ChatPage.vue impacts were UNKNOWN/0 edges; source references confirmed FullLayout is the root layout and /chat dynamically imports ChatPage. Dashboard build/typecheck and sync passed with existing bundler warnings; all 48 assets match across dashboard, webui, and desktop (SHA-256 998D63AD60EC0A4AC798C19BB40EBF3F4B17338971E307A8F3534D40E7E578EC). Served root, entry JS, ChatPage JS, and CSS returned HTTP 200. Docs check passed (121 files/1314 links/577 anchors/0 errors); feature JSON parsed; git diff --check passed. Final refreshed GitNexus detect-changes all and compare-main returned 23 files/16 symbols/790 affected flows/CRITICAL. An earlier indexed run varied at 23/28/0/LOW; repeated runs with --limit 2000 retained the CRITICAL summary while the displayed flow list still showed 780 more. Counts include the whole pre-existing dirty workspace; no risk was waived. No tests were run. Visual confirmation after browser refresh remains pending."
+        },
+        {
+          "report": "progress.md#2026-10-24--welcome-only-status-banner-and-saved-revision-removal",
+          "command": "GitNexus upstream impacts + Vue route source audit; pnpm --dir dashboard build; pnpm --dir dashboard sync:webui; 48-file snapshot parity; served asset HTTP/hash checks; removed-label scan; docs, JSON, diff, and GitNexus all/compare gates",
+          "result": "SystemBanner.vue was mounted unconditionally by FullLayout.vue, causing the control-plane status banner to appear on every page. It is now mounted only on route welcome. Removed the saved revision row from SystemBanner and the Welcome managed status card, plus unused Chinese/English locale entries; applied revision remains. Pre-edit GitNexus: SystemBanner.vue HIGH (166 impacted nodes / 181 inferred process hits), FullLayout.vue LOW (11 nodes / 1 direct / 0 processes), WelcomePage.vue UNKNOWN/0. Source audit found only the single FullLayout import/mount and confirmed the Welcome route/template references. Dashboard typecheck/build and asset sync passed with existing bundler warnings; all 48 static files match across dashboard/webui/desktop (SHA-256 dc507725e974c6cf6a08503eddd57d61e1c5812b55c765171c41dea390a19caa). Served index, main, WelcomePage, and ChatPage files returned HTTP 200 and hash-match local copies; removed saved-revision labels are absent from generated JavaScript. Across refreshed GitNexus all and compare-main runs, results varied from 14 to 27 symbols and 0 to 791 affected processes (LOW to CRITICAL); the latest post-index run returned 26 files / 15 symbols / 791 processes / CRITICAL, following a prior pre-refresh result of 23 / 16 / 790 / CRITICAL. The refreshed graph still omits 3,202/3,402 entry candidates, 952 callees, 43 walks, 23 depth-capped traces, and 38 large files; retain those limits and do not claim complete graph coverage. Docs check passed (121 files / 1,316 links / 577 anchors / 0 errors); JSON and diff checks passed. No tests were run. Browser visual acceptance after refresh remains pending. CORONA-IMPL remains in_progress / NOT READY."
+        },
+        {
+          "report": "progress.md#2026-10-24--onebot-generated-reply-runtime-environment-repair",
+          "command": "Read-only outbound trace query; active interpreter/package probes; deploy stop and Conda-backed deploy start --detach; deploy runtime status; managed-tree executable paths; reverse WebSocket log classification; HTTP GET",
+          "result": "Trace: turn.generate and send.prepare succeeded; send.segment failed target_codec_rejected; reply.no_delivery was no_segment_delivered. The owned Corona/Core tree had been running C:\\Python314\\python.exe, which lacks nonebot_plugin_alconna; the existing Conda Stella interpreter imports pinned Alconna 0.62.1 Target and LiteLLM. Relaunched the same portable STELLA_HOME instance with Conda Python. New Corona PID 23288 and Core PID 21408 use that interpreter; API reachable, Nucleus/core ready, OneBot healthy, WebUI GET 200, and reverse WebSocket connection observed at 21:29:41 Asia/Shanghai. No QQ outgoing test or post-restart delivery is claimed; a user-originated message remains the live acceptance step."
         }
       ]
     },
@@ -1754,6 +1799,93 @@
       ],
       "acceptance": "自检结果已提升至应用级 Pinia 状态，并通过 Dashboard 构建、资源同步和仓库状态检查；浏览器路由往返验收未运行。",
       "branch": "codex/frontend-ui-polish"
+    },
+    {
+      "id": "SETTINGS-DOCTOR-MANAGED-REPORT",
+      "name": "Managed 设置页返回完整环境自检报告",
+      "description": "修复 Corona managed doctor 与 SettingsPage 响应契约不匹配导致的零统计、空列表，并在真实报告中合并 managed 状态检查。",
+      "status": "done",
+      "dependencies": [
+        "SETTINGS-DOCTOR-PERSIST"
+      ],
+      "scope": [
+        "corona/config_api.py",
+        "webui/services/system.py",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "managed /system/doctor 返回 SettingsPage 所需 summary 与 report.items，同时保留 Corona control checks。",
+        "完整 deploy doctor 通过共享 runner 执行；Windows 子进程不弹出控制台。",
+        "managed Stella 进程加载修复后恢复 ready；Ruff、compileall、文档、JSON 与 diff 检查结果记录。",
+        "浏览器验收缺口如实记录，不用 CLI 输出替代登录态页面验收。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus upstream impact + source reference audit",
+          "result": "Corona system_doctor/config_api.py 未命中，UNKNOWN；Python run_doctor 名称解析到 Tauri 同名目标，精确 WebUI target 未命中。SettingsPage 文件 impact CRITICAL（86 nodes / 71 direct / 7 flows / 19 modules），未修改。源码确认 Corona 挂载路由、SettingsPage 请求路径及 legacy WebUI 调用共享 runner。"
+        },
+        {
+          "command": "Conda Python ruff check; compileall; deploy paths; deploy doctor --json",
+          "result": "Ruff 与 compileall 通过。STELLA_HOME 为 E:\\stella\\stella_project\\StellaData。doctor 返回 35 ok / 3 warn / 0 error / 38 total，5 个有结论条目；输出仅记录摘要与检查 id/level。"
+        },
+        {
+          "command": "deploy runtime --component stella restart; deploy runtime --component stella status; GET http://127.0.0.1:8080/",
+          "result": "同一 managed instance root-aea0d0133a3c01e2 restart 成功；Corona PID 46288、Core PID 33120 均使用 Conda Python，API reachable、Nucleus ready、OneBot healthy；WebUI root HTTP 200。未运行测试。"
+        }
+      ],
+      "acceptance": "响应契约修复并已部署；登录态浏览器重新运行自检、检查报告项目仍待用户刷新页面验收。",
+      "branch": "main"
+    },
+    {
+      "id": "WELCOME-STATUS-SETTINGS-DOCTOR-STARTUP",
+      "name": "欢迎状态收敛与启动环境自检",
+      "description": "将受管状态摘要整合到欢迎页运行状态卡，统一指标字号；登录后启动时自动运行环境自检并在设置页显示，同时修复本机 doctor 的模型、Chromium 依赖与旧环境变量告警。",
+      "status": "done",
+      "dependencies": [
+        "SETTINGS-DOCTOR-MANAGED-REPORT"
+      ],
+      "scope": [
+        "dashboard/src/components/SystemBanner.vue",
+        "dashboard/src/layouts/FullLayout.vue",
+        "dashboard/src/stores/doctor.ts",
+        "dashboard/src/views/SettingsPage.vue",
+        "dashboard/src/views/WelcomePage.vue",
+        "deploy/checks.py",
+        "deploy/probe.py",
+        "StellaData/.env (user data; backup retained outside Git)",
+        "feature_list.json",
+        "progress.md",
+        "session-handoff.md"
+      ],
+      "done_criteria": [
+        "欢迎页不再在页面顶部单独显示受管状态；控制面与应用状态在运行状态卡中，运行指标统一使用 text-body-1，修订 ID 不展示。",
+        "登录后的 FullLayout 首次挂载自动运行一次 doctor；结果留在当前 Pinia 会话，Settings 显示结果/加载状态并支持手动重跑。",
+        "doctor 使用记忆整合角色实际解析模型；Chromium 探测必须匹配当前 Playwright 的 headless-shell 修订；用户 .env 旧别名只在规范键已有值时清理并备份。",
+        "Dashboard 构建与同步、doctor、Chromium 实际启动、Ruff、compileall、文档与 GitNexus 门禁结果均记录；未运行测试套件。",
+        "服务端资源与 CLI 环境自检验证不替代用户登录态浏览器视觉验收，缺口单独记录。"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus list and upstream impact; router/source reference audit",
+          "result": "索引为 Stella_project@3825f99 / main。Vue SFC、doctor 检查函数及 probe 查询均为 UNKNOWN/未索引；useDoctorStore 为 UNKNOWN/0。源码引用确认 FullLayout 是所有认证页布局、Settings 是自检 store 原调用者、三条检查都注册在 doctor 总检查表。"
+        },
+        {
+          "command": "STELLA_HOME resolve; user .env alias audit and backup; deploy doctor --json",
+          "result": "STELLA_HOME=E:\\stella\\stella_project\\StellaData。30 个旧端点键均有非空规范键覆盖，0 个重复配置/0 个需要挽救的旧值；已备份原 .env 并只移除旧别名，规范值未改。doctor 汇总 38 ok / 0 warn / 0 error / 38 total。"
+        },
+        {
+          "command": "Conda Python Playwright install and browser launch",
+          "result": "Conda Python 3.12.13 安装 Playwright 1.64.1 和匹配的 chromium_headless_shell 修订 1248；下载 ZIP CRC 验证通过，实际 headless launch 成功，浏览器版本 156.0.8078.4。"
+        },
+        {
+          "command": "Dashboard build/sync; served asset verification; Ruff/compileall/diff check",
+          "result": "vue-tsc + Vite build exit 0，保留已有 mixed-import 与大 chunk 警告；同步到 webui/dist 和 desktop/dashboard-dist。三份构建树 48 文件完全一致，8080 首页与 47 个静态资源均 HTTP 200。Ruff、compileall 和 git diff --check 通过；文档检查 121 files / 1,316 links / 577 anchors / 0 errors。GitNexus all 与 compare/main 均为 34 files / 19 symbols / 0 affected processes / LOW，无 partial/truncated。未运行测试。"
+        }
+      ],
+      "acceptance": "源码和本机 doctor/浏览器依赖已修复并部署静态资源；登录态页面视觉验收仍需用户刷新欢迎页和设置页确认。",
+      "branch": "main"
     }
   ]
 }

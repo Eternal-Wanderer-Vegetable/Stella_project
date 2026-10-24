@@ -16,12 +16,14 @@
   错误让用户手动重启——宁可保持运行，也不能把站点停成失联。
 
 doctor：子进程跑 ``python -m deploy doctor --json``，与 CLI 完全同源，
-避免在 webui 进程里重跑探测逻辑。超时 60s；失败返回错误文本。
+避免在 webui 进程里重跑探测逻辑。超时 120s；失败返回错误文本。
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
 import sys
 
 from webui import security
@@ -46,20 +48,26 @@ def restart() -> dict:
     return {"ok": True, "restart_mode": "self", "successor_pid": spawn.get("pid")}
 
 
-async def run_doctor() -> dict:
+async def run_doctor(*, reframe_embedded_bot_port: bool = True) -> dict:
     """子进程跑 ``python -m deploy doctor --json``，与 CLI 完全同源。
 
     退出码语义：**存在未通过检查项时非零**（deploy 侧的约定）——这不等于
     「doctor 没跑成」。报告 JSON 无论退出码如何都照常打印，所以这里先解析
     stdout 再看退出码；``ok`` 取自报告自身的 summary（error=0 且不 blocking），
-    而不是退出码。解析失败（真异常）才降级为错误文本。
+    而不是退出码。解析失败（真异常）才降级为错误文本。Corona managed 模式
+    传 ``reframe_embedded_bot_port=False``，因为 WebUI 所在的控制面进程不等于
+    承载 OneBot 端口的 Bot 进程。
     """
     import json
 
+    process_options: dict[str, int] = {}
+    if os.name == "nt":
+        process_options["creationflags"] = subprocess.CREATE_NO_WINDOW
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "deploy", "doctor", "--json",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        **process_options,
     )
     try:
         out, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
@@ -75,7 +83,8 @@ async def run_doctor() -> dict:
             "error": f"doctor 退出码 {proc.returncode}，且输出不是 JSON",
             "output": text[-4000:],
         }
-    _reframe_port_item(report)
+    if reframe_embedded_bot_port:
+        _reframe_port_item(report)
     summary = report.get("summary", {}) if isinstance(report, dict) else {}
     ok = bool(summary) and not summary.get("blocking", False) and summary.get("error", 0) == 0
     return {"ok": ok, "report": report, "summary": summary, "exit_code": proc.returncode}

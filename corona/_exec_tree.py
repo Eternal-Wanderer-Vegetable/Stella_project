@@ -43,7 +43,14 @@ def main() -> int:
         # controller's Job Object, so launch the managed command as its child
         # and keep the wrapper alive until that child exits. The Job Object
         # then owns both processes and every descendant.
-        child = subprocess.Popen(command, env=os.environ)
+        child = subprocess.Popen(
+            command,
+            env=os.environ,
+            stdin=subprocess.DEVNULL,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
         return child.wait()
     executable = command[0]
     os.execvpe(executable, command, os.environ)

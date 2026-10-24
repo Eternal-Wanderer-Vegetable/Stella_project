@@ -123,13 +123,6 @@ def create_corona_app(
 
         install_business_proxy(app, supervisor)
 
-        if bootstrap.serve_dist:
-            from webui.static import register_static_from_directory
-
-            register_static_from_directory(
-                app, bootstrap.project_root / "webui" / "dist"
-            )
-
     @app.get("/_corona/v1/health")
     async def corona_health(request: Request):
         _require_loopback(request)
@@ -144,6 +137,14 @@ def create_corona_app(
                 "webui_enabled": bootstrap.webui_enabled,
             }
         )
+
+    # The SPA catch-all must be registered after every control-plane route.
+    # Otherwise requests such as /_corona/v1/health return index.html and can
+    # be mistaken for a healthy controller by callers that only check HTTP 200.
+    if bootstrap.webui_enabled and bootstrap.serve_dist:
+        from webui.static import register_static_from_directory
+
+        register_static_from_directory(app, bootstrap.project_root / "webui" / "dist")
 
     @app.exception_handler(ApiError)
     async def api_error_handler(_request: Request, exc: ApiError):

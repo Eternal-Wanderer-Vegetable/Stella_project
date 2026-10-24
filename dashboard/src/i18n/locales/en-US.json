@@ -63,7 +63,6 @@
       "groups": "Bound groups",
       "tokensToday": "Tokens today",
       "corePhase": "Core phase",
-      "savedRevision": "Saved revision",
       "appliedRevision": "Applied revision",
       "go": "Open"
     },
@@ -115,7 +114,6 @@
       "control": "Control plane",
       "connected": "Online",
       "reconnecting": "Connection interrupted; reconnecting",
-      "saved": "Saved",
       "applied": "Applied",
       "core": "Core",
       "operation": "Configuration operation",

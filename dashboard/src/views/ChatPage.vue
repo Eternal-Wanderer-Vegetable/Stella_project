@@ -172,8 +172,8 @@ onMounted(loadHistory);
 </script>
 
 <template>
-  <v-layout class="chat-layout">
-    <v-main class="chat-main">
+  <div class="chat-layout">
+    <div class="chat-main">
       <v-alert v-if="cacheStale" type="warning" variant="tonal" density="compact" class="mx-4 mt-3">
         当前聊天记录可能来自旧核心缓存；失败的消息不会自动重试。
         <v-btn size="small" variant="text" :disabled="busy" @click="loadHistory">刷新记录</v-btn>
@@ -206,7 +206,7 @@ onMounted(loadHistory);
           </div>
         </div>
       </div>
-      <div class="pa-4">
+      <div class="pa-4 chat-composer">
         <div class="d-flex ga-2">
           <v-text-field
             v-model="input"
@@ -220,7 +220,7 @@ onMounted(loadHistory);
           <v-btn icon="mdi-delete-outline" variant="text" @click="reset" />
         </div>
       </div>
-    </v-main>
+    </div>
     <v-dialog
       :model-value="webChatSettingsDialog"
       max-width="760"
@@ -261,20 +261,29 @@ onMounted(loadHistory);
         </v-card-actions>
       </v-card>
     </v-dialog>
-  </v-layout>
+  </div>
 </template>
 
 <style scoped>
-.chat-layout { height: calc(100vh - 64px); }
-.chat-main {
-  height: 100%;
+.chat-layout {
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  overflow: hidden;
 }
-.chat-header { flex: 0 0 auto; }
+.chat-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.chat-header,
+.chat-composer { flex: 0 0 auto; }
 .chat-scroll {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
 }
 .bubble {
