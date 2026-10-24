@@ -28,6 +28,7 @@ Scope: Run the PR #120 Python, Windows-native, Rust/Tauri, and Dashboard checks 
 - Windows Rust: CLI `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, CLI tests (**22 passed**), runtime-manager tests (**9 passed**), and Tauri desktop tests (**25 passed**). The release CLI build succeeded; `stellacli.exe --version` returned `6.2.0` and `--help` worked.
 - The desktop-wide `cargo fmt --all --check` still fails on existing formatting differences across `commands.rs`, `python.rs`, and `main.rs`. These unrelated lines were not mass-formatted; the new test import itself follows rustfmt layout.
 - Dashboard Vitest (**110 passed**), production build, and `sync:webui` passed; Dashboard, WebUI, and Tauri static assets match. Docker Compose static configuration validation passed; no container was started and no application image build completed.
+- Hosted validation on code/test head `f1cc1fd`: CI run `40044987734` passed **12/12 jobs**, including Python 3.10/3.11/3.12 and Windows native reliability matrix. Docker Publish run `40044987747` and Dashboard CI run `40044987735` passed.
 
 ## GitNexus Change Gates
 

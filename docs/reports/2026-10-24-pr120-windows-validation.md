@@ -28,6 +28,7 @@
 - Windows Rust：CLI `cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、CLI tests **22 passed**、runtime-manager tests **9 passed**、Tauri desktop tests **25 passed**。Release CLI 构建成功；`stellacli.exe --version` 返回 `6.2.0`，`--help` 可用。
 - `desktop/src-tauri` 全包 `cargo fmt --all --check` 仍失败，列出多个既存 `commands.rs`、`python.rs`、`main.rs` 格式差异；本轮没有批量格式化这些无关代码，新增测试导入自身已按 rustfmt 排列。
 - Dashboard：Vitest **110 passed**，production build 与 `sync:webui` 成功；Dashboard / WebUI / Tauri 静态产物一致。Docker Compose 静态配置校验通过，没有启动容器或完成应用镜像构建。
+- Windows 修复代码/测试 head `f1cc1fd` 的 Hosted CI run `40044987734` **12/12 jobs passed**，含 Python 3.10/3.11/3.12 与 Windows native reliability matrix；Docker Publish `40044987747`、Dashboard CI `40044987735` 均通过。
 
 ## GitNexus 变更门禁
 
