@@ -34,14 +34,14 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 > 注：选择全本地部署运行的模式时，数据不出网是彻底的。需要联网的工具（查天气、查番剧）由插件自己发送请求和返回实际的数据，而判断该不该用工具、把结果压缩成摘要、把插件卡片渲染成图片，全部在本地完成。
 
-## 6.3.0 开发预览（PR #120）
+## 6.3.0 发布说明
 
-- 本开发分支版本号为 6.3.0，新增 Corona / Nucleus 双进程运行与监管能力；默认入口仍为 legacy，尚未切换默认运行路径。
-- Windows Job Object 进程树托管、私有目录 ACL、HTTP/WebSocket 代理与关闭预算已完成本机回归；安装器 EXE 已在一次性 Windows Sandbox 通过安装器 harness，Docker 镜像构建与隔离容器烟测也已通过。签名、GUI 首启、在线组件下载、升级回滚和 Compose 仍未验收。
-- 记忆 schema 保持 19，Rust backend API 保持 3；本分支没有引入业务数据库 schema 迁移。
-- 干净 VM、完整产品生命周期及 QQ/WebChat/模型验收仍需分别完成；真实 QQ 接入留待 PR 合并至 main 后实测。
+- Stella 6.3.0 加入 Corona / Nucleus 双进程运行与监管能力；legacy 仍是默认入口，尚未切换默认运行路径。
+- Windows Job Object 进程树托管、私有目录 ACL、HTTP/WebSocket 代理与关闭预算已完成本机回归；安装器 EXE 已在一次性 Windows Sandbox 通过安装器 harness，Docker 镜像构建与隔离容器烟测也已通过。
+- 完整发布工作流会构建公开资产并执行资产校验。本机尚未验收 GUI 首启、在线组件下载、升级回滚、Compose 与干净 VM；QQ、WebChat 和真实模型验收也不由构建或容器健康状态替代。
+- 记忆 schema 保持 19，Rust backend API 保持 3；本版本没有引入业务数据库 schema 迁移。
 
-这是未发布的开发预览。升级前备份完整数据根，并先在副本运行 `python -m deploy migrate --dry-run`。完整中英文指南、默认值与验收边界见 [文档索引](docs/README.md)。
+升级前备份完整数据根，并先在副本运行 `python -m deploy migrate --dry-run`。完整中英文指南、默认值与验收边界见 [文档索引](docs/README.md)。
 
 ## 🔌 三种部署模式
 

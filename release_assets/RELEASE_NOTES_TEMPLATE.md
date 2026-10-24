@@ -1,8 +1,8 @@
 # Stella v6.3.0
 
-> Unreleased draft for PR #120. Do not publish until the remaining product acceptance gates are complete. This version builds on the published [v6.2.0](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/tag/v6.2.0) release.
+This release builds on the published [v6.2.0](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/releases/tag/v6.2.0).
 
-Stella 6.3.0 prepares the Corona / Nucleus dual-process runtime and strengthens Windows supervision, packaging, and container health checks. The legacy entrypoint remains the default in this branch.
+Stella 6.3.0 adds the Corona / Nucleus dual-process runtime and strengthens Windows supervision, packaging, and container health checks. The legacy entrypoint remains the default in this release.
 
 ## What's Changed
 
@@ -38,7 +38,7 @@ Stella 6.3.0 prepares the Corona / Nucleus dual-process runtime and strengthens 
 
 4. Rust deployments must continue to use a native wheel built for API 3 / schema 19. The wheel has its own package version and is not versioned with the desktop application.
 
-The application version is 6.3.0 on this development branch; it has not been published. The launcher, runtime-manager, native wheel, and private Dashboard keep independent component versions. The frozen v1 GUI is not part of this release.
+The application version is 6.3.0. The launcher, runtime-manager, native wheel, and private Dashboard keep independent component versions. The frozen v1 GUI is not part of this release.
 
 ## Downloads
 
@@ -55,14 +55,14 @@ Additional assets include Windows/Linux CLI packages, the CPU backend, native wh
 
 ## Known Boundaries
 
-- The release remains NOT READY until the Windows installer, Docker runtime, clean-VM, full product lifecycle, platform, model, upgrade, and rollback gates are recorded.
-- Real QQ/OneBot acceptance is intentionally deferred until PR #120 is merged to `main`.
+- The legacy runtime remains the default. The managed runtime is not ready for a default rollout; clean-VM, full product lifecycle, GUI first-boot, online component download, upgrade/rollback, and real model acceptance remain unverified.
+- Real QQ/OneBot end-to-end acceptance has not been run. The maintainer's post-merge platform check is still pending; this release makes no successful QQ delivery claim.
 - Container health proves liveness only; it does not establish successful QQ delivery or model readiness.
 - `VERSIONED_LAYOUT=0` remains the workflow default.
 
 ## 中文摘要
 
-Stella 6.3.0 开发分支准备 Corona / Nucleus 双进程运行架构，并加强 Windows 监管、安装包和容器健康检查；本分支仍以 legacy 为默认入口，版本尚未发布。
+Stella 6.3.0 加入 Corona / Nucleus 双进程运行架构，并加强 Windows 监管、安装包和容器健康检查；legacy 仍为默认入口。
 
 - 新增 Corona 控制面与受监管的 Nucleus 核心，包括版本化配置、就绪/重启预算，以及进程存活与业务就绪状态区分。
 - 新增按路由目录转发 HTTP/WebSocket 平台流量的代理；Standalone / OneClick 纳入 Corona、Nucleus、bootstrap 和合同包，并加强发布包与 Docker 上下文中的敏感数据过滤。
@@ -70,6 +70,6 @@ Stella 6.3.0 开发分支准备 Corona / Nucleus 双进程运行架构，并加�
 - Docker 健康检查优先探测 Corona 存活端点，并兼容 legacy 状态接口；容器 healthy 不代表 QQ 或模型已就绪。
 - 本分支没有业务数据库 schema 迁移，记忆库保持 schema 19，Rust memory contract 保持 API 3 / schema 19。默认入口尚未切换。
 
-在剩余产品验收完成之前，本草案不可发布。Windows 安装器、Docker 运行、干净 VM、六类产品生命周期、模型与平台验收仍按独立门禁记录；真实 QQ/OneBot 接入留待 PR 合并至 `main` 后实测。
+legacy 仍是默认运行入口。托管运行时尚未达到默认切换条件；干净 VM、完整产品生命周期、GUI 首启、在线组件下载、升级/回退和真实模型验收仍未完成。真实 QQ/OneBot 端到端验收尚未执行，维护者合并后的平台检查仍待完成；本版本不宣称 QQ 消息已成功送达。
 
 **Full Changelog**: https://github.com/Eternal-Wanderer-Vegetable/Stella_project/compare/v6.2.0...v6.3.0
