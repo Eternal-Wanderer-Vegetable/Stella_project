@@ -64,6 +64,26 @@
       "traces_depth_capped": 23,
       "files_over_512kb_skipped": 38,
       "cross_language_property_edges_declined": 339
+    },
+    "post_commit_refresh": {
+      "commit": "44228044c19cc9dd38487b270f93d3863bc7b8c5",
+      "status": "up-to-date",
+      "snapshot": {
+        "nodes": 114608,
+        "edges": 288477,
+        "clusters": 1192,
+        "flows": 796,
+        "method_nodes": 3230,
+        "empty_method_ids": 0
+      },
+      "scope_all": "No changes detected on the clean indexed HEAD.",
+      "compare_main": {
+        "files": 294,
+        "symbols": 1945,
+        "processes": 165,
+        "risk": "critical",
+        "listing_capped": true
+      }
     }
   },
   "windows_installer": {
@@ -141,5 +161,22 @@
   "acceptance": {
     "qq_onebot": "deferred until the user merges PR #120 to main",
     "corona_impl": "in_progress / NOT READY"
+  },
+  "hosted_workflows": {
+    "commit": "44228044c19cc9dd38487b270f93d3863bc7b8c5",
+    "ci": {
+      "run_id": 40051788830,
+      "jobs_passed": 12,
+      "jobs_total": 12,
+      "conclusion": "success"
+    },
+    "docker_publish": {
+      "run_id": 40051788823,
+      "conclusion": "success"
+    },
+    "dashboard_ci": {
+      "run_id": 40051788829,
+      "conclusion": "success"
+    }
   }
 }
