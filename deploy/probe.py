@@ -90,13 +90,29 @@ def _offline_browsers_root() -> Path | None:
     return candidate if candidate.is_dir() else None
 
 
+def _playwright_chromium_revision() -> str | None:
+    """Return the headless-shell revision required by the installed Playwright package."""
+    spec = importlib.util.find_spec("playwright")
+    if spec is None or not spec.origin:
+        return None
+    manifest = Path(spec.origin).parent / "driver" / "package" / "browsers.json"
+    try:
+        browsers = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    for browser in browsers.get("browsers", []):
+        if browser.get("name") == "chromium-headless-shell":
+            revision = browser.get("revision")
+            return str(revision) if revision is not None else None
+    return None
+
+
 def _probe_render() -> dict[str, Any]:
     """渲染能力：pip 包是否装了 + Chromium 内核是否下载过。
 
-    内核用**目录启发式**判断而不是真去启动浏览器：启动一次要 1~2 秒，而 doctor
-    是个一次性 CLI，不值得为一条提示付这个钱。判断错的后果只是提示不准，
-    不影响任何行为（真正的可用性判断在 astrbot_compat/render.py 里，失败即降级）。
-    随包离线内核（offline/playwright-browsers）与默认缓存等价，命中即算已安装。
+    读取 Playwright 自带的浏览器清单，只认可当前包要求的 headless-shell 修订，
+    避免旧 Chromium 目录被误认为可用。这里不启动浏览器，doctor 保持轻量；
+    真正渲染仍由 astrbot_compat/render.py 执行，失败会降级。
     """
     out: dict[str, Any] = {
         "playwright_installed": importlib.util.find_spec("playwright") is not None,
@@ -105,22 +121,25 @@ def _probe_render() -> dict[str, Any]:
     if not out["playwright_installed"]:
         out["chromium_installed"] = False
         return out
-    root = _browsers_root()
-    if root is not None:
-        with contextlib.suppress(OSError):
-            out["chromium_installed"] = root.is_dir() and any(
-                child.is_dir() and child.name.startswith("chromium")
-                for child in root.iterdir()
-            )
-    if not out["chromium_installed"]:
-        offline = _offline_browsers_root()
-        if offline is not None:
-            with contextlib.suppress(OSError):
-                out["chromium_installed"] = any(
-                    child.is_dir()
-                    and child.name.startswith("chromium_headless_shell")
-                    for child in offline.iterdir()
-                )
+    revision = _playwright_chromium_revision()
+    if revision is None:
+        return out
+    expected = f"chromium_headless_shell-{revision}"
+    roots = (_browsers_root(), _offline_browsers_root())
+    inspected = False
+    for root in roots:
+        if root is None:
+            continue
+        try:
+            if root.is_dir():
+                inspected = True
+                if (root / expected).is_dir():
+                    out["chromium_installed"] = True
+                    return out
+        except OSError:
+            continue
+    if inspected:
+        out["chromium_installed"] = False
     return out
 
 

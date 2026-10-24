@@ -359,14 +359,22 @@ def check_lm_model_chat(snap: Snapshot) -> CheckResult | None:
 
 
 def check_lm_model_consolidation(snap: Snapshot) -> CheckResult | None:
-    """整合模型：不在已加载列表 → error。切在线后跳过。"""
+    """检查整合角色最终模型；空角色覆盖时回退到端点解析模型。"""
     if _role_is_online(snap, "consolidation"):
         return None
+    role = snap.llm_roles.get("consolidation") or {}
+    configured = snap.lm_model_consolidation
+    env_key = "LLM_ROLE_CONSOLIDATION_MODEL"
+    if not configured:
+        configured = str(role.get("model") or "")
+        slot = str(role.get("slot") or "").upper()
+        if configured and slot:
+            env_key = f"LLM_ENDPOINT_{slot}_MODEL"
     return _check_lm_model(
         snap,
         check_id="lm_model_consolidation",
-        configured=snap.lm_model_consolidation,
-        env_key="LLM_ROLE_CONSOLIDATION_MODEL",
+        configured=configured,
+        env_key=env_key,
         level="error",
         fix_hint="在 LM Studio 中加载该模型，或修正 LLM_ROLE_CONSOLIDATION_MODEL；"
         "建议设 GPU Offload=0 走 CPU，与聊天模型并行。",

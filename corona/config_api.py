@@ -605,34 +605,110 @@ async def system_doctor(request: Request) -> Any:
     store = _store(request)
     snapshot = request.app.state.supervisor.snapshot
     state = store.state()
-    return ok(
+    core_phase = getattr(snapshot, "phase", "unknown")
+    checks = [
+        {"name": "control_store", "ok": True, "fix_hint": None},
         {
-            "checks": [
-                {"name": "control_store", "ok": True, "fix_hint": None},
-                {
-                    "name": "core",
-                    "ok": getattr(snapshot, "phase", None) == "ready",
-                    "fix_hint": None
-                    if getattr(snapshot, "phase", None) == "ready"
-                    else "检查核心状态或重新应用当前配置",
-                },
-                {
-                    "name": "desired_applied_revision",
-                    "ok": state.desired_revision == state.applied_revision,
-                    "fix_hint": None
-                    if state.desired_revision == state.applied_revision
-                    else "应用待生效配置",
-                },
-                {
-                    "name": "external_config_conflict",
-                    "ok": not state.external_conflict,
-                    "fix_hint": None
-                    if not state.external_conflict
-                    else "检查外部配置编辑并重新保存",
-                },
-            ]
-        }
-    )
+            "name": "core",
+            "ok": core_phase == "ready",
+            "fix_hint": None
+            if core_phase == "ready"
+            else "检查核心状态或重新应用当前配置",
+        },
+        {
+            "name": "desired_applied_revision",
+            "ok": state.desired_revision == state.applied_revision,
+            "fix_hint": None
+            if state.desired_revision == state.applied_revision
+            else "应用待生效配置",
+        },
+        {
+            "name": "external_config_conflict",
+            "ok": not state.external_conflict,
+            "fix_hint": None
+            if not state.external_conflict
+            else "检查外部配置编辑并重新保存",
+        },
+    ]
+    labels = {
+        "control_store": ("控制面配置存储", "控制面配置存储可读取。"),
+        "core": ("Stella 核心状态", f"核心当前阶段：{core_phase}。"),
+        "desired_applied_revision": (
+            "配置应用状态",
+            "目标配置已应用。"
+            if state.desired_revision == state.applied_revision
+            else "目标配置尚未应用到核心。",
+        ),
+        "external_config_conflict": (
+            "配置一致性",
+            "未检测到外部配置冲突。"
+            if not state.external_conflict
+            else "检测到外部配置冲突。",
+        ),
+    }
+    managed_items = []
+    for check in checks:
+        title, detail = labels[check["name"]]
+        level = "ok" if check["ok"] else ("error" if check["name"] == "core" else "warn")
+        managed_items.append(
+            {
+                "id": f"corona_{check['name']}",
+                "level": level,
+                "title": title,
+                "detail": detail,
+                "fix_hint": check["fix_hint"],
+            }
+        )
+
+    # The legacy WebUI and SettingsPage consume the full deploy doctor contract.
+    # Keep the Corona-specific checks and append them to that shared report.
+    from webui.services.system import run_doctor
+
+    result = await run_doctor(reframe_embedded_bot_port=False)
+    report = result.get("report")
+    if not isinstance(report, dict):
+        report = {"version": 1, "items": [], "summary": {}}
+    items = report.get("items")
+    if not isinstance(items, list):
+        items = []
+    items.extend(managed_items)
+    doctor_error = result.get("error")
+    if doctor_error:
+        items.append(
+            {
+                "id": "environment_doctor",
+                "level": "error",
+                "title": "环境诊断进程",
+                "detail": str(doctor_error),
+                "fix_hint": "检查当前 Python 环境和 deploy doctor 输出后重试",
+            }
+        )
+
+    raw_summary = report.get("summary")
+    summary = dict(raw_summary) if isinstance(raw_summary, dict) else {}
+    for key in ("ok", "warn", "error", "total"):
+        try:
+            summary[key] = int(summary.get(key, 0))
+        except (TypeError, ValueError):
+            summary[key] = 0
+    summary["blocking"] = bool(summary.get("blocking", False))
+    for item in managed_items:
+        summary[item["level"]] = int(summary.get(item["level"], 0)) + 1
+        summary["total"] += 1
+        if item["level"] == "error":
+            summary["blocking"] = True
+    if doctor_error:
+        summary["error"] += 1
+        summary["total"] += 1
+        summary["blocking"] = True
+
+    report["items"] = items
+    report["summary"] = summary
+    result["report"] = report
+    result["summary"] = summary
+    result["checks"] = checks
+    result["ok"] = not summary["blocking"] and summary["error"] == 0
+    return ok(result)
 
 
 async def _core_operation(request: Request, kind: str, auth: AuthContext) -> Any:

@@ -127,6 +127,7 @@ ROUTE_OWNERSHIP: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/v1/plugins/market", "nucleus"),
     ("GET", "/api/v1/providers/runtime", "nucleus"),
     ("GET", "/api/v1/status", "corona"),
+    ("GET", "/api/v1/gravitas/status", "nucleus"),
     ("GET", "/api/v1/trace/memory", "nucleus"),
     ("GET", "/api/v1/trace/memory/{trace_id}", "nucleus"),
     ("GET", "/api/v1/trace/participation", "nucleus"),

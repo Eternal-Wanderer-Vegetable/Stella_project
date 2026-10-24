@@ -38,16 +38,19 @@ class ProxyResponse(Response):
         self.raw_headers = list(headers)
         self.body = body
         self.close = close
+        # FastAPI's routing layer attaches dependency background tasks to any
+        # returned Response instance, so this field is part of its contract.
+        self.background = None
 
     async def __call__(self, scope, receive, send) -> None:
-        await send(
-            {
-                "type": "http.response.start",
-                "status": self.status_code,
-                "headers": self.raw_headers,
-            }
-        )
         try:
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": self.status_code,
+                    "headers": self.raw_headers,
+                }
+            )
             if scope.get(
                 "method", "GET"
             ).upper() != "HEAD" and self.status_code not in {
@@ -65,6 +68,8 @@ class ProxyResponse(Response):
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         finally:
             await self.close()
+        if self.background is not None:
+            await self.background()
 
 
 def response_headers(raw_headers):

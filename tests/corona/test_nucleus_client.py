@@ -7,9 +7,12 @@ from __future__ import annotations
 import base64
 
 import pytest
+from fastapi import BackgroundTasks, FastAPI
+from fastapi.testclient import TestClient
 from starlette.requests import Request
 
 from corona.nucleus_client import NucleusClient, NucleusProtocolError
+from corona.proxy import ProxyResponse
 from stella_contracts.control import (
     CONTROL_PROTOCOL_VERSION,
     DRAIN_PATH,
@@ -94,6 +97,34 @@ def test_forward_headers_strip_browser_control_and_auth_headers() -> None:
         for name, value in platform_headers
         if name.startswith("x-stella-")
     )
+
+
+def test_proxy_response_works_with_fastapi_and_runs_background_after_close() -> None:
+    events: list[str] = []
+
+    async def body():
+        yield b"upstream response"
+
+    async def close() -> None:
+        events.append("closed")
+
+    app = FastAPI()
+
+    @app.get("/proxy")
+    async def proxy(background_tasks: BackgroundTasks):
+        background_tasks.add_task(lambda: events.append("background"))
+        return ProxyResponse(
+            status_code=203,
+            headers=[(b"content-type", b"text/plain")],
+            body=body(),
+            close=close,
+        )
+
+    response = TestClient(app).get("/proxy")
+
+    assert response.status_code == 203
+    assert response.text == "upstream response"
+    assert events == ["closed", "background"]
 
 
 def test_browser_actor_is_derived_only_after_corona_jwt_validation(tmp_path) -> None:

@@ -34,6 +34,73 @@ def _revision(home: Path, *, external: dict[str, str] | None = None):
     )
 
 
+def test_current_windows_sid_uses_process_token_without_spawning_process(
+    monkeypatch, request
+):
+    import subprocess
+    import sys
+    from types import SimpleNamespace
+
+    from stella_bootstrap import config as bootstrap_config
+
+    token = object()
+    process_handle = object()
+    user_sid = object()
+    calls = []
+    closed = []
+
+    def open_token(handle, access):
+        calls.append(("open", handle, access))
+        return token
+
+    def token_information(actual_token, information_class):
+        calls.append(("information", actual_token, information_class))
+        return user_sid, 0
+
+    def convert_sid(actual_sid):
+        calls.append(("convert", actual_sid))
+        return "S-1-5-21-123-456-789-1001"
+
+    fake_error = type("FakeWindowsError", (Exception,), {})
+    monkeypatch.setitem(sys.modules, "pywintypes", SimpleNamespace(error=fake_error))
+    monkeypatch.setitem(
+        sys.modules,
+        "win32api",
+        SimpleNamespace(
+            GetCurrentProcess=lambda: process_handle,
+            CloseHandle=lambda actual_token: closed.append(actual_token),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "win32security",
+        SimpleNamespace(
+            TOKEN_QUERY=0x0008,
+            TokenUser=1,
+            OpenProcessToken=open_token,
+            GetTokenInformation=token_information,
+            ConvertSidToStringSid=convert_sid,
+        ),
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("SID lookup must not spawn a process"),
+    )
+    bootstrap_config._current_windows_sid.cache_clear()
+    request.addfinalizer(bootstrap_config._current_windows_sid.cache_clear)
+
+    expected = "S-1-5-21-123-456-789-1001"
+    assert bootstrap_config._current_windows_sid() == expected
+    assert bootstrap_config._current_windows_sid() == expected
+    assert calls == [
+        ("open", process_handle, 0x0008),
+        ("information", token, 1),
+        ("convert", user_sid),
+    ]
+    assert closed == [token]
+
+
 def test_dotenv_parser_matches_installed_python_dotenv(monkeypatch):
     """Capture quoting, comments, duplicate keys, interpolation and CRLF semantics."""
     text = (

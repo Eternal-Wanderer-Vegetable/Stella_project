@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { api, unwrap } from '@/api/http';
+import SystemBanner from '@/components/SystemBanner.vue';
 import { useSystemStore } from '@/stores/system';
 
 // 欢迎页：后端可达时展示一帧真实状态（复用 /stella/status 的聚合），
@@ -15,7 +16,6 @@ interface StatusPayload {
   version?: string;
   pid?: number;
   uptime_seconds?: number;
-  allowed_group_count?: number;
   link?: { connected?: boolean } | null;
   usage?: { totals: { prompt_tokens: number; completion_tokens: number } | null } | null;
   control?: { phase: string };
@@ -27,12 +27,15 @@ interface StatusPayload {
     error?: string | null;
     stale?: boolean;
   };
-  desired_revision?: string;
-  applied_revision?: string;
   webui?: { username: string };
 }
 
+interface SpaceBindingsPayload {
+  spaces: Array<{ qq_groups?: number[] }>;
+}
+
 const status = ref<StatusPayload | null>(null);
+const boundGroupCount = ref<number | null>(null);
 const loadError = ref('');
 const system = useSystemStore();
 
@@ -105,15 +108,29 @@ const uptimeText = computed(() => {
 // 群数；step3 看进程存活（pid）。
 const steps = computed(() => [
   { key: 'step1', to: '/providers', done: endpointsReady.value === true },
-  { key: 'step2', to: '/persona', done: (status.value?.allowed_group_count ?? 0) > 0 },
+  { key: 'step2', to: '/persona', done: (boundGroupCount.value ?? 0) > 0 },
   { key: 'step3', to: '/platforms', done: system.managed ? system.coreReady : !!status.value?.pid },
 ]);
+
+async function loadBoundGroupCount(): Promise<void> {
+  try {
+    const { spaces } = await unwrap<SpaceBindingsPayload>(api.get('/spaces'));
+    boundGroupCount.value = new Set(
+      spaces.flatMap((space) => space.qq_groups ?? []),
+    ).size;
+  } catch {
+    // Unknown remains distinct from zero so an unavailable business API cannot
+    // falsely report that all configured QQ group bindings are missing.
+    boundGroupCount.value = null;
+  }
+}
 
 function goStep(to: string) {
   router.push(to);
 }
 
 onMounted(async () => {
+  void loadBoundGroupCount();
   try {
     status.value = await unwrap<StatusPayload>(api.get('/status'));
   } catch (err) {
@@ -164,22 +181,24 @@ onMounted(async () => {
       <div class="text-subtitle-1 font-weight-medium mb-3">
         {{ $t('features.welcome.statusTitle') }}
       </div>
+      <SystemBanner class="mb-3" />
       <v-row v-if="status && system.managed">
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.corePhase') }}</div>
-          <div class="text-h6">{{ status.core?.phase ?? $t('core.status.unknown') }}</div>
+          <div class="text-body-1 font-weight-medium">
+            {{ system.status?.core?.phase ?? status.core?.phase ?? $t('core.status.unknown') }}
+          </div>
         </v-col>
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.pid') }}</div>
-          <div class="text-h6">{{ status.core?.pid ?? '—' }}</div>
+          <div class="text-body-1 font-weight-medium">{{ status.core?.pid ?? '—' }}</div>
         </v-col>
         <v-col cols="6" sm="4" md="3">
-          <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.savedRevision') }}</div>
-          <div class="text-body-2">{{ status.desired_revision?.slice(0, 8) ?? '—' }}</div>
+          <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.groups') }}</div>
+          <div class="text-body-1 font-weight-medium">{{ boundGroupCount ?? '—' }}</div>
         </v-col>
-        <v-col cols="6" sm="4" md="3">
-          <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.appliedRevision') }}</div>
-          <div class="text-body-2">{{ status.applied_revision?.slice(0, 8) ?? '—' }}</div>
+        <v-col v-if="system.statusError" cols="12">
+          <v-alert type="warning" variant="tonal" density="compact">{{ system.statusError }}</v-alert>
         </v-col>
         <v-col v-if="status.core?.error" cols="12">
           <v-alert type="error" variant="tonal" density="compact">{{ status.core.error }}</v-alert>
@@ -188,19 +207,19 @@ onMounted(async () => {
       <v-row v-else-if="status">
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.version') }}</div>
-          <div class="text-h6">v{{ status.version }}</div>
+          <div class="text-body-1 font-weight-medium">v{{ status.version }}</div>
         </v-col>
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.pid') }}</div>
-          <div class="text-h6">{{ status.pid }}</div>
+          <div class="text-body-1 font-weight-medium">{{ status.pid }}</div>
         </v-col>
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.uptime') }}</div>
-          <div class="text-h6">{{ uptimeText }}</div>
+          <div class="text-body-1 font-weight-medium">{{ uptimeText }}</div>
         </v-col>
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.link') }}</div>
-          <div class="text-h6">
+          <div class="text-body-1 font-weight-medium d-flex align-center">
             <v-icon
               size="small"
               :color="status.link?.connected ? 'success' : 'error'"
@@ -212,11 +231,11 @@ onMounted(async () => {
         </v-col>
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.groups') }}</div>
-          <div class="text-h6">{{ status.allowed_group_count }}</div>
+          <div class="text-body-1 font-weight-medium">{{ boundGroupCount ?? '—' }}</div>
         </v-col>
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.tokensToday') }}</div>
-          <div class="text-h6">{{ tokensToday }}</div>
+          <div class="text-body-1 font-weight-medium">{{ tokensToday }}</div>
         </v-col>
       </v-row>
     </v-card>

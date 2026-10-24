@@ -284,13 +284,15 @@ async def _proxy_websocket(
     )
     options: dict[str, Any] = {
         "origin": origin,
-        "subprotocols": list(scope.get("subprotocols") or ()),
         "compression": None,
         "open_timeout": 5,
         "close_timeout": 5,
         "ping_interval": 20,
         "ping_timeout": 20,
     }
+    subprotocols = list(scope.get("subprotocols") or ())
+    if subprotocols:
+        options["subprotocols"] = subprotocols
     options[header_option] = forwarded
     if "proxy" in parameters:
         options["proxy"] = None

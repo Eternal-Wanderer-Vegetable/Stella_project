@@ -8,9 +8,9 @@ import { useDisplay } from 'vuetify';
 
 import { useAuthStore } from '@/stores/auth';
 import { useCustomizerStore, type ThemeMode } from '@/stores/customizer';
+import { useDoctorStore } from '@/stores/doctor';
 import { useSystemStore } from '@/stores/system';
 import { useToast } from '@/stores/toast';
-import SystemBanner from '@/components/SystemBanner.vue';
 
 // 侧栏信息架构对齐 AstrBot Dashboard（方案 §6）；带里程碑徽标的条目在
 // 对应里程碑落地前不可点——导航即路线图，避免「空白占位页」。
@@ -18,6 +18,7 @@ const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 const customizer = useCustomizerStore();
+const doctor = useDoctorStore();
 const system = useSystemStore();
 const toast = useToast();
 const theme = useTheme();
@@ -95,6 +96,7 @@ const isDark = computed(() => theme.global.name.value === 'StellaThemeDark');
 
 onMounted(() => {
   void system.startMonitoring();
+  void doctor.ensureLoaded();
 });
 onBeforeUnmount(() => system.stopMonitoring());
 
@@ -196,8 +198,10 @@ function closeTemporaryDrawer(temporary: boolean): void {
       </v-navigation-drawer>
     </template>
 
-    <v-main class="page-min-height">
-      <SystemBanner />
+    <v-main
+      class="page-min-height"
+      :class="{ 'page-min-height--chat': $route.name === 'chat' }"
+    >
       <router-view />
     </v-main>
   </v-layout>
@@ -206,6 +210,15 @@ function closeTemporaryDrawer(temporary: boolean): void {
 <style scoped>
 .page-min-height {
   min-height: 100vh;
+}
+
+.page-min-height--chat {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .navigation-list :deep(.v-list-item--nav .v-list-item-title) {
