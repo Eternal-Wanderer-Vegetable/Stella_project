@@ -2,9 +2,16 @@
 
 ## Current Session — Corona / Nucleus implementation
 
+## 2026-10-25 — PR #123 hosted acceptance
+
+- Pull request [#123](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/123) targets `main`, is open and mergeable, and has not been merged. Its checked head was `9e0500a`.
+- Hosted CI run [40109252080](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/40109252080) passed all 11 jobs, including Python 3.10 / 3.11 / 3.12 full test matrices, Windows native reliability, Rust CLI, flow manifest/closure, docs, Ruff, security and memory benchmark.
+- Dashboard CI [40109252056](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/40109252056) passed; Docker Publish [40109252032](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/actions/runs/40109252032) passed image build and import/entrypoint smoke.
+- This validates source, package and automated CI gates on `9e0500a`; no live QQ outgoing reply, authenticated visual page review, real-model/WebChat run or clean-VM/installer lifecycle is implied. `CORONA-IMPL` stays `in_progress` / NOT READY.
+
 ## 2026-10-24 — Online branch submission and automatic acceptance
 
-- Submission: the broad repair set was committed as `cc48f74` (`feat: complete managed runtime and WebUI repairs`) and pushed to `origin/codex/managed-runtime-webui-repairs`. Direct push to protected `main` was rejected by GitHub; a pull request will carry the branch to `main`.
+- Submission: the broad repair set was committed as `cc48f74` (`feat: complete managed runtime and WebUI repairs`) and pushed to `origin/codex/managed-runtime-webui-repairs`. Direct push to protected `main` was rejected by GitHub; PR #123 is open and mergeable against `main`, not merged.
 - CI blockers found and fixed during acceptance: regenerated immutable message-flow manifest `message-flow.b38bac9de632.json`; changed the offline Chromium probe test to use Playwright's installed `chromium-headless-shell` revision instead of hard-coded `1187`.
 - Python: full suite under an isolated `STELLA_HOME`, requirements-platform lock overlay, and direct Stella Python 3.12 interpreter: **4,129 passed / 25 skipped / 0 failed** (342.16s). Three warnings remain: two duplicate Corona local-control OpenAPI operation IDs and one deprecated class-scoped pytest fixture. The old runtime Conda packages alone had four TestClient incompatibilities; the locked dependency overlay resolves them. An intermediate venv run reported one PID assertion because Windows' venv launcher re-executes the base interpreter; direct interpreter execution and the isolated managed-process test pass.
 - Hot reload: isolated FastAPI TestClient + Corona config API + real `CoreSupervisor` process lifecycle; saved LLM timeout 11.5 → 22.5, applied target revision succeeded, applied revision matched, core returned ready, generation ID and PID changed, and the new child read back the new value and revision. No production `STELLA_HOME` or database was used. The operation's rollback case also passed in the real-child regression.

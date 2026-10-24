@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-24",
+  "updated_at": "2026-10-25",
   "active_feature": "CORONA-IMPL",
   "features": [
     {
@@ -1122,6 +1122,11 @@
           "report": "progress.md#2026-10-24--online-branch-submission-and-automatic-acceptance",
           "command": "Locked Python dependency overlay + isolated STELLA_HOME full pytest; Corona CoreSupervisor hot-reload process probe; pnpm --dir dashboard test/build/sync:webui; HTTP asset/hash probes; ruff; docs and message-flow gates",
           "result": "At the pushed repair branch head, full Python suite passed 4129/25/0 on direct Stella Python 3.12 with requirements-platform.lock dependencies (342.16s); 3 warnings remain (2 duplicate local-control OpenAPI operation IDs, 1 class-scoped pytest fixture deprecation). Isolated hot reload saved LLM_TIMEOUT 11.5 then applied 22.5 through Corona API; operation succeeded, target/applied revisions matched, Nucleus became ready under a new generation and PID, and the new child read back 22.5 and the target revision. Dashboard 9 files/110 tests passed; typecheck/build and distribution sync passed with existing Vite chunk/import warnings. Served root and four primary assets returned HTTP 200 and hashes matched local output. Ruff, docs (121/1316/577/0), message-flow --check, and diff check passed. The generated manifest drift and hard-coded Playwright revision test fixture were fixed. Rust was not changed; live QQ outgoing, authenticated visual page review, live model/WebChat and clean-VM/installer lifecycle acceptance remain open, so CORONA-IMPL is still in_progress / NOT READY."
+        },
+        {
+          "report": "progress.md#2026-10-25--pr-123-hosted-acceptance",
+          "command": "GitHub Actions PR checks for head 9e0500a1755f80b7c2006c5745c53d2f8576e1c2",
+          "result": "PR #123 is open and mergeable against main, not merged. CI run 40109252080 passed all 11 jobs, including full Python 3.10/3.11/3.12 tests, Windows native reliability, CLI Rust checks, flow, docs, Ruff, security and benchmark. Dashboard CI 40109252056 and Docker Publish 40109252032 passed. External QQ outgoing, authenticated visual, live model/WebChat, and clean-VM/installer gates remain open; CORONA-IMPL remains in_progress / NOT READY."
         }
       ]
     },
