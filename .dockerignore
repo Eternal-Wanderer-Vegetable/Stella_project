@@ -123,5 +123,6 @@ __pycache__
 **/__pycache__
 *.pyc
 
-# Rust CLI：不进镜像（镜像里只需要 Python 程序），target/ 体积大
+# Rust CLI 和桌面壳的 Rust 构建目录：不进镜像（镜像里只需要 Python 程序）
 cli
+**/target

@@ -1,0 +1,53 @@
+﻿{
+    "schema_version":  1,
+    "status":  "pass",
+    "installer":  "C:\\StellaTest\\share\\Stella_6.3.0_x64-setup.exe",
+    "installer_sha256":  "049eeaaf193efae0f5f74fe07a421b3db2a0ca83f2d740fa8f03b77cacca8a7a",
+    "installer_size":  231977878,
+    "signature_status":  2,
+    "exit_code":  0,
+    "duration_seconds":  20,
+    "expected_profile":  "oneclick-python",
+    "expected_payload":  "online",
+    "declared_profile":  "oneclick-python",
+    "declared_payload":  "online",
+    "checks":  [
+                   {
+                       "detail":  "status=NotSigned requireSigned=False",
+                       "name":  "installer signature",
+                       "passed":  true
+                   },
+                   {
+                       "detail":  "exit code 0",
+                       "name":  "installer exit code is 0",
+                       "passed":  true
+                   },
+                   {
+                       "detail":  "C:\\StellaInstallTest\\resources\\stella\\bot.py",
+                       "name":  "program tree staged",
+                       "passed":  true
+                   },
+                   {
+                       "detail":  "declared=oneclick-python expected=oneclick-python",
+                       "name":  "staged profile matches expectation",
+                       "passed":  true
+                   },
+                   {
+                       "detail":  "declared=online expected=online",
+                       "name":  "payload mode declaration matches expectation",
+                       "passed":  true
+                   },
+                   {
+                       "detail":  "meta=online",
+                       "name":  "release metadata payload_mode consistent",
+                       "passed":  true
+                   }
+               ],
+    "progress_snapshot":  [
+
+                          ],
+    "data_root":  null,
+    "helper_session_log_tail":  "",
+    "install_events_tail":  "",
+    "napcat_msi_log_tail":  ""
+}

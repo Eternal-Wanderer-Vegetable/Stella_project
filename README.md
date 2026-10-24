@@ -34,14 +34,14 @@ Stella 的设计前提是上下文窗口很小 —— 基准上限是 **8192 tok
 
 > 注：选择全本地部署运行的模式时，数据不出网是彻底的。需要联网的工具（查天气、查番剧）由插件自己发送请求和返回实际的数据，而判断该不该用工具、把结果压缩成摘要、把插件卡片渲染成图片，全部在本地完成。
 
-## 6.2.0 当前版本
+## 6.3.0 开发预览（PR #120）
 
-- 记忆来源证据与 claim lineage 纳入可审核合同；数据库自动迁移至 schema 19，旧 evidence 标记为 `legacy_unverified`，不会自动变成已验证事实。
-- 回复归属使用 typed reply envelope 与来源证据校验；会话压缩有界批处理并保留可验证来源包，统一最终回复协议。
-- Rust 记忆后端合同升级为 API 3 / schema 19；Rust 安装须使用本版本随包构建的 native wheel。
-- 真实 QQ 灰度、Rust 检索排序一致性，以及干净 VM / GUI 首启仍需按各自验收流程单独确认。
+- 本开发分支版本号为 6.3.0，新增 Corona / Nucleus 双进程运行与监管能力；默认入口仍为 legacy，尚未切换默认运行路径。
+- Windows Job Object 进程树托管、私有目录 ACL、HTTP/WebSocket 代理与关闭预算已完成本机回归；安装器 EXE 已在一次性 Windows Sandbox 通过安装器 harness，Docker 镜像构建与隔离容器烟测也已通过。签名、GUI 首启、在线组件下载、升级回滚和 Compose 仍未验收。
+- 记忆 schema 保持 19，Rust backend API 保持 3；本分支没有引入业务数据库 schema 迁移。
+- 干净 VM、完整产品生命周期及 QQ/WebChat/模型验收仍需分别完成；真实 QQ 接入留待 PR 合并至 main 后实测。
 
-升级前备份完整数据根，并先在副本运行 `python -m deploy migrate --dry-run`。完整中英文指南、默认值与验收边界见 [文档索引](docs/README.md)。
+这是未发布的开发预览。升级前备份完整数据根，并先在副本运行 `python -m deploy migrate --dry-run`。完整中英文指南、默认值与验收边界见 [文档索引](docs/README.md)。
 
 ## 🔌 三种部署模式
 

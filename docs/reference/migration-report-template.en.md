@@ -15,7 +15,7 @@
 | Source directory | `<old installation>` |
 | Source version | `<old version or unknown>` |
 | Target directory | `<current program directory>` |
-| Target version | `6.2.0` |
+| Target version | `6.3.0` |
 | Generated at | `<UTC timestamp>` |
 
 ## Files and Data
@@ -49,4 +49,4 @@
 - `<configuration conflict or manual confirmation>`
 - `<NapCat/OneBot manual QR login or network configuration>`
 
-Record the actual source memory schema (6.2.0 uses 19; the published 6.1.0 snapshot uses 18) separately from independently versioned databases. Confirm that knowledge, schedules, Cometa, WebUI administrator state, and backend credentials remain under the preserved data root. Never include raw credentials in the report.
+Record the actual source memory schema (6.3.0 and 6.2.0 both use 19; the published 6.1.0 snapshot uses 18) separately from independently versioned databases. Confirm that knowledge, schedules, Cometa, WebUI administrator state, and backend credentials remain under the preserved data root. Never include raw credentials in the report.

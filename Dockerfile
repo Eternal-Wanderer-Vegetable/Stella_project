@@ -93,8 +93,10 @@ USER stella
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8080/_corona/v1/health >/dev/null \
-        || curl -fsS http://127.0.0.1:8080/stella/status >/dev/null
+    CMD curl -fsS http://127.0.0.1:8080/_corona/v1/health \
+        | grep -q '"controller_boot_id":' \
+        || curl -fsS http://127.0.0.1:8080/stella/status \
+        | grep -q '"version":'
 
 # 启动 Bot 前校验 /data/.env 存在（缺失则打印引导并退出），其他命令直接放行。
 # 想绕过 entrypoint 直接执行命令时用 --entrypoint。

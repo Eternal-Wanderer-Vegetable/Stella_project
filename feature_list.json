@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-23",
+  "updated_at": "2026-10-24",
   "active_feature": "CORONA-IMPL",
   "features": [
     {
@@ -1067,6 +1067,11 @@
           "report": "docs/reports/2026-10-24-pr120-windows-validation.md",
           "command": "Windows Python 3.11.16 full suite and tests/windows; Windows Rust/Tauri and Dashboard gates; GitNexus pre-edit impacts",
           "result": "Windows full Python: 4117 passed/32 skipped/6 warnings; Windows-native: 10 passed/1 skipped (STELLA_INSTALL_TEST_EXE absent). Shutdown-budget regression passed 10 consecutive runs. CLI fmt/clippy/tests (22), runtime-manager (9), Tauri (25), release CLI build, Ruff, compileall, flow check, Dashboard 110 tests/build/sync passed. Hosted CI run 40044987734 on f1cc1fd passed 12/12 jobs (including Windows native reliability matrix and Python 3.10/3.11/3.12); Docker Publish 40044987747 and Dashboard CI 40044987735 passed. Desktop-wide rustfmt check still reports existing differences. Refreshed GitNexus compares varied: against 2d1eb736, 22 files/10-27 symbols/782-790 processes/CRITICAL; against main, 282 files/488-833 symbols/784-791 processes/CRITICAL. Status-document scope=all samples included 5/10/0 LOW, 5/1/783 CRITICAL, and 5/8/0 LOW; final indexed scope=all reported no uncommitted changes. Generic __call__ flows remain unclosed by source review and no CRITICAL result is waived. Installer EXE, clean VMs, Docker runtime/build, live QQ/WebChat/model, final lifecycle/rollback acceptance remain NOT RUN; CORONA-IMPL remains in_progress / NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-24-pr120-windows-validation.md",
+          "command": "PR #120 follow-up: align version 6.3.0, repair GitNexus process attribution, build/install the real Windows NSIS EXE in Windows Sandbox, then build and run the Docker image; defer QQ acceptance until after merge to main",
+          "result": "Version sources are 6.3.0; DB schema 19, Rust API 3, and legacy default remain unchanged. GitNexus 1.6.12 forced full reindex: 3,230 Method nodes / 0 empty IDs; both target __call__ symbols now have empty process lists. Final all-scope: 18 files/35 symbols/0 processes/LOW. Against baseline 2d1eb736: 35 files/73 symbols/12 processes/HIGH; compare main: 292 files/1,945 symbols/165 affected processes/CRITICAL cumulative, listing capped. Windows Sandbox NSIS install harness passed for oneclick-python online payload; EXE is unsigned and GUI first boot, catalog/bootstrap, upgrade, and rollback remain open. Docker image built and ran with a dedicated named volume; container health is healthy, JSON-aware healthcheck rejects SPA HTML false positives, and status JSON reports 6.3.0. No QQ adapter, token, or live model was connected. Clean VM lifecycle, Compose deployment, model/WebChat, and post-merge QQ acceptance remain open; CORONA-IMPL stays in_progress / NOT READY."
         }
       ]
     },

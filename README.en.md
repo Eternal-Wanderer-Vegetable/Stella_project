@@ -36,14 +36,14 @@ You decide where the models come from.
 
 > Note: With the all-local deployment mode, the data truly stays off the network. Networked tools (such as weather and anime lookups) send requests and return actual data themselves, while deciding whether to use a tool, compressing its result into a summary, and rendering plugin cards as images all happen locally.
 
-## Current release: 6.2.0
+## 6.3.0 Development Preview (PR #120)
 
-- Memory-source evidence and claim lineage are now auditable contracts. The database migrates to schema 19; existing evidence is marked `legacy_unverified` and is not promoted to verified facts.
-- Reply attribution uses typed reply envelopes and source-evidence checks. Bounded session compaction preserves verifiable source packets and uses a unified final-reply protocol.
-- The Rust memory contract is API 3 / schema 19. Rust deployments must use the native wheel built with this release.
-- Real QQ rollout, Rust retrieval-order parity, and clean-VM / GUI first-launch checks remain separate acceptance activities.
+- This development branch is version 6.3.0 and adds the Corona / Nucleus dual-process runtime and supervisor. The legacy entrypoint remains the default; no default switch has been made.
+- Windows Job Object process-tree management, private data-directory ACLs, HTTP/WebSocket proxying, and shutdown-budget behavior passed local regression checks. The installer harness passed in a disposable Windows Sandbox, and the Docker image build plus isolated container smoke passed. Signature, GUI first boot, online component downloads, upgrade/rollback, and Compose remain unverified.
+- The memory schema remains 19 and the Rust backend API remains 3; this branch introduces no business-database schema migration.
+- Clean VMs, full product lifecycle checks, and QQ/WebChat/model acceptance remain separate. Real QQ integration is deferred until this PR is merged to main.
 
-Back up the complete data root before upgrading, and run `python -m deploy migrate --dry-run` against a copy first. See the [documentation index](docs/README.en.md) for bilingual guides, defaults, and acceptance boundaries.
+This is an unreleased development preview. Back up the complete data root before upgrading, and run `python -m deploy migrate --dry-run` against a copy first. See the [documentation index](docs/README.en.md) for bilingual guides, defaults, and acceptance boundaries.
 
 ## 🔌 Three Deployment Modes
 
