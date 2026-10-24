@@ -99,6 +99,7 @@ class AdapterProxyMiddleware:
                 raw_path = scope.get("raw_path")
                 if not isinstance(raw_path, bytes):
                     raw_path = path.encode("ascii")
+                raw_path = raw_path.split(b"?", 1)[0]
                 alternate_raw = (
                     raw_path[:-1] if raw_path.endswith(b"/") else raw_path + b"/"
                 )
@@ -237,6 +238,7 @@ async def _proxy_websocket(
     raw_path = scope.get("raw_path")
     if not isinstance(raw_path, bytes) or not raw_path.startswith(b"/"):
         raw_path = str(scope.get("path", "/")).encode("ascii", errors="strict")
+    raw_path = raw_path.split(b"?", 1)[0]
     query = scope.get("query_string", b"")
     target = raw_path + (b"?" + query if query else b"")
     import httpx
@@ -391,6 +393,7 @@ def _unsafe_path(scope: dict[str, Any]) -> bool:
     path = str(scope.get("path", ""))
     if not isinstance(raw_path, bytes):
         raw_path = path.encode("utf-8", errors="ignore")
+    raw_path = raw_path.split(b"?", 1)[0]
     return bool(
         _BAD_PERCENT.search(raw_path)
         or b"%2f" in raw_path.lower()

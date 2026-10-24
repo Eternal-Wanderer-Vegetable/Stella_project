@@ -4,6 +4,8 @@ import ctypes
 import os
 import subprocess
 import sys
+import time
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +25,37 @@ def test_process_tree_contains_real_child(tmp_path):
     finally:
         child.kill()
         child.wait()
+
+
+def test_corona_process_tree_module_imports_on_windows():
+    from corona import process_tree
+
+    assert process_tree.ManagedProcessTree.__name__ == "ManagedProcessTree"
+
+
+def test_corona_managed_process_tree_starts_the_child_in_its_job(tmp_path):
+    from corona.process_tree import ManagedProcessTree
+
+    log_path = tmp_path / "managed-child.log"
+    tree = ManagedProcessTree.spawn(
+        [sys.executable, "-c", "import os, time; print(os.getpid(), flush=True); time.sleep(30)"],
+        cwd=Path(__file__).resolve().parents[2],
+        env=os.environ.copy(),
+        log_path=log_path,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if log_path.exists() and log_path.read_text(encoding="utf-8").strip():
+                child_pid = int(log_path.read_text(encoding="utf-8").strip())
+                assert tree.owns_pid(child_pid)
+                return
+            if tree.poll() is not None:
+                break
+            time.sleep(0.02)
+        pytest.fail("managed child did not start inside its Windows Job Object")
+    finally:
+        tree.terminate()
 
 
 def test_file_lock_is_observable_and_clears(tmp_path):

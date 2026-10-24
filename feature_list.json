@@ -1062,6 +1062,11 @@
           "report": "progress.md#2026-10-23--pr-120-memory-evidence-concurrency-follow-up",
           "command": "Push commit 13d837e; inspect PR #120 hosted CI, Docker Publish, and Dashboard CI workflows",
           "result": "Final hosted CI run 39973270572 passed 12/12 jobs. Python 3.10.15, 3.11.14 and 3.12.15 each reported 4116 passed / 29 skipped (4/5/5 warnings; 219.51s/239.54s/270.96s). Flow-manifest/closure, lint, docs, security, CLI, Windows native reliability, public memory benchmark and notify passed. Docker Publish 39973270444 and Dashboard CI 39973270399 passed. This resolves the current hosted CI failures. Local Python 3.12 policy_clock_jump did not reproduce in hosted CI; fail-closed policy was preserved. Product live/VM/rollback acceptance remains NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-24-pr120-windows-validation.md",
+          "command": "Windows Python 3.11.16 full suite and tests/windows; Windows Rust/Tauri and Dashboard gates; GitNexus pre-edit impacts",
+          "result": "Windows full Python: 4117 passed/32 skipped/6 warnings; Windows-native: 10 passed/1 skipped (STELLA_INSTALL_TEST_EXE absent). Shutdown-budget regression passed 10 consecutive runs. CLI fmt/clippy/tests (22), runtime-manager (9), Tauri (25), release CLI build, Ruff, compileall, flow check, Dashboard 110 tests/build/sync passed. Desktop-wide rustfmt check still reports existing differences. Refreshed GitNexus compares varied: against 2d1eb736, 22 files/10-27 symbols/782-790 processes/CRITICAL; against main, 282 files/488-833 symbols/784-791 processes/CRITICAL. Status-document scope=all samples included 5/10/0 LOW, 5/1/783 CRITICAL, and 5/8/0 LOW; final indexed scope=all reported no uncommitted changes. Generic __call__ flows remain unclosed by source review and no CRITICAL result is waived. Installer EXE, clean VMs, Docker runtime/build, live QQ/WebChat/model, final lifecycle/rollback acceptance remain NOT RUN; CORONA-IMPL remains in_progress / NOT READY."
         }
       ]
     },

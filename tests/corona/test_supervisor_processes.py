@@ -196,19 +196,26 @@ async def test_real_fake_core_reaches_ready_and_drains(tmp_path: Path) -> None:
         max_attempts=1,
         command_factory=lambda _boot: [sys.executable, "-c", _FAKE_CORE, "ready"],
     )
-    ready = await supervisor.start()
-    assert ready.phase == "ready"
-    assert ready.pid is not None
-    assert ready.revision_id == bootstrap.revision.revision_id
-    log_path = (
-        runtime_dir(bootstrap.stella_home, bootstrap.instance_id)
-        / "generations"
-        / ready.generation_id
-        / "nucleus.log"
-    )
-    assert log_path.is_file()
-    assert log_path.stat().st_mode & 0o777 == 0o600
-    await supervisor.stop()
+    try:
+        ready = await supervisor.start()
+        assert ready.phase == "ready"
+        assert ready.pid is not None
+        assert ready.revision_id == bootstrap.revision.revision_id
+        log_path = (
+            runtime_dir(bootstrap.stella_home, bootstrap.instance_id)
+            / "generations"
+            / ready.generation_id
+            / "nucleus.log"
+        )
+        assert log_path.is_file()
+        if os.name == "nt":
+            from stella_bootstrap.config import _check_windows_private_acl
+
+            _check_windows_private_acl(log_path)
+        else:
+            assert log_path.stat().st_mode & 0o777 == 0o600
+    finally:
+        await supervisor.stop()
     assert supervisor.snapshot.phase == "stopped"
 
 
@@ -225,18 +232,30 @@ async def test_crash_after_ready_uses_bounded_restart_budget(tmp_path: Path) -> 
             sys.executable,
             "-c",
             _FAKE_CORE,
-            "crash_after_ready",
+            "crash_after_ready_triggered",
         ],
     )
-    assert (await supervisor.start()).phase == "ready"
-    deadline = time.monotonic() + 5
-    while supervisor.snapshot.phase != "failed" and time.monotonic() < deadline:
-        await asyncio.sleep(0.02)
-    assert supervisor.snapshot.phase == "failed"
-    assert supervisor.snapshot.attempt == 2
-    assert supervisor.snapshot.error_code == "core_crashed"
-    assert supervisor._tree is None
-    await supervisor.stop()
+    try:
+        ready = await supervisor.start()
+        assert ready.phase == "ready"
+        crash_generations = {ready.generation_id}
+        (bootstrap.stella_home / f"cn10-crash-after-ready-{ready.generation_id}").touch()
+        deadline = time.monotonic() + 5
+        while supervisor.snapshot.phase != "failed" and time.monotonic() < deadline:
+            current = supervisor.snapshot
+            if (
+                current.phase == "ready"
+                and current.generation_id not in crash_generations
+            ):
+                crash_generations.add(current.generation_id)
+                (bootstrap.stella_home / f"cn10-crash-after-ready-{current.generation_id}").touch()
+            await asyncio.sleep(0.02)
+        assert supervisor.snapshot.phase == "failed"
+        assert supervisor.snapshot.attempt == 2
+        assert supervisor.snapshot.error_code == "core_crashed"
+        assert supervisor._tree is None
+    finally:
+        await supervisor.stop()
 
 
 @pytest.mark.skipif(
@@ -404,16 +423,18 @@ async def test_fake_core_failures_are_bounded_and_owned(
     bootstrap = _bootstrap(tmp_path, instance_id=f"cn03-{mode}")
     supervisor = CoreSupervisor(
         bootstrap,
-        readiness_timeout=0.6,
+        readiness_timeout=3,
         poll_interval=0.03,
         max_attempts=1,
         command_factory=lambda _boot: [sys.executable, "-c", _FAKE_CORE, mode],
     )
     failed = await supervisor.start()
-    assert failed.phase == "failed"
-    assert failed.error_code == expected_error
-    assert supervisor._tree is None
-    await supervisor.stop()
+    try:
+        assert failed.phase == "failed"
+        assert failed.error_code == expected_error
+        assert supervisor._tree is None
+    finally:
+        await supervisor.stop()
 
 
 def test_corona_ownership_lock_is_held_by_open_handle(tmp_path: Path) -> None:

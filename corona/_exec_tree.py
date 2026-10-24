@@ -7,6 +7,7 @@ from __future__ import annotations
 import ctypes
 import os
 import signal
+import subprocess
 import sys
 
 
@@ -35,8 +36,15 @@ def main() -> int:
     if sys.stdin.buffer.read(1) != b"\x01":
         return 65
     expected_parent = int(os.environ.get("STELLA_CONTROLLER_PID", "0"))
-    if expected_parent > 0 and os.getppid() != expected_parent:
+    if os.name != "nt" and expected_parent > 0 and os.getppid() != expected_parent:
         return 66
+    if os.name == "nt":
+        # Windows has no exec replacement. The wrapper already belongs to the
+        # controller's Job Object, so launch the managed command as its child
+        # and keep the wrapper alive until that child exits. The Job Object
+        # then owns both processes and every descendant.
+        child = subprocess.Popen(command, env=os.environ)
+        return child.wait()
     executable = command[0]
     os.execvpe(executable, command, os.environ)
     return 127

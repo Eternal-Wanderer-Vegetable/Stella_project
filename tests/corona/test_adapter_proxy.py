@@ -606,3 +606,9 @@ def test_encoded_separator_and_dot_segments_are_rejected_before_fallback() -> No
     assert not _unsafe_path(
         {"path": "/onebot/v11/http", "raw_path": b"/onebot/v11/http"}
     )
+    assert not _unsafe_path(
+        {
+            "path": "/onebot/v11/http",
+            "raw_path": b"/onebot/v11/http?access_token=a%2Fb&x=%E4%B8%AD",
+        }
+    )

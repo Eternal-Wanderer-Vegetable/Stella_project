@@ -396,8 +396,19 @@ class CoreSupervisor:
                 await asyncio.sleep(self.poll_interval)
                 continue
             if status == 200 and payload.get("ready") is True:
-                expected = dict(identity, pid=tree.pid)
-                if any(payload.get(key) != value for key, value in expected.items()):
+                if any(payload.get(key) != value for key, value in identity.items()):
+                    raise CoreLaunchError("foreign_core_identity")
+                core_pid = payload.get("pid")
+                if (
+                    isinstance(core_pid, bool)
+                    or not isinstance(core_pid, int)
+                    or core_pid < 1
+                ):
+                    raise CoreLaunchError("foreign_core_identity")
+                if os.name == "nt":
+                    if not tree.owns_pid(core_pid):
+                        raise CoreLaunchError("foreign_core_identity")
+                elif core_pid != tree.pid:
                     raise CoreLaunchError("foreign_core_identity")
                 try:
                     route_catalog = await asyncio.to_thread(client.route_catalog)
@@ -407,6 +418,7 @@ class CoreSupervisor:
                     raise CoreLaunchError("route_catalog_identity_mismatch")
                 if tree.poll() is not None:
                     raise CoreLaunchError("process_exited_before_ready")
+                tree.pid = core_pid
                 return route_catalog
             await asyncio.sleep(self.poll_interval)
         raise CoreLaunchError("readiness_timeout")

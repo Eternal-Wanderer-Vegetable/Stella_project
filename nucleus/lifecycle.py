@@ -176,6 +176,7 @@ class NucleusLifecycle:
         self._phase = "starting"
         self._server: Any | None = None
         self._deadline: float | None = None
+        self._shutdown_budget_exhausted = False
         self._watchdog: threading.Timer | None = None
         self._watchdog_deadline: float | None = None
         self._lock = threading.Lock()
@@ -283,6 +284,8 @@ class NucleusLifecycle:
 
     def remaining_shutdown_seconds(self) -> float:
         with self._lock:
+            if self._shutdown_budget_exhausted:
+                return 0.0
             deadline = self._deadline
         if deadline is None:
             return self.shutdown_budget_seconds
@@ -318,6 +321,8 @@ class NucleusLifecycle:
         if not done:
             task.cancel()
             task.add_done_callback(_consume_task_result)
+            with self._lock:
+                self._shutdown_budget_exhausted = True
             _safe_stderr(f"[nucleus] shutdown hook exceeded shared budget: {_callable_name(callback)}")
             return
         try:

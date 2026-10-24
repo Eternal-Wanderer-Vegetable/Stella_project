@@ -51,6 +51,14 @@ def test_business_root_lock_is_process_held_and_keyed_by_database(
     try:
         assert lock.database_path == database.resolve()
         assert lock.lock_path == database.with_name(".memory.db.nucleus.lock")
+        child_env = {
+            "PATH": os.environ.get("PATH", ""),
+            "PYTHONPATH": str(ROOT),
+            "PYTHONNOUSERSITE": "1",
+            "STELLA_HOME": str(tmp_path / "isolated-home"),
+        }
+        if os.name == "nt" and os.environ.get("SYSTEMROOT"):
+            child_env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
         probe = subprocess.run(
             [
                 sys.executable,
@@ -63,12 +71,7 @@ def test_business_root_lock_is_process_held_and_keyed_by_database(
                 str(database),
             ],
             cwd=ROOT,
-            env={
-                "PATH": os.environ.get("PATH", ""),
-                "PYTHONPATH": str(ROOT),
-                "PYTHONNOUSERSITE": "1",
-                "STELLA_HOME": str(tmp_path / "isolated-home"),
-            },
+            env=child_env,
             check=True,
             capture_output=True,
             text=True,

@@ -1076,7 +1076,10 @@ fn runtime_failure(envelope: &serde_json::Value, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{canonical_plain, extract_json, resolve_log_path, runtime_failure, runtime_message};
+    use super::{
+        canonical_plain, deploy_start_arguments, extract_json, resolve_log_path, runtime_failure,
+        runtime_message,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};

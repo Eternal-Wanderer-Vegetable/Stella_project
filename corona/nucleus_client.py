@@ -266,6 +266,7 @@ class NucleusClient:
         raw_path = request.scope.get("raw_path")
         if not isinstance(raw_path, bytes) or not raw_path.startswith(b"/"):
             raw_path = request.url.path.encode("ascii", errors="strict")
+        raw_path = raw_path.split(b"?", 1)[0]
         if b"%2f" in raw_path.lower() or b"%5c" in raw_path.lower():
             raise NucleusProtocolError("unsafe_encoded_path")
         query = request.scope.get("query_string", b"")

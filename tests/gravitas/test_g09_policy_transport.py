@@ -247,7 +247,12 @@ def test_policy_reader_rejects_non_regular_or_oversize_file(tmp_path):
         read_json_bounded(target, max_bytes=1)
     if hasattr(os, "symlink"):
         link = tmp_path / "link.json"
-        link.symlink_to(target)
+        try:
+            link.symlink_to(target)
+        except OSError as exc:
+            if os.name == "nt" and getattr(exc, "winerror", None) == 1314:
+                pytest.skip("当前 Windows 用户没有创建 symlink 的特权")
+            raise
         with pytest.raises(OSError):
             read_json_bounded(link, max_bytes=20)
 

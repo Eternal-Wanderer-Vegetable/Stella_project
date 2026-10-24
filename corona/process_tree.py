@@ -39,6 +39,13 @@ class ManagedProcessTree:
         if not command:
             raise ValueError("managed process command cannot be empty")
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            try:
+                from stella_bootstrap.config import _set_windows_private_acl
+
+                _set_windows_private_acl(log_path.parent, is_directory=True)
+            except Exception as exc:
+                raise ProcessTreeError("could not protect managed process logs") from exc
         if os.name != "nt":
             log_path.parent.chmod(0o700)
         descriptor = os.open(log_path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
@@ -200,10 +207,18 @@ class ManagedProcessTree:
             with suppress(OSError):
                 os.close(descriptor)
 
+    def owns_pid(self, pid: int) -> bool:
+        """Return whether a process is inside this managed Windows Job Object."""
+        if self._job is None:
+            return pid == self.pid
+        return self._job.contains_pid(pid)
 
-def _kill_process_group(pgid: int, sig: int = signal.SIGKILL) -> None:
+
+def _kill_process_group(pgid: int, sig: int | None = None) -> None:
     if os.name == "nt":
         return
+    if sig is None:
+        sig = signal.SIGKILL
     try:
         os.killpg(pgid, sig)
     except ProcessLookupError:
@@ -327,12 +342,21 @@ class _WindowsJob:
             ]
 
         self._ctypes = ctypes
+        self._wintypes = wintypes
         self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         self._kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        self._kernel32.OpenProcess.argtypes = [
+            wintypes.DWORD, wintypes.BOOL, wintypes.DWORD
+        ]
+        self._kernel32.OpenProcess.restype = wintypes.HANDLE
         self._kernel32.SetInformationJobObject.argtypes = [
             wintypes.HANDLE, wintypes.INT, wintypes.LPVOID, wintypes.DWORD
         ]
         self._kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        self._kernel32.IsProcessInJob.argtypes = [
+            wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)
+        ]
+        self._kernel32.IsProcessInJob.restype = wintypes.BOOL
         self._kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
         self._kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         self._handle = self._kernel32.CreateJobObjectW(None, None)
@@ -352,6 +376,21 @@ class _WindowsJob:
     def terminate(self, exit_code: int) -> None:
         if self._handle:
             self._kernel32.TerminateJobObject(self._handle, exit_code)
+
+    def contains_pid(self, pid: int) -> bool:
+        if not self._handle or pid < 1:
+            return False
+        process = self._kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
+        if not process:
+            return False
+        try:
+            in_job = self._wintypes.BOOL()
+            succeeded = self._kernel32.IsProcessInJob(
+                process, self._handle, self._ctypes.byref(in_job)
+            )
+            return bool(succeeded and in_job.value)
+        finally:
+            self._kernel32.CloseHandle(process)
 
     def close(self) -> None:
         if self._handle:

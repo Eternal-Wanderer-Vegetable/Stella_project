@@ -390,40 +390,73 @@ def _current_windows_sid() -> str:
 
 
 def _set_windows_private_acl(path: Path, *, is_directory: bool) -> None:
-    icacls = shutil.which("icacls.exe") or shutil.which("icacls")
-    if not icacls:
-        raise ConfigRevisionError("icacls is required to protect configuration revisions")
-    sid = _current_windows_sid()
-    grant = f"*{sid}:(OI)(CI)F" if is_directory else f"*{sid}:F"
     try:
-        subprocess.run(
-            [icacls, str(path), "/inheritance:r", "/grant:r", grant, "/Q"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
+        import ntsecuritycon
+        import pywintypes
+        import win32security
+    except ImportError as exc:
+        raise ConfigRevisionError("pywin32 is required to protect configuration revisions") from exc
+
+    current_sid = win32security.ConvertStringSidToSid(_current_windows_sid())
+    inheritance_flags = (
+        win32security.OBJECT_INHERIT_ACE | win32security.CONTAINER_INHERIT_ACE
+        if is_directory
+        else 0
+    )
+    dacl = win32security.ACL()
+    try:
+        dacl.AddAccessAllowedAceEx(
+            win32security.ACL_REVISION,
+            inheritance_flags,
+            ntsecuritycon.FILE_ALL_ACCESS,
+            current_sid,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+        win32security.SetNamedSecurityInfo(
+            str(path),
+            win32security.SE_FILE_OBJECT,
+            win32security.DACL_SECURITY_INFORMATION
+            | win32security.PROTECTED_DACL_SECURITY_INFORMATION,
+            None,
+            None,
+            dacl,
+            None,
+        )
+    except (OSError, pywintypes.error) as exc:
         raise ConfigRevisionError("could not restrict configuration revision ACL") from exc
 
 
 def _check_windows_private_acl(path: Path) -> None:
-    icacls = shutil.which("icacls.exe") or shutil.which("icacls")
-    if not icacls:
-        raise ConfigRevisionError("icacls is required to validate configuration ACLs")
-    sid = _current_windows_sid()
     try:
-        result = subprocess.run(
-            [icacls, str(path)],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
+        import ntsecuritycon
+        import pywintypes
+        import win32security
+    except ImportError as exc:
+        raise ConfigRevisionError("pywin32 is required to validate configuration ACLs") from exc
+
+    current_sid = win32security.ConvertStringSidToSid(_current_windows_sid())
+    try:
+        descriptor = win32security.GetFileSecurity(
+            str(path), win32security.DACL_SECURITY_INFORMATION
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+        dacl = descriptor.GetSecurityDescriptorDacl()
+    except (OSError, pywintypes.error) as exc:
         raise ConfigRevisionError("could not validate configuration revision ACL") from exc
-    entries = [line.strip() for line in result.stdout.splitlines() if re.search(r":\(", line)]
-    if not entries or any(sid not in entry for entry in entries):
+
+    if dacl is None or dacl.GetAceCount() == 0:
         raise ConfigRevisionError("configuration revision ACL includes another account")
-    if not any(sid in entry and "(F)" in entry for entry in entries):
+
+    has_full_control = False
+    for index in range(dacl.GetAceCount()):
+        try:
+            (ace_type, _ace_flags), access_mask, ace_sid = dacl.GetAce(index)
+        except (OSError, pywintypes.error, ValueError, TypeError) as exc:
+            raise ConfigRevisionError("could not validate configuration revision ACL") from exc
+        if ace_sid != current_sid:
+            raise ConfigRevisionError("configuration revision ACL includes another account")
+        if ace_type != win32security.ACCESS_ALLOWED_ACE_TYPE:
+            raise ConfigRevisionError("configuration revision ACL denies current-user access")
+        if access_mask & ntsecuritycon.FILE_ALL_ACCESS == ntsecuritycon.FILE_ALL_ACCESS:
+            has_full_control = True
+
+    if not has_full_control:
         raise ConfigRevisionError("configuration revision ACL lacks current-user access")

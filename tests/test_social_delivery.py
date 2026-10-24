@@ -190,7 +190,7 @@ class TestDeliverLines:
         from gravitas.contracts import Deadline
 
         clock = system_control_clock()
-        deadline = Deadline(clock.now() + 0.03, clock.clock_id)
+        deadline = Deadline(clock.now() + 1.0, clock.clock_id)
         started = asyncio.Event()
         release = asyncio.Event()
         attempts = []

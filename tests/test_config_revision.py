@@ -182,8 +182,10 @@ def _managed_settings(revision_path: Path, cwd: Path) -> dict:
         "REVISION_MARKER": "inherited-poison",
         "LLM_TIMEOUT": "999",
     }
-    if os.name == "nt" and os.environ.get("SYSTEMROOT"):
-        env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
+    if os.name == "nt":
+        env["PATH"] = os.environ.get("PATH", "")
+        if os.environ.get("SYSTEMROOT"):
+            env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
     script = (
         "import json, pathlib, config.settings as settings; "
         "print(json.dumps({'marker': settings._getenv('REVISION_MARKER', 'default'), "
