@@ -56,6 +56,9 @@ def test_route_matrix_matches_plan_and_nucleus_business_assembly(
         (row["method"], row["path"], row["proposed_owner"])
         for row in inventory["webui_routes"]
     }
+    # The initial route inventory is a frozen planning snapshot. This endpoint
+    # was added afterward and is owned by Nucleus like the other business APIs.
+    expected.add(("GET", "/api/v1/gravitas/status", "nucleus"))
     assert set(ROUTE_OWNERSHIP) == expected
     assert (
         len(CONTROL_ROUTE_KEYS),
@@ -63,7 +66,7 @@ def test_route_matrix_matches_plan_and_nucleus_business_assembly(
         len(MIXED_ROUTE_KEYS),
     ) == (
         21,
-        111,
+        112,
         1,
     )
 

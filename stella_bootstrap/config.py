@@ -10,13 +10,12 @@ import math
 import os
 import re
 import secrets
-import shutil
 import stat
-import subprocess
 import tempfile
 from collections.abc import Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 
 from stella_contracts.config import ConfigRevision, ConfigRevisionError
@@ -369,24 +368,31 @@ def _check_private_file(path: Path) -> None:
             raise ConfigRevisionError("configuration revision directory permissions are too broad")
 
 
+@lru_cache(maxsize=1)
 def _current_windows_sid() -> str:
-    whoami = shutil.which("whoami.exe") or shutil.which("whoami")
-    if not whoami:
-        raise ConfigRevisionError("cannot identify the current Windows account")
+    """Return the current process user's SID without launching a console process."""
     try:
-        result = subprocess.run(
-            [whoami, "/user", "/fo", "csv", "/nh"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
+        import pywintypes
+        import win32api
+        import win32security
+    except ImportError as exc:
         raise ConfigRevisionError("cannot identify the current Windows account") from exc
-    match = re.search(r"S-1-(?:\d+-)+\d+", result.stdout)
-    if not match:
-        raise ConfigRevisionError("cannot identify the current Windows account")
-    return match.group(0)
+
+    token = None
+    try:
+        token = win32security.OpenProcessToken(
+            win32api.GetCurrentProcess(), win32security.TOKEN_QUERY
+        )
+        user_sid, _attributes = win32security.GetTokenInformation(
+            token, win32security.TokenUser
+        )
+        return win32security.ConvertSidToStringSid(user_sid)
+    except (OSError, pywintypes.error) as exc:
+        raise ConfigRevisionError("cannot identify the current Windows account") from exc
+    finally:
+        if token is not None:
+            with suppress(OSError, pywintypes.error):
+                win32api.CloseHandle(token)
 
 
 def _set_windows_private_acl(path: Path, *, is_directory: bool) -> None:

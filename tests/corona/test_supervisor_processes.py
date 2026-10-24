@@ -485,6 +485,116 @@ def test_child_environment_never_inherits_desktop_session_capability(
     assert secret not in child_environment.values()
 
 
+def test_windows_process_tree_hides_console_for_exec_wrapper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import io
+    from types import SimpleNamespace
+
+    import corona.process_tree as process_tree
+    from stella_bootstrap import config as bootstrap_config
+
+    create_new_process_group = 0x00000200
+    create_no_window = 0x08000000
+    monkeypatch.setattr(
+        process_tree,
+        "os",
+        SimpleNamespace(
+            name="nt",
+            open=os.open,
+            fdopen=os.fdopen,
+            getpid=os.getpid,
+            O_CREAT=os.O_CREAT,
+            O_WRONLY=os.O_WRONLY,
+            O_TRUNC=os.O_TRUNC,
+        ),
+    )
+    monkeypatch.setattr(
+        bootstrap_config, "_set_windows_private_acl", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        process_tree.subprocess,
+        "CREATE_NEW_PROCESS_GROUP",
+        create_new_process_group,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        process_tree.subprocess,
+        "CREATE_NO_WINDOW",
+        create_no_window,
+        raising=False,
+    )
+    monkeypatch.setattr(process_tree, "_WindowsJob", lambda _process: None)
+
+    captured: dict[str, object] = {}
+    fake_process = SimpleNamespace(pid=12345, stdin=io.BytesIO())
+
+    def fake_popen(command: list[str], **kwargs: object) -> SimpleNamespace:
+        captured["command"] = command
+        captured.update(kwargs)
+        return fake_process
+
+    monkeypatch.setattr(process_tree.subprocess, "Popen", fake_popen)
+
+    tree = process_tree.ManagedProcessTree.spawn(
+        ["python", "-m", "nucleus"],
+        cwd=tmp_path,
+        env={},
+        log_path=tmp_path / "nucleus.log",
+    )
+    try:
+        flags = captured["creationflags"]
+        assert flags & create_new_process_group
+        assert flags & create_no_window
+    finally:
+        tree._close_log()
+
+
+def test_windows_exec_wrapper_hides_console_for_managed_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import io
+    from types import SimpleNamespace
+
+    import corona._exec_tree as exec_tree
+
+    create_no_window = 0x08000000
+    monkeypatch.setattr(
+        exec_tree,
+        "os",
+        SimpleNamespace(name="nt", environ={"STELLA_CONTROLLER_PID": "1"}),
+    )
+    monkeypatch.setattr(
+        exec_tree,
+        "sys",
+        SimpleNamespace(
+            argv=["corona._exec_tree", "python", "-m", "nucleus"],
+            stdin=SimpleNamespace(buffer=io.BytesIO(b"\x01")),
+            stdout=io.StringIO(),
+            stderr=io.StringIO(),
+        ),
+    )
+    monkeypatch.setattr(exec_tree, "_arm_parent_death_signal", lambda: None)
+    monkeypatch.setattr(
+        exec_tree.subprocess, "CREATE_NO_WINDOW", create_no_window, raising=False
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_popen(command: list[str], **kwargs: object) -> SimpleNamespace:
+        captured["command"] = command
+        captured.update(kwargs)
+        return SimpleNamespace(wait=lambda: 0)
+
+    monkeypatch.setattr(exec_tree.subprocess, "Popen", fake_popen)
+
+    assert exec_tree.main() == 0
+    assert captured["creationflags"] & create_no_window
+    assert captured["stdin"] == subprocess.DEVNULL
+    assert captured["stdout"] is exec_tree.sys.stdout
+    assert captured["stderr"] is exec_tree.sys.stderr
+
+
 @pytest.mark.skipif(
     os.name == "nt", reason="POSIX process groups are unavailable on Windows"
 )

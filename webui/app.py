@@ -70,6 +70,7 @@ def webui_route_routers():
     from webui.routers import config as config_router_module
     from webui.routers import conversations as conversations_router_module
     from webui.routers import evaluation as evaluation_router_module
+    from webui.routers import gravitas as gravitas_router_module
     from webui.routers import logs as logs_router_module
     from webui.routers import manage as manage_router_module
     from webui.routers import personal_memory as personal_memory_router_module
@@ -84,6 +85,7 @@ def webui_route_routers():
     return (
         auth_router_module.router,
         status_router_module.router,
+        gravitas_router_module.router,
         usage_router_module.router,
         providers_router_module.router,
         platform_router_module.router,

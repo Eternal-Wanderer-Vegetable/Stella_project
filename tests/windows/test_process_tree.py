@@ -58,6 +58,29 @@ def test_corona_managed_process_tree_starts_the_child_in_its_job(tmp_path):
         tree.terminate()
 
 
+def test_corona_managed_process_tree_suppresses_console_window(tmp_path):
+    from corona.process_tree import ManagedProcessTree
+
+    log_path = tmp_path / "console-window.log"
+    tree = ManagedProcessTree.spawn(
+        [
+            sys.executable,
+            "-c",
+            "import ctypes; print(ctypes.windll.kernel32.GetConsoleWindow(), flush=True)",
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        env=os.environ.copy(),
+        log_path=log_path,
+    )
+    try:
+        assert tree.wait(timeout=10) == 0
+        tree.wait_for_tree()
+        assert log_path.read_text(encoding="utf-8").strip() == "0"
+    finally:
+        if tree.poll() is None:
+            tree.terminate()
+
+
 def test_file_lock_is_observable_and_clears(tmp_path):
     path = tmp_path / "locked.txt"
     path.write_text("locked", encoding="utf-8")

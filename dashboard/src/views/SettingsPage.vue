@@ -45,13 +45,10 @@ async function saveAccount(): Promise<void> {
 }
 
 async function runDoctor(): Promise<void> {
-  doctorLoading.value = true;
   try {
-    doctor.value = await unwrap<{ ok: boolean; output: string }>(api.get('/system/doctor'));
+    await doctorStore.run();
   } catch (err) {
     toastApiError(toast, err);
-  } finally {
-    doctorLoading.value = false;
   }
 }
 
@@ -61,9 +58,9 @@ async function runDoctor(): Promise<void> {
   <v-container fluid class="pa-6">
     <h1 class="text-h5 font-weight-bold mb-4">设置</h1>
 
-    <v-row>
-      <v-col cols="12" md="6">
-        <v-card class="pa-4 mb-4">
+    <v-row align="stretch">
+      <v-col cols="12" md="6" class="d-flex flex-column ga-4">
+        <v-card class="pa-4">
           <div class="text-subtitle-1 font-weight-medium mb-3">安全</div>
           <v-text-field v-model="username" label="用户名" density="compact" disabled />
           <v-text-field v-model="oldPassword" label="当前密码" type="password" density="compact" />
@@ -73,7 +70,7 @@ async function runDoctor(): Promise<void> {
           </v-btn>
         </v-card>
 
-        <v-card class="pa-4">
+        <v-card class="pa-4 mt-auto">
           <div class="text-subtitle-1 font-weight-medium mb-3">关于</div>
           <div class="text-body-2 text-medium-emphasis">
             Stella 控制台 · WebUI v2（设计文档见 design_docs）。AGPL-3.0。
@@ -82,14 +79,17 @@ async function runDoctor(): Promise<void> {
         </v-card>
       </v-col>
 
-      <v-col cols="12" md="6">
-        <v-card class="pa-4">
+      <v-col cols="12" md="6" class="d-flex">
+        <v-card class="pa-4 flex-grow-1">
           <div class="d-flex align-center mb-3">
             <div class="text-subtitle-1 font-weight-medium">环境自检（doctor）</div>
             <v-spacer />
             <v-btn size="small" :loading="doctorLoading" @click="runDoctor">运行</v-btn>
           </div>
-          <div v-if="!doctor" class="text-body-2 text-medium-emphasis">
+          <div v-if="!doctor && doctorLoading" class="text-body-2 text-medium-emphasis">
+            正在运行环境自检，请稍候…
+          </div>
+          <div v-else-if="!doctor" class="text-body-2 text-medium-emphasis">
             运行环境自检（Python/依赖/目录/端口/NapCat 探活）。
           </div>
           <template v-else>

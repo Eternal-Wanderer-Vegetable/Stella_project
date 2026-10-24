@@ -60,7 +60,10 @@ class ManagedProcessTree:
         creationflags = 0
         popen_args: dict = {}
         if os.name == "nt":
-            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            creationflags = (
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            )
         else:
             owner_watch_read_fd, owner_watch_write_fd = os.pipe()
             os.set_inheritable(owner_watch_read_fd, True)

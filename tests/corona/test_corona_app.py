@@ -128,15 +128,22 @@ def test_corona_static_fallback_uses_explicit_dist_only(tmp_path: Path) -> None:
         response = client.get("/")
         assert response.status_code == 200
         assert "corona-dist" in response.text
+        health = client.get("/_corona/v1/health")
+        assert health.status_code == 404
+        assert health.headers["content-type"].startswith("application/json")
+        assert health.json()["error"]["code"] == "not_found"
+        assert "corona-dist" in client.get("/settings").text
         assert client.get("/api/v1/auth/setup-status").status_code == 200
 
 
-def test_disabled_webui_keeps_supervisor_and_local_health(tmp_path: Path) -> None:
+def test_disabled_webui_keeps_supervisor_and_protects_local_health(tmp_path: Path) -> None:
     bootstrap = _bootstrap(tmp_path, webui_enabled=False)
     supervisor = _StubSupervisor()
     app = create_corona_app(bootstrap, supervisor)
-    with TestClient(app, client=("127.0.0.1", 123)) as client:
+    with TestClient(app) as client:
         assert client.get("/api/v1/auth/setup-status").status_code == 404
-        assert client.get("/_corona/v1/health").status_code == 200
+        health = client.get("/_corona/v1/health")
+        assert health.status_code == 404
+        assert health.json()["error"]["code"] == "not_found"
         assert supervisor.started
     assert supervisor.stopped
