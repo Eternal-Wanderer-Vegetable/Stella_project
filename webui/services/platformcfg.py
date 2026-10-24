@@ -14,13 +14,13 @@ from pathlib import Path
 
 from dotenv.parser import parse_stream
 
-from core.transport.adapter_loader import (
+from deploy import env_keys
+from deploy.env_schema import build_schema
+from stella_bootstrap.adapter_names import (
     DEFAULT_ADAPTER_MODULES,
     parse_adapter_modules,
 )
-from core.transport.adapter_policy import unavailable_adapter_reasons
-from deploy import env_keys
-from deploy.env_schema import build_schema
+from stella_bootstrap.adapter_policy import unavailable_adapter_reasons
 from webui.responses import ApiError
 from webui.services import envfile
 

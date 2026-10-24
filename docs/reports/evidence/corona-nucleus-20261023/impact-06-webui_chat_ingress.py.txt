@@ -1,0 +1,102 @@
+{
+  "target": {
+    "id": "File:webui/chat_ingress.py",
+    "name": "chat_ingress.py",
+    "type": "File",
+    "filePath": "webui/chat_ingress.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 6,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 2,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:webui/routers/chat.py",
+        "name": "chat.py",
+        "filePath": "webui/routers/chat.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/services/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:webui/app.py",
+        "name": "app.py",
+        "filePath": "webui/app.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/routers/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:scripts/dev_webui.py",
+        "name": "dev_webui.py",
+        "filePath": "scripts/dev_webui.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/mount.py",
+        "name": "mount.py",
+        "filePath": "webui/mount.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  }
+}
+
+  GitNexus Impact (1.6.12)

@@ -47,3 +47,11 @@ SQLite（STELLA_HOME/memory/agent_memory.db）
 （v14 的 `user_address_preferences` 表，与 `user_profiles.nickname` 和普通记忆分开），
 `memory/addressing_intent.py` 负责从自然语言里识别「叫我 X」这类意图——规则做廉价预筛、
 embedding 判语义，只返回结构化请求，不把模型输出当可执行命令。
+
+## Corona / Nucleus 进程边界（2026-10-23）
+
+Corona 是独立控制进程，负责本机管理 API、认证、配置修复与 Nucleus 子进程监督；Nucleus 承载 Bot、业务 WebUI 路由、模型与业务数据库。浏览器业务请求由 Corona 校验身份后代理给 Nucleus，进程间接口使用 `stella_contracts/` 中的版本化合同。两者共用显式 `STELLA_HOME`，控制状态、业务 SQLite 与运行日志仍按数据边界隔离。
+
+Docker 的 `/_corona/v1/health` 表示 Corona 控制进程可响应，返回的 `core_phase` 单独报告 Nucleus 阶段；容器 `healthy` 不代表 Bot 已连上 QQ、模型可用或业务已 ready。Compose 停止宽限设为 65 秒，覆盖 45 秒排空、10 秒强停/回收及宿主余量。Docker Healthcheck 在 Corona 探活失败时仍回退到 legacy 状态路由，以兼容现行默认入口。
+
+截至本记录，`bot.py` 与 Compose 默认入口仍为 legacy。CN11 的发布包静态检查和隔离测试不等于灰度或外部产品验收；Windows/Linux 干净 VM、真实 Docker 启动、QQ/WebChat 与模型验收未齐前，`CORONA-IMPL` 保持 NOT READY。范围与证据见[实施计划](../plans/2026-10-23-corona-nucleus-engineering-plan.md)及[CN11 报告](../reports/2026-10-23-corona-nucleus-cn11.md)。

@@ -1,0 +1,264 @@
+{
+  "processes": [
+    {
+      "id": "proc_322_create_evaluation_ru",
+      "summary": "Create_evaluation_run → _utcnow",
+      "priority": 0.095,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 3
+    },
+    {
+      "id": "proc_121_main",
+      "summary": "Main → Docker_available",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_122_main",
+      "summary": "Main → Run_output",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_172_main",
+      "summary": "Main → Find_root",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_173_main",
+      "summary": "Main → No_python_error",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_174_main",
+      "summary": "Main → Render_llm",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "intra_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_175_main",
+      "summary": "Main → Parse_json_output",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_64_main",
+      "summary": "Main → Embedded_python",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_65_main",
+      "summary": "Main → Probe_python",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_105_plugins_reload",
+      "summary": "Plugins_reload → _call_hook",
+      "priority": 0.08,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/services/evaluation.py:start_run",
+      "name": "start_run",
+      "filePath": "webui/services/evaluation.py",
+      "startLine": 79,
+      "endLine": 168,
+      "module": "Services",
+      "process_id": "proc_322_create_evaluation_ru",
+      "step_index": 2
+    },
+    {
+      "id": "Function:cli/src/main.rs:run",
+      "name": "run",
+      "filePath": "cli/src/main.rs",
+      "startLine": 220,
+      "endLine": 432,
+      "module": "Cluster_148",
+      "process_id": "proc_121_main",
+      "step_index": 2
+    },
+    {
+      "id": "Function:astrbot_compat/loader.py:reload_plugin",
+      "name": "reload_plugin",
+      "filePath": "astrbot_compat/loader.py",
+      "startLine": 1035,
+      "endLine": 1117,
+      "module": "Astrbot_compat",
+      "process_id": "proc_105_plugins_reload",
+      "step_index": 3
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/test_deploy_process.py:test_start_detached_cleans_up_process_after_startup_probe_failure",
+      "name": "test_start_detached_cleans_up_process_after_startup_probe_failure",
+      "filePath": "tests/test_deploy_process.py",
+      "startLine": 141,
+      "endLine": 173,
+      "module": "Deploy"
+    },
+    {
+      "id": "Function:tests/test_deploy_process.py:test_start_detached_replaces_running_instance_and_transfers_ownership",
+      "name": "test_start_detached_replaces_running_instance_and_transfers_ownership",
+      "filePath": "tests/test_deploy_process.py",
+      "startLine": 597,
+      "endLine": 635,
+      "module": "Deploy"
+    },
+    {
+      "id": "File:tests/test_deploy_process.py",
+      "name": "test_deploy_process.py",
+      "filePath": "tests/test_deploy_process.py"
+    },
+    {
+      "id": "Function:deploy/process.py:stop",
+      "name": "stop",
+      "filePath": "deploy/process.py",
+      "startLine": 408,
+      "endLine": 440,
+      "module": "Deploy"
+    },
+    {
+      "id": "Function:deploy/process.py:preflight_for_foreground_start",
+      "name": "preflight_for_foreground_start",
+      "filePath": "deploy/process.py",
+      "startLine": 522,
+      "endLine": 537,
+      "module": "Deploy"
+    },
+    {
+      "id": "File:deploy/process.py",
+      "name": "process.py",
+      "filePath": "deploy/process.py"
+    },
+    {
+      "id": "Function:desktop/src-tauri/src/commands.rs:apply_advanced_env",
+      "name": "apply_advanced_env",
+      "filePath": "desktop/src-tauri/src/commands.rs",
+      "startLine": 969,
+      "endLine": 1052,
+      "module": "Cluster_468"
+    },
+    {
+      "id": "File:desktop/src-tauri/src/commands.rs",
+      "name": "commands.rs",
+      "filePath": "desktop/src-tauri/src/commands.rs"
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_hot_reload.py:test_reload_purges_the_module_tree",
+      "name": "test_reload_purges_the_module_tree",
+      "filePath": "tests/astrbot_compat/test_hot_reload.py",
+      "startLine": 301,
+      "endLine": 314
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_hot_reload.py:test_reload_cancels_registered_tasks",
+      "name": "test_reload_cancels_registered_tasks",
+      "filePath": "tests/astrbot_compat/test_hot_reload.py",
+      "startLine": 317,
+      "endLine": 342
+    },
+    {
+      "id": "File:tests/astrbot_compat/test_hot_reload.py",
+      "name": "test_hot_reload.py",
+      "filePath": "tests/astrbot_compat/test_hot_reload.py"
+    },
+    {
+      "id": "Function:stella-installer/src-tauri/src/commands.rs:start_bot",
+      "name": "start_bot",
+      "filePath": "stella-installer/src-tauri/src/commands.rs",
+      "startLine": 92,
+      "endLine": 129,
+      "module": "Cluster_767"
+    },
+    {
+      "id": "Function:stella-installer/src-tauri/src/commands.rs:apply_advanced_env",
+      "name": "apply_advanced_env",
+      "filePath": "stella-installer/src-tauri/src/commands.rs",
+      "startLine": 889,
+      "endLine": 972,
+      "module": "Cluster_763"
+    },
+    {
+      "id": "File:stella-installer/src-tauri/src/commands.rs",
+      "name": "commands.rs",
+      "filePath": "stella-installer/src-tauri/src/commands.rs"
+    },
+    {
+      "id": "Property:astrbot_compat/loader.py:_detached",
+      "name": "_detached",
+      "filePath": "astrbot_compat/loader.py",
+      "startLine": 58,
+      "endLine": 58
+    },
+    {
+      "id": "File:astrbot_compat/loader.py",
+      "name": "loader.py",
+      "filePath": "astrbot_compat/loader.py"
+    },
+    {
+      "id": "Function:deploy/__main__.py:_cmd_start",
+      "name": "_cmd_start",
+      "filePath": "deploy/__main__.py",
+      "startLine": 137,
+      "endLine": 159,
+      "module": "Deploy"
+    },
+    {
+      "id": "Function:deploy/__main__.py:_cmd_space_merge",
+      "name": "_cmd_space_merge",
+      "filePath": "deploy/__main__.py",
+      "startLine": 365,
+      "endLine": 375
+    },
+    {
+      "id": "File:deploy/__main__.py",
+      "name": "__main__.py",
+      "filePath": "deploy/__main__.py"
+    },
+    {
+      "id": "Function:tests/capability/test_registry.py:test_replace_provider_swaps_in_place",
+      "name": "test_replace_provider_swaps_in_place",
+      "filePath": "tests/capability/test_registry.py",
+      "startLine": 538,
+      "endLine": 546,
+      "module": "Capability"
+    }
+  ],
+  "timing": {
+    "vector": 8.5,
+    "bm25": 1577.7,
+    "merge": 0.3,
+    "symbol_lookup": 104.7,
+    "ranking": 0.1,
+    "formatting": 0.1,
+    "wall": 1684.2
+  }
+}
+
+  GitNexus Query (1.6.12)

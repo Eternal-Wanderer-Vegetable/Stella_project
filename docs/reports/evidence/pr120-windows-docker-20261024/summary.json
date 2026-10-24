@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "evidence_date": "2026-10-24",
+  "pull_request": 120,
+  "branch": "codex/corona-nucleus-implementation",
+  "release_version": "6.3.0",
+  "compatibility": {
+    "database_schema": 19,
+    "rust_api": 3,
+    "default_runtime": "legacy"
+  },
+  "gitnexus": {
+    "version": "1.6.12",
+    "root_cause": "Incremental LadybugDB readback produced empty Method IDs and contaminated generic __call__ flow attribution.",
+    "upstream_issue": "https://github.com/abhigyanpatwari/GitNexus/issues/3564",
+    "rebuild_command": "node .gitnexus/run.cjs analyze --force --no-parse-cache --index-only --pdg --workers 1 <PR-worktree>",
+    "snapshot": {
+      "nodes": 114607,
+      "edges": 288472,
+      "clusters": 1192,
+      "flows": 796,
+      "method_nodes": 3230,
+      "empty_method_ids": 0
+    },
+    "verified_callables": [
+      {
+        "uid": "Method:corona/adapter_proxy.py:AdapterProxyMiddleware.__call__#3",
+        "processes": []
+      },
+      {
+        "uid": "Method:corona/proxy.py:ProxyResponse.__call__#3",
+        "processes": []
+      }
+    ],
+    "detect_changes": {
+      "all": {
+        "files": 18,
+        "symbols": 35,
+        "processes": 0,
+        "risk": "low",
+        "partial_or_truncated": false
+      },
+      "compare_windows_baseline_2d1eb736": {
+        "files": 35,
+        "symbols": 73,
+        "processes": 12,
+        "risk": "high",
+        "partial_or_truncated": false
+      },
+      "compare_main": {
+        "files": 292,
+        "symbols": 1945,
+        "processes": 165,
+        "risk": "critical",
+        "listing_capped": true,
+        "partial_or_truncated": false
+      }
+    },
+    "known_limits": {
+      "entry_candidates_omitted": 3200,
+      "entry_candidates_total": 3400,
+      "callees_skipped": 952,
+      "walks_cut": 43,
+      "traces_depth_capped": 23,
+      "files_over_512kb_skipped": 38,
+      "cross_language_property_edges_declined": 339
+    },
+    "post_commit_refresh": {
+      "commit": "44228044c19cc9dd38487b270f93d3863bc7b8c5",
+      "status": "up-to-date",
+      "snapshot": {
+        "nodes": 114608,
+        "edges": 288477,
+        "clusters": 1192,
+        "flows": 796,
+        "method_nodes": 3230,
+        "empty_method_ids": 0
+      },
+      "scope_all": "No changes detected on the clean indexed HEAD.",
+      "compare_main": {
+        "files": 294,
+        "symbols": 1945,
+        "processes": 165,
+        "risk": "critical",
+        "listing_capped": true
+      }
+    }
+  },
+  "windows_installer": {
+    "artifact": "Stella_6.3.0_x64-setup.exe",
+    "sha256": "049eeaaf193efae0f5f74fe07a421b3db2a0ca83f2d740fa8f03b77cacca8a7a",
+    "size_bytes": 231977878,
+    "signature_status": "NotSigned",
+    "profile": "oneclick-python",
+    "payload_mode": "online",
+    "environment": "disposable Windows Sandbox",
+    "harness": "scripts/test_nsis_install.ps1",
+    "result": "pass",
+    "duration_seconds": 20,
+    "checks_passed": [
+      "installer signature policy (unsigned local build allowed)",
+      "installer exits with code 0",
+      "program tree staged",
+      "profile matches oneclick-python",
+      "payload mode matches online",
+      "release metadata payload mode is consistent"
+    ],
+    "limits": [
+      "GUI first boot was not exercised",
+      "Online runtime/component package bootstrap was not exercised",
+      "Local staging did not contain the formal-release package catalog",
+      "Upgrade and rollback were not exercised"
+    ],
+    "raw_report": "installer-test-report.json"
+  },
+  "docker": {
+    "engine_version": "29.8.2",
+    "build_command": "docker build --tag stella:pr120-20261024-630-hc2 .",
+    "initial_complete_build_context": "235.84 MB",
+    "prior_aborted_context": "1.89 GB; stopped after finding desktop/src-tauri/target was not excluded",
+    "image_tag": "stella:pr120-20261024-630-hc2",
+    "image_id": "sha256:5fe65d3fbe99b70654e0b5f1efe8f4ee41f559babca9358ca74e995e743d02a4",
+    "image_size_bytes": 2244941899,
+    "container_id": "ed06a45127a4bf69938335c0c1452109b9bebb845e45d025ba3d52102559d5c6",
+    "container_state_at_capture": "running",
+    "health_at_capture": "healthy",
+    "volume": "stella-pr120-smoke-data-20261024",
+    "published_binding": "127.0.0.1:18863 -> 8080/tcp",
+    "dummy_config": {
+      "host": "0.0.0.0",
+      "port": 8080,
+      "allowed_groups": "0",
+      "contains_credentials": false
+    },
+    "checks": {
+      "static_version_marker": "6.3.0",
+      "desktop_rust_target_in_image": false,
+      "container_local_status_http": 200,
+      "container_local_status_content_type": "application/json",
+      "container_local_status_version": "6.3.0",
+      "host_local_status_http": 403,
+      "corona_path_http": 200,
+      "corona_path_content_type": "text/html; charset=utf-8",
+      "healthcheck_exit_code": 0,
+      "docker_health": "healthy",
+      "qq_adapter_connected": false,
+      "qq_token_configured": false,
+      "local_model_available": false
+    },
+    "healthcheck_behavior": "Require controller_boot_id in the Corona JSON response; otherwise fall back to /stella/status and require a JSON version field. This rejects the legacy SPA HTML 200 false positive.",
+    "limits": [
+      "Docker Compose deployment was not exercised",
+      "No QQ/OneBot, WebChat, or model service was connected"
+    ],
+    "cleanup_after_capture": "Complete: verified removal of the task-created container, dedicated named volume, and both task-tagged images.",
+    "removed_image_ids": [
+      "sha256:b1119226da02afc55ae1a5aed14d997ef024cde86f21989c015be54bbc326a19",
+      "sha256:5fe65d3fbe99b70654e0b5f1efe8f4ee41f559babca9358ca74e995e743d02a4"
+    ]
+  },
+  "acceptance": {
+    "qq_onebot": "deferred until the user merges PR #120 to main",
+    "corona_impl": "in_progress / NOT READY"
+  },
+  "hosted_workflows": {
+    "commit": "44228044c19cc9dd38487b270f93d3863bc7b8c5",
+    "ci": {
+      "run_id": 40051788830,
+      "jobs_passed": 12,
+      "jobs_total": 12,
+      "conclusion": "success"
+    },
+    "docker_publish": {
+      "run_id": 40051788823,
+      "conclusion": "success"
+    },
+    "dashboard_ci": {
+      "run_id": 40051788829,
+      "conclusion": "success"
+    }
+  }
+}

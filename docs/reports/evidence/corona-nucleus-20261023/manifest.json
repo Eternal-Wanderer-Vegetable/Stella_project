@@ -1,0 +1,397 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "c1713e3dfb0854e1a7b746e0ef1e5c82ed9a8485",
+  "date": "2026-10-23",
+  "exclusions": [
+    "manifest.json",
+    "README.md",
+    "verification.json"
+  ],
+  "files": [
+    {
+      "path": "baseline-docs.txt",
+      "sha256": "b74c88944acac2e2ee35c1c8b59cd063d430b422cffea4b702442104c5bb6ca6",
+      "bytes": 87
+    },
+    {
+      "path": "baseline-pytest.txt",
+      "sha256": "477da2b68921468cd650f26e37002905c6c93119c1e0a843bf3a3d5a746e7183",
+      "bytes": 180
+    },
+    {
+      "path": "build_inventory.py",
+      "sha256": "6a102bdc347ecb9ee4462f8743d03024bb116b4f8dbc7d630ccac4cbdebb8c6d",
+      "bytes": 22644
+    },
+    {
+      "path": "config-probe-result.json",
+      "sha256": "f0a00ac350cb9621d09009d62162dc25663943dd600e401007e65a0fe2b86af1",
+      "bytes": 346
+    },
+    {
+      "path": "config_probe.py",
+      "sha256": "d334adfac255aac2cd9a9f29e4cd9ca964f2f85e39b90dae12e711f021330188",
+      "bytes": 2802
+    },
+    {
+      "path": "context-_graceful_shutdown-ai_gateway.txt",
+      "sha256": "c703b1d3025fcc2b28d1f9aa491b4def3b1396373df06b0a57b27e7dc093fd34",
+      "bytes": 1790
+    },
+    {
+      "path": "context-create_webui_app-app.txt",
+      "sha256": "6d3ef2ffdc53eb18565604b2fc693751412c3ed466c4ea290130c63f7cb01eea",
+      "bytes": 1710
+    },
+    {
+      "path": "context-execute_operation-runtime.txt",
+      "sha256": "02d930d310c0710bf9d5997ab985e5858209b923dc8f964a4cc3ff226b1d3041",
+      "bytes": 6130
+    },
+    {
+      "path": "context-replace_running-process.txt",
+      "sha256": "c0b9c9cb87b6f6f48cd78256ecca2bc5c0a28f51f306bc53852fd75367ef5367",
+      "bytes": 1585
+    },
+    {
+      "path": "context-restart-system.txt",
+      "sha256": "be5e709c30a0bad7320d76948a16c856d8ef6afd32607890c35280768a563ebf",
+      "bytes": 2364
+    },
+    {
+      "path": "context-run_turn-chat_ingress.txt",
+      "sha256": "e66bfb10ea3b046bacb5f0ed520d6991f53bb7df1ff8463891a802af5e57186d",
+      "bytes": 5058
+    },
+    {
+      "path": "context-setup_webui-mount.txt",
+      "sha256": "046b995f1ca2548682701d294dcd28478e72ec40eef968be8c65f338acbb9651",
+      "bytes": 640
+    },
+    {
+      "path": "context-spawn_successor-self_restart.txt",
+      "sha256": "a06f124da0ad7fb19b4f1d2d456c82b5ba28f285d3a7e97f7f8d296740f54d00",
+      "bytes": 1230
+    },
+    {
+      "path": "context-start_bot-commands.txt",
+      "sha256": "9f20b7287bc042136ac33f5eb17f1b05ae6ab84b5b03a2cf391c5ffc77b2cff1",
+      "bytes": 2082
+    },
+    {
+      "path": "context-start_detached-process.txt",
+      "sha256": "2c577906d1bf31acb58a94e7611ddbaeba63464ecbd2545dba8dd83bbc5f719f",
+      "bytes": 3359
+    },
+    {
+      "path": "context-stop-runtime.txt",
+      "sha256": "428addf860afcbf7ecef8c8e4a6d3e42c35d73d305799341563c10bb0622a974",
+      "bytes": 2953
+    },
+    {
+      "path": "context-wait_for_startup-process.txt",
+      "sha256": "aeb7ba3012b56ef8bb2a2587d0418a111176ff51c7977c331990e108374ce97a",
+      "bytes": 1842
+    },
+    {
+      "path": "data-boundary.json",
+      "sha256": "3af39ad6ad9fd750f541bb13f2243c07412f4b8cc9ac13e4f1593f8ee64f5026",
+      "bytes": 248
+    },
+    {
+      "path": "detect-final-all.json",
+      "sha256": "9caa25c781a6a705ca0ec322f4852ffd744f517d277e6636bc2e8349ede3e6a4",
+      "bytes": 2478
+    },
+    {
+      "path": "detect-final-compare.json",
+      "sha256": "393656906d998e1f72f169f04801b41c2accb965a2f044a9046ab33543cbb3f1",
+      "bytes": 11659
+    },
+    {
+      "path": "detect-incremental-zero-all.json",
+      "sha256": "34f19bd9251c69f4e6a1a37198c1032425ca86a9ebdc8fb31fddb38501e7adcc",
+      "bytes": 173
+    },
+    {
+      "path": "detect-incremental-zero-compare.json",
+      "sha256": "d0ad3729023836f6609a6cb9c7ad9298e53d0f0ec757790c0de1dfd84bb47b18",
+      "bytes": 590
+    },
+    {
+      "path": "evidence-reproduction.txt",
+      "sha256": "ed7770846b16317e53d69e6eac99fb95ebebfcb3183b4f743e7ea27e3751e710",
+      "bytes": 224
+    },
+    {
+      "path": "evidence-ruff.txt",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "bytes": 19
+    },
+    {
+      "path": "framework-probe-result.json",
+      "sha256": "2b38d9f62e0ce14891cfa0ca7e5dc1b21a5e6dae4f6e1e095caf4d175afc8f56",
+      "bytes": 458
+    },
+    {
+      "path": "framework_probe.py",
+      "sha256": "126936e4d85306fdfb4daf3e417db277c6f91a8506e95e5320e1150f31ee7c10",
+      "bytes": 1462
+    },
+    {
+      "path": "graph-commands.json",
+      "sha256": "5e7e94936c7d4e6cca8dbbe358d9c9d44cdcbd3a538535be6089c6fa47f3de72",
+      "bytes": 32151
+    },
+    {
+      "path": "impact-00-config_settings.py-output-retry.stderr.txt",
+      "sha256": "11f1be76525c40f95bf9e41cb9edc10291c445d8c0be083e4513e461ced97add",
+      "bytes": 28
+    },
+    {
+      "path": "impact-00-config_settings.py-output-retry.txt",
+      "sha256": "2692b14f15ca166bc8200ce1ae7ad7da5c119940057d3edf2369f73a0d8b53b8",
+      "bytes": 71365
+    },
+    {
+      "path": "impact-00-config_settings.py.txt",
+      "sha256": "393adf741f1a26c83c184082099bfa8c1e974c0d143d0336e79b183d7abe7d3e",
+      "bytes": 65558
+    },
+    {
+      "path": "impact-01-config___init__.py.txt",
+      "sha256": "0078af24151aade70c360d4d9f2338698f647d818703dada889fa698ce5c3c3f",
+      "bytes": 52975
+    },
+    {
+      "path": "impact-02-bot.py.txt",
+      "sha256": "9657f51e704636bb2f2f2af518907df7acaa7cf3b117b138c5dcc51a25d9f55c",
+      "bytes": 1109
+    },
+    {
+      "path": "impact-03-webui_app.py.txt",
+      "sha256": "db399c4777302c6c2cfdf932818b8d30315b8adf3e623a740a4def547343f65b",
+      "bytes": 1504
+    },
+    {
+      "path": "impact-04-webui_security.py.txt",
+      "sha256": "3b4930c6673fe1af5160fcbb60ca6dc3b1f931522dfbce10f3ce0f166cd10c5a",
+      "bytes": 6243
+    },
+    {
+      "path": "impact-05-webui_services_envfile.py.txt",
+      "sha256": "37ddd9e9d3c662c33f7c09464c09525b229838bc0d0bbdfb80f9b04dab45b0d6",
+      "bytes": 3391
+    },
+    {
+      "path": "impact-06-webui_chat_ingress.py.txt",
+      "sha256": "c731eed8dd53045d438b1245529f84bf3fc77a8d3c7aaaf2ae9e1bbe98ff3c29",
+      "bytes": 2297
+    },
+    {
+      "path": "impact-07-deploy_process.py.txt",
+      "sha256": "b25c85b99b0d373f485218cb147a6bdb0e16d18dfeeb5cdfdc4d4d56919041a9",
+      "bytes": 10878
+    },
+    {
+      "path": "impact-08-deploy_runtime.py.txt",
+      "sha256": "2229c87870c101d9fcf931b48f7870806964a92f3b27f6046e13ef822f84ddf8",
+      "bytes": 14540
+    },
+    {
+      "path": "impact-09-runtime-manager_src_main.rs.txt",
+      "sha256": "10a203d5e3d0fdc9582c0ba78a3918411760a2443c42a92c9448fb1fd199e4fc",
+      "bytes": 1152
+    },
+    {
+      "path": "impact-10-desktop_src-tauri_src_commands.rs.txt",
+      "sha256": "59e3a1fcafaa6bbcbba2d3dd33df3f0f8bde2a9771a9119373367a365cb60021",
+      "bytes": 1168
+    },
+    {
+      "path": "impact-11-core_runtime_facade.py.txt",
+      "sha256": "9f24b72e42f2a6765c003d535e49f2140d2a3fc06a58df02ed8b2304f4045dd3",
+      "bytes": 5525
+    },
+    {
+      "path": "impact-12-cometa_runtime.py.txt",
+      "sha256": "b65aafd40f8f4f0c274a30f3160ae54e8ccbf405a609f4eb9a0f4964c3d949f6",
+      "bytes": 3425
+    },
+    {
+      "path": "impact-13-webui_source_build.py.txt",
+      "sha256": "967863a276e036afa2ae7335ab7fa600daf7cbcf465093fa72cdf5d2c4a6961b",
+      "bytes": 1038
+    },
+    {
+      "path": "impact-14-feature_list.json.txt",
+      "sha256": "593aef105c569663d228a0717d2a66747ccdfdac90b3fa634e99c423892ab049",
+      "bytes": 5650
+    },
+    {
+      "path": "impact-15-progress.md.txt",
+      "sha256": "279b2f66f3ca4d5c671210487b6b682a75f069d764ec5c77edfc9c7b6f5a8007",
+      "bytes": 7429
+    },
+    {
+      "path": "impact-16-session-handoff.md.txt",
+      "sha256": "f32051af530a8d772cd89bcaaca1b08dc57219ec17f2146211600c598931ae6a",
+      "bytes": 5653
+    },
+    {
+      "path": "impact-17-docs_history_README.md.txt",
+      "sha256": "1b0f5db1a4b15f849437897ed237fcffafc7b14274868fd6e3b7e61f998a4d7a",
+      "bytes": 26494
+    },
+    {
+      "path": "impact-18-docs_history_README.en.md.txt",
+      "sha256": "5dce90d536ec63132908f4befbee545aa3a4f5ea08eabe5fba7a28a95dc2cb7f",
+      "bytes": 25576
+    },
+    {
+      "path": "impact-19-docs_plans_2026-10-23-corona-nucleus-engineering-plan.md.txt",
+      "sha256": "81a67dee475bd19d3bd5b04d9bda2046090ad76cfef960739b85408b2d7c7b86",
+      "bytes": 284
+    },
+    {
+      "path": "impact-evidence-build_inventory.py.json",
+      "sha256": "9ed6a5af2227dbe5687188889340a9a79bda9b3e77147b818346b4d7cbcaf565",
+      "bytes": 5939
+    },
+    {
+      "path": "impact-evidence-config_probe.py.json",
+      "sha256": "61f41e43440b5dc76ff08d1b7ebfd5f270773da60c099bd41e0dfb994b8a66a9",
+      "bytes": 5840
+    },
+    {
+      "path": "impact-evidence-framework_probe.py.json",
+      "sha256": "258444c06d6aaa9738b34d527e9d04dd4b8f912147e1bf8c0e10791d6ed6f0a1",
+      "bytes": 91059
+    },
+    {
+      "path": "impact-evidence-verify_plan.py.json",
+      "sha256": "37230e74b53bc20b5611696e13b81e17ff02e8cb5d858bb48957806952e34aa2",
+      "bytes": 68337
+    },
+    {
+      "path": "impact-symbol-_graceful_shutdown-ai_gateway.txt",
+      "sha256": "f617fee2429a23e89ac1c611226e9eed9a595aa731384240e8dc078c9dd1c75c",
+      "bytes": 1774
+    },
+    {
+      "path": "impact-symbol-_trigger_shutdown-ai_gateway.txt",
+      "sha256": "93fc5cc448efa8a8d948581e7364cf1c681842947f843ab9ede73ce22918facf",
+      "bytes": 1425
+    },
+    {
+      "path": "impact-symbol-execute_operation-runtime.txt",
+      "sha256": "cb10ac3702fedf8d5e8b5cea043d8ebe3292c66bd78164086c585a37085e7819",
+      "bytes": 950
+    },
+    {
+      "path": "impact-symbol-reload-spaces.txt",
+      "sha256": "c8ecccd4428bfe91e83394333f30b6027713e725d130699d35910119223aa582",
+      "bytes": 12313
+    },
+    {
+      "path": "impact-symbol-set_bindings-groups.txt",
+      "sha256": "dbfb93db2007cdfac337645494af18d77d8f2edfe8712737c7f7c133de7d5cc1",
+      "bytes": 1775
+    },
+    {
+      "path": "impact-symbol-spawn_successor-self_restart.txt",
+      "sha256": "9b2d290ce023d0f8d7d725987957dd5a0759a8df6c8b588031e946f6a7e49529",
+      "bytes": 2656
+    },
+    {
+      "path": "impact-symbol-stop-runtime.txt",
+      "sha256": "38ee456d801f68c7070c4bfbf85ad80710ba35d8cf55b2c282a7eb104d0addf4",
+      "bytes": 917
+    },
+    {
+      "path": "impact-symbol-submit_turn-facade.txt",
+      "sha256": "48bbc92f8e10c505ba0e610f6afc33bd1289a02d8f4b7157e0473e988c5c636b",
+      "bytes": 2615
+    },
+    {
+      "path": "index-snapshot.json",
+      "sha256": "cfbd2ec599990b5eff419bdb8bb85f605106f263ce2473e70670b0bdb194c630",
+      "bytes": 1208
+    },
+    {
+      "path": "processes-output-retry.stderr.txt",
+      "sha256": "39fb5997d524a0c6cc907b18920841f93e916d9598a7c3f4646a021c3d6d185f",
+      "bytes": 28
+    },
+    {
+      "path": "processes-output-retry.txt",
+      "sha256": "a321ee92d6d0a4ad597d4f3dee04fdf94bb9e9b6ac0d3b90c737663d16029132",
+      "bytes": 98321
+    },
+    {
+      "path": "processes.txt",
+      "sha256": "0153daf375378cc5bd2cf4aeeeedfc93bca043309da111f3923d827192222dc4",
+      "bytes": 65563
+    },
+    {
+      "path": "query-background.txt",
+      "sha256": "f4576d907ff3541f77b53155ccaee1dd2b8379aae482ba8a6478a7e85e4fa93d",
+      "bytes": 4685
+    },
+    {
+      "path": "query-configuration.txt",
+      "sha256": "4d6c8430aae2e1a135b49723c0ede215e8e4960a1d9985287d0cfe31f711cb92",
+      "bytes": 9340
+    },
+    {
+      "path": "query-restart.txt",
+      "sha256": "fcf522ab66d611918cf1a4feb1f3281d8696d5f703fcaf0514c1d17bec6771b4",
+      "bytes": 8842
+    },
+    {
+      "path": "query-runtime.txt",
+      "sha256": "98e0488132a5e7fc52ea5c43712a50c481f270bc865a95ae1799e2427dc50826",
+      "bytes": 8256
+    },
+    {
+      "path": "query-startup-retry.txt",
+      "sha256": "71bce0a7509a293ae696776ff2e6f89f1c5a52478f18d59ef6f19d1dfb6711c0",
+      "bytes": 7468
+    },
+    {
+      "path": "query-startup.txt",
+      "sha256": "816073b549444e5784fa18cd5adb15a005baea31b7073f08725cb39402da150a",
+      "bytes": 7812
+    },
+    {
+      "path": "query-webui.txt",
+      "sha256": "273a2d0d7064be76e4e5aa249c7c0d3e5f171866cafd442e21b74f5f26d2f0ad",
+      "bytes": 7336
+    },
+    {
+      "path": "repos.txt",
+      "sha256": "70110cd22ee993d13f1c764b63fff7df6b8b4bdafb7e39d50afb6f017ff84fad",
+      "bytes": 323
+    },
+    {
+      "path": "selected-process-steps.txt",
+      "sha256": "5d9af77b960968a27ab456e513631430db4bca895dfbc3b390b52d56f069d448",
+      "bytes": 6806
+    },
+    {
+      "path": "source-reference-audit.txt",
+      "sha256": "5e6069405341997b7129c9e471b05000ae76315787f8c95b9fa7c17b1164c3bc",
+      "bytes": 3617
+    },
+    {
+      "path": "status.txt",
+      "sha256": "57f5d1dae9396739d83799346fc7a77f1767aa4344c014d7d9376edea7247b22",
+      "bytes": 2925
+    },
+    {
+      "path": "verify_plan.py",
+      "sha256": "1a6f67f1215eb8a2d4274b48bcacee443d8093df3c3ee4d03d9dc76fda46416f",
+      "bytes": 7678
+    }
+  ]
+}

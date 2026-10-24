@@ -152,13 +152,11 @@ def _source_tree(tmp_path: Path) -> Path:
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in (
-        "astrbot_compat", "capability", "config", "core", "deploy",
-        "extensions", "gravitas", "memory", "system_prompts", "runtime-manager",
-        "stella_project", "knowledge", "skills", "assets", "webui",
-        "desktop",
-    ):
-        path = source / directory / "__init__.py"
+    from scripts.build_release_package import COMMON_DIRS
+
+    for directory in COMMON_DIRS:
+        filename = "__main__.py" if directory == "nucleus" else "__init__.py"
+        path = source / directory / filename
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("", encoding="utf-8")
     from deploy.profiles import PROFILE_IDS
@@ -366,6 +364,10 @@ def test_helper_legacy_packages_still_gate_on_manifest(tmp_path, monkeypatch):
 
 def _run_cmd_bootstrap(monkeypatch, install_result=None, exc=None):
     from deploy import __main__ as deploy_main
+
+    # A direct handler call bypasses main()'s normal legacy-configuration load.
+    # Use the same setup as the real bootstrap command without a user home.
+    deploy_main._load_legacy_modules()
     from deploy import bootstrap
 
     if exc is not None:

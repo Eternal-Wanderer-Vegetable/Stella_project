@@ -16,6 +16,7 @@
 
 | 主题 | 起点 |
 | --- | --- |
+| Corona / Nucleus 双进程 | [工程计划](../plans/2026-10-23-corona-nucleus-engineering-plan.md)、[CN00 实施记录](../reports/2026-10-23-corona-nucleus-cn00.md)、[CN01 实施记录](../reports/2026-10-23-corona-nucleus-cn01.md)、[工作包与边界清单](../plans/2026-10-23-corona-nucleus-inventory.json)、[GitNexus 与隔离探针证据](../reports/evidence/corona-nucleus-20261023/README.md)；CN00/CN01 完成、CN02 待开始，整体实施与发布验收 NOT READY |
 | 对话归属、投递与来源 | [10-08 修复计划](../plans/2026-10-08-gitnexus-plan-dialogue-attribution-delivery-repair.md)、[10-05 P8 验收](../reports/2026-10-05-dialogue-attribution-p8-acceptance.md)、[QQ 灰度](../reports/2026-10-05-qq-gray-rollout-checklist.md) |
 | Dashboard 流程完整性 | [修复计划](../plans/2026-10-04-gitnexus-plan-dashboard-flow-completeness-repair.md)、[第三次审查](../reports/2026-10-05-dashboard-flow-plan-acceptance-third-review.md) |
 | 私聊与个人记忆 | [计划](../plans/2026-10-03-gitnexus-plan-qq-private-personal-memory.md)、[检查清单](../reports/2026-10-03-qq-private-personal-memory-checklist.md) |

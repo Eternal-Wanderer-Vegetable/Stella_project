@@ -24,12 +24,23 @@ from memory.post_processors import bad_phrase_filter, parse_output, split_lines
 
 
 @pytest.fixture()
-def flow_db(tmp_path):
+def flow_db(tmp_path, monkeypatch):
+    from config import settings
+    from memory import social_store
+    from memory.social_schema import ensure_social_schema
+
+    social_db = tmp_path / "social.db"
+    monkeypatch.setattr(settings, "DB_PATH", social_db)
+    social_store._TABLES_READY = False
+    ensure_social_schema(social_db, backup=False)
+    social_store._TABLES_READY = True
+
     db = tmp_path / "turn_trace.db"
     turn_trace.configure(db)
     yield db
     message_flow.flush()
     turn_trace.configure(None)
+    social_store._TABLES_READY = False
 
 
 def _events(db, trace_id: str, kinds: tuple[str, ...] | None = None) -> list[tuple]:

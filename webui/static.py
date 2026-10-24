@@ -25,8 +25,6 @@ from urllib.parse import unquote, urlsplit
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-import config.settings as settings
-
 router = APIRouter(include_in_schema=False)
 
 logger = logging.getLogger(__name__)
@@ -100,6 +98,7 @@ def _report_dist_health_once(dist: Path) -> None:
     if not dist_version:
         return  # 本地手搓的 dist 没有版本标记：未知版本不告警
     try:
+        import config.settings as settings
         from config.state import program_version
 
         core_version = program_version(Path(settings.PROJECT_ROOT))
@@ -114,6 +113,8 @@ def _report_dist_health_once(dist: Path) -> None:
 
 def dist_dir() -> Path | None:
     """dist 目录；未启用托管或目录不存在（未构建）返回 None。"""
+    import config.settings as settings
+
     if not settings.WEBUI_SERVE_DIST:
         return None
     candidate = Path(settings.PROJECT_ROOT) / "webui" / "dist"
@@ -139,8 +140,8 @@ code{background:#1E2732;padding:.2rem .5rem;border-radius:.3rem}</style></head>
     return HTMLResponse(html, status_code=200, headers={"Cache-Control": "no-store"})
 
 
-async def _index() -> HTMLResponse:
-    dist = dist_dir()
+async def _index(get_dist=dist_dir) -> HTMLResponse:
+    dist = get_dist()
     if dist is None:
         return _not_built_page()
     return FileResponse(
@@ -148,10 +149,10 @@ async def _index() -> HTMLResponse:
     )
 
 
-async def _static_file(static_path: str) -> Any:
+async def _static_file(static_path: str, get_dist=dist_dir) -> Any:
     if static_path.startswith("api") or static_path.split("/", 1)[0] == "api":
         return JSONResponse({"status": "error", "message": "Not Found"}, status_code=404)
-    dist = dist_dir()
+    dist = get_dist()
     if dist is None:
         return _not_built_page()
     candidate = (dist / static_path).resolve()
@@ -182,7 +183,29 @@ async def _static_file(static_path: str) -> Any:
 def register_static(app) -> None:
     """把 SPA 托管路由挂到 webui 子应用上。必须**最后**调用——catch-all
     会吃掉之后注册的一切 GET 路由。"""
-    app.add_api_route("/", _index, methods=["GET"], include_in_schema=False)
+    _register_static(app, dist_dir)
+
+
+def register_static_from_directory(app, directory: Path | None) -> None:
+    """Register the safe SPA routes with a control-plane-owned dist path."""
+    resolved = directory.expanduser().resolve() if directory is not None else None
+
+    def get_dist() -> Path | None:
+        if resolved is not None and (resolved / "index.html").is_file():
+            return resolved
+        return None
+
+    _register_static(app, get_dist)
+
+
+def _register_static(app, get_dist) -> None:
+    async def index() -> HTMLResponse:
+        return await _index(get_dist)
+
+    async def static_file(static_path: str) -> Any:
+        return await _static_file(static_path, get_dist)
+
+    app.add_api_route("/", index, methods=["GET"], include_in_schema=False)
     app.add_api_route(
-        "/{static_path:path}", _static_file, methods=["GET"], include_in_schema=False
+        "/{static_path:path}", static_file, methods=["GET"], include_in_schema=False
     )

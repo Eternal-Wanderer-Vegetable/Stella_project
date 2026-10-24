@@ -18,6 +18,16 @@ The WebView2 runtime is not part of the payload; instead it is embedded into the
 
 **When touching install-time components, keep the payload in sync**: new catalog components need no payload-script change (it iterates the catalog); new Python dependencies must produce wheels under `pip wheel`; a playwright upgrade must be reflected by the bundled kernel revision (the script installs it live, so it always matches).
 
+### Corona / Nucleus release scope (CN11)
+
+Python Standalone and OneClick use the explicit `COMMON_DIRS` / `INSTALLER_DIRS` allowlists in `scripts/build_release_package.py` to include `corona/`, `nucleus/`, `stella_bootstrap/`, and `stella_contracts/`, together with the version-matched `webui/dist/`. When changing package contents, inspect both the zip and installer staging output; the source tree and import tests alone do not prove packaging is correct.
+
+The exclusion list is a release security boundary. `.stella/`, `.env` and its backups, control-client/ownership state, SQLite databases and `-wal` / `-shm` / `-journal` sidecars, logs, and deployment secrets must stay out of archives, staging, and Docker build contexts. When adding user data files, review both `build_release_package.py` and `.dockerignore`, then use synthetic sentinels to verify nested-path filtering. Upgrades reuse the existing `STELLA_HOME`; this plan does not change the business schema.
+
+The root `pyproject.toml` setuptools discovery rule includes only `stella_project*`; current Standalone/OneClick products are built from the source tree, not from a root application wheel. If a root app wheel is added later, package discovery and verification for the four new top-level packages and their resources must be expanded explicitly; the existing plugin wheel rule is not a complete product package.
+
+Docker Healthcheck probes `/_corona/v1/health` first and keeps `/stella/status` as a compatibility fallback for the current legacy default entrypoint. `core_phase` describes the Nucleus phase; container health is not business readiness. Compose `stop_grace_period` is at least 65 seconds. The CN11 default-entrypoint switch still depends on clean VMs on both platforms, a real Docker run, QQ/WebChat, model, upgrade, and rollback acceptance. `bot.py` still defaults to legacy. See the [implementation plan](../plans/2026-10-23-corona-nucleus-engineering-plan.md) and [CN11 report](../reports/2026-10-23-corona-nucleus-cn11.en.md).
+
 ### Checklist Before Tagging
 
 1. `python -m pytest tests -q` is fully green

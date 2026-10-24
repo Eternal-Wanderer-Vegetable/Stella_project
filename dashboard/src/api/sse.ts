@@ -1,4 +1,4 @@
-import { clearToken, getToken } from './http';
+import { clearToken, getToken, isControlPlaneEndpoint } from './http';
 
 /** 401 未授权（与 Axios 拦截器同一处理后的标记错误）：调用方据此停止重连。 */
 export class SseAuthError extends Error {
@@ -31,13 +31,16 @@ export async function sseStream(
     signal: opts.signal,
   });
   if (resp.status === 401) {
-    // O09：SSE 收到 401 走与 Axios 拦截器（http.ts）完全相同的处理——
-    // 清登录态并回登录页；调用方凭 SseAuthError 停止重连。
-    clearToken();
-    if (typeof window !== 'undefined' && !window.location.hash.startsWith('#/auth/login')) {
-      window.location.hash = '/auth/login';
+    // Only a control-plane 401 invalidates the Dashboard session. A core-proxied
+    // stream may fail authorization while the logged-in control plane remains healthy.
+    if (isControlPlaneEndpoint(url)) {
+      clearToken();
+      if (typeof window !== 'undefined' && !window.location.hash.startsWith('#/auth/login')) {
+        window.location.hash = '/auth/login';
+      }
+      throw new SseAuthError();
     }
-    throw new SseAuthError();
+    throw new Error('核心流式请求未授权（401）');
   }
   if (!resp.ok || !resp.body) {
     throw new Error(`SSE 连接失败（${resp.status}）`);

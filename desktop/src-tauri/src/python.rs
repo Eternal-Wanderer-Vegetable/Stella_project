@@ -1456,13 +1456,21 @@ pub fn find_python(root: &Path) -> PathBuf {
 /// UTF-8，但 stderr 可能混入其他编码（如 Windows 的系统错误消息），非法字节
 /// 不该让整个调用失败。
 pub fn run_deploy(args: &[&str]) -> Result<(String, String, i32), String> {
-    run_deploy_inner(args, true)
+    run_deploy_inner(args, true, None)
+}
+
+/// Execute Corona start with the desktop WebView session capability.
+pub fn run_deploy_with_desktop_secret(
+    args: &[&str],
+    desktop_session_secret: &str,
+) -> Result<(String, String, i32), String> {
+    run_deploy_inner(args, true, Some(desktop_session_secret))
 }
 
 /// 执行无需准备 Python 的命令。关闭窗口时使用它，避免用户只打开界面后
 /// 关闭窗口却触发首次运行时下载。
 pub fn run_deploy_without_prepare(args: &[&str]) -> Result<(String, String, i32), String> {
-    run_deploy_inner(args, false)
+    run_deploy_inner(args, false, None)
 }
 
 /// 执行统一 Runtime 操作。
@@ -1491,12 +1499,13 @@ pub fn run_runtime_operation(
         args.push("--force".to_owned());
     }
     let borrowed: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_deploy_inner(&borrowed, prepare)
+    run_deploy_inner(&borrowed, prepare, None)
 }
 
 fn run_deploy_inner(
     args: &[&str],
     prepare: bool,
+    desktop_session_secret: Option<&str>,
 ) -> Result<(String, String, i32), String> {
     let root = project_root();
     if prepare {
@@ -1509,13 +1518,9 @@ fn run_deploy_inner(
     if rust_wheel_present(&root) {
         cmd.env("MEMORY_BACKEND", "rust");
     }
-    // v2 壳：把桌面会话秘钥注入 deploy/Bot 子进程——WebUI 据此支持
-    // desktop-session 免登录（方案 §4 D5）。秘钥由 lib.rs 的 OnceLock 生成。
-    cmd.env(
-        "STELLA_DESKTOP_SESSION_SECRET",
-        crate::desktop_session_secret(),
-    );
-
+    if let Some(secret) = desktop_session_secret {
+        cmd.env("STELLA_DESKTOP_SESSION_SECRET", secret);
+    }
     // Windows 抑制黑窗：不加则每次调用都闪一个黑色控制台窗口。
     // 几乎所有 Tauri + 子进程的项目都会踩这个坑。0x0800_0000 = CREATE_NO_WINDOW。
     #[cfg(windows)]

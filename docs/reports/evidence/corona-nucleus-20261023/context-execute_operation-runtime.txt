@@ -1,0 +1,215 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:deploy/runtime.py:execute_operation",
+    "name": "execute_operation",
+    "kind": "Function",
+    "filePath": "deploy/runtime.py",
+    "startLine": 602,
+    "endLine": 792
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:deploy/__main__.py:_cmd_runtime",
+        "name": "_cmd_runtime",
+        "filePath": "deploy/__main__.py"
+      },
+      {
+        "uid": "Function:tests/test_runtime_contract.py:test_execute_rejects_unconfigured_llama_component",
+        "name": "test_execute_rejects_unconfigured_llama_component",
+        "filePath": "tests/test_runtime_contract.py"
+      },
+      {
+        "uid": "Function:tests/test_runtime_contract.py:test_execute_start_captures_legacy_output",
+        "name": "test_execute_start_captures_legacy_output",
+        "filePath": "tests/test_runtime_contract.py"
+      },
+      {
+        "uid": "Function:tests/test_runtime_contract.py:test_execute_status_uses_shared_operation_envelope",
+        "name": "test_execute_status_uses_shared_operation_envelope",
+        "filePath": "tests/test_runtime_contract.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:deploy/checks.py:run_all",
+        "name": "run_all",
+        "filePath": "deploy/checks.py"
+      },
+      {
+        "uid": "Function:deploy/checks.py:run_all",
+        "name": "run_all",
+        "filePath": "deploy/checks.py"
+      },
+      {
+        "uid": "Function:deploy/llama.py:ensure_local_embedding_service",
+        "name": "ensure_local_embedding_service",
+        "filePath": "deploy/llama.py"
+      },
+      {
+        "uid": "Function:deploy/llama.py:ensure_local_embedding_service",
+        "name": "ensure_local_embedding_service",
+        "filePath": "deploy/llama.py"
+      },
+      {
+        "uid": "Function:deploy/llama.py:stop_local_embedding_service",
+        "name": "stop_local_embedding_service",
+        "filePath": "deploy/llama.py"
+      },
+      {
+        "uid": "Function:deploy/llama.py:stop_local_embedding_service",
+        "name": "stop_local_embedding_service",
+        "filePath": "deploy/llama.py"
+      },
+      {
+        "uid": "Function:deploy/probe.py:collect",
+        "name": "collect",
+        "filePath": "deploy/probe.py"
+      },
+      {
+        "uid": "Function:deploy/probe.py:collect",
+        "name": "collect",
+        "filePath": "deploy/probe.py"
+      },
+      {
+        "uid": "Function:deploy/process.py:status",
+        "name": "status",
+        "filePath": "deploy/process.py"
+      },
+      {
+        "uid": "Function:deploy/report.py:has_blocking",
+        "name": "has_blocking",
+        "filePath": "deploy/report.py"
+      },
+      {
+        "uid": "Function:deploy/report.py:has_blocking",
+        "name": "has_blocking",
+        "filePath": "deploy/report.py"
+      },
+      {
+        "uid": "Function:deploy/report.py:has_blocking",
+        "name": "has_blocking",
+        "filePath": "deploy/report.py"
+      },
+      {
+        "uid": "Function:deploy/report.py:to_json",
+        "name": "to_json",
+        "filePath": "deploy/report.py"
+      },
+      {
+        "uid": "Function:deploy/report.py:to_json",
+        "name": "to_json",
+        "filePath": "deploy/report.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:_captured_call",
+        "name": "_captured_call",
+        "filePath": "deploy/runtime.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:embedding_endpoint_config",
+        "name": "embedding_endpoint_config",
+        "filePath": "deploy/runtime.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:prepare_optional_runtime",
+        "name": "prepare_optional_runtime",
+        "filePath": "deploy/runtime.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:redact_value",
+        "name": "redact_value",
+        "filePath": "deploy/runtime.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:snapshot",
+        "name": "snapshot",
+        "filePath": "deploy/runtime.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:structured_error",
+        "name": "structured_error",
+        "filePath": "deploy/runtime.py"
+      },
+      {
+        "uid": "Function:deploy/runtime.py:validate_operation_request",
+        "name": "validate_operation_request",
+        "filePath": "deploy/runtime.py"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_123_execute_operation",
+      "name": "Execute_operation → State_path",
+      "step_index": 1,
+      "step_count": 5
+    },
+    {
+      "id": "proc_259_execute_operation",
+      "name": "Execute_operation → _endpoint_ready",
+      "step_index": 1,
+      "step_count": 3
+    },
+    {
+      "id": "proc_2_execute_operation",
+      "name": "Execute_operation → _now",
+      "step_index": 1,
+      "step_count": 10
+    },
+    {
+      "id": "proc_365_execute_operation",
+      "name": "Execute_operation → Default_manifest",
+      "step_index": 1,
+      "step_count": 6
+    },
+    {
+      "id": "proc_366_execute_operation",
+      "name": "Execute_operation → _read_json",
+      "step_index": 1,
+      "step_count": 6
+    },
+    {
+      "id": "proc_367_execute_operation",
+      "name": "Execute_operation → Manifest_path",
+      "step_index": 1,
+      "step_count": 6
+    },
+    {
+      "id": "proc_368_execute_operation",
+      "name": "Execute_operation → Validate_manifest",
+      "step_index": 1,
+      "step_count": 6
+    },
+    {
+      "id": "proc_3_execute_operation",
+      "name": "Execute_operation → _package_store",
+      "step_index": 1,
+      "step_count": 10
+    },
+    {
+      "id": "proc_46_execute_operation",
+      "name": "Execute_operation → _stella_home",
+      "step_index": 1,
+      "step_count": 7
+    },
+    {
+      "id": "proc_4_execute_operation",
+      "name": "Execute_operation → _validate_record",
+      "step_index": 1,
+      "step_count": 10
+    },
+    {
+      "id": "proc_66_execute_operation",
+      "name": "Execute_operation → _now",
+      "step_index": 1,
+      "step_count": 6
+    }
+  ]
+}
+
+  GitNexus Context (1.6.12)

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 import { api, unwrap } from '@/api/http';
 import { sseStream } from '@/api/sse';
 import { toastApiError, useToast } from '@/stores/toast';
+import { useSystemStore } from '@/stores/system';
 
 // 聊天页（M4 WebChat）：与 Stella 私聊，记忆按 webchat 空间隔离
 interface Message {
@@ -17,7 +18,17 @@ const messages = ref<Message[]>([]);
 const input = ref('');
 const busy = ref(false);
 const listEl = ref<HTMLElement | null>(null);
+const historyStale = ref(false);
+const historyGeneration = ref<string | null>(null);
 const toast = useToast();
+const system = useSystemStore();
+const cacheStale = computed(() =>
+  historyStale.value
+  || (system.managed && (
+    system.coreUnavailable
+    || Boolean(historyGeneration.value && system.coreGeneration !== historyGeneration.value)
+  )),
+);
 const webChatSettingsDialog = ref(false);
 const webChatPrompt = ref('');
 const webChatSettingsLoading = ref(false);
@@ -38,6 +49,7 @@ function scrollBottom(): void {
 
 async function loadHistory(): Promise<void> {
   try {
+    await system.refreshStatus();
     const data = await unwrap<{ items: { id: number; content: string; source_kind: string; timestamp: string }[] }>(
       api.get('/chat/messages', { params: { limit: 100 } }),
     );
@@ -47,9 +59,12 @@ async function loadHistory(): Promise<void> {
       content: m.content,
       ts: m.timestamp,
     }));
+    historyGeneration.value = system.coreGeneration;
+    historyStale.value = false;
     scrollBottom();
   } catch {
-    // 历史缺失不阻塞聊天
+    // Keep the local cache visible and mark it stale; never replay a failed chat request.
+    historyStale.value = true;
   }
 }
 
@@ -90,6 +105,7 @@ async function send(): Promise<void> {
     { method: 'POST', body: JSON.stringify({ message: text }) },
     );
   } catch (err) {
+    historyStale.value = true;
     toastApiError(toast, err);
   } finally {
     busy.value = false;
@@ -158,6 +174,10 @@ onMounted(loadHistory);
 <template>
   <v-layout class="chat-layout">
     <v-main class="chat-main">
+      <v-alert v-if="cacheStale" type="warning" variant="tonal" density="compact" class="mx-4 mt-3">
+        当前聊天记录可能来自旧核心缓存；失败的消息不会自动重试。
+        <v-btn size="small" variant="text" :disabled="busy" @click="loadHistory">刷新记录</v-btn>
+      </v-alert>
       <div class="chat-header d-flex align-center ga-3 px-4 pt-4">
         <div>
           <h1 class="text-h5 font-weight-bold">聊天</h1>
@@ -193,10 +213,10 @@ onMounted(loadHistory);
             placeholder="输入消息…"
             density="comfortable"
             hide-details
-            :disabled="busy"
+            :disabled="busy || (system.managed && system.coreUnavailable)"
             @keydown.enter="send"
           />
-          <v-btn color="primary" :loading="busy" @click="send">发送</v-btn>
+          <v-btn color="primary" :loading="busy" :disabled="system.managed && system.coreUnavailable" @click="send">发送</v-btn>
           <v-btn icon="mdi-delete-outline" variant="text" @click="reset" />
         </div>
       </div>

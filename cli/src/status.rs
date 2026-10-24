@@ -4,7 +4,7 @@
 
 //! status 的渲染层与 docker 形态的状态聚合。
 //!
-//! 本地形态：消费 `deploy status --json`（契约见 deploy/process.py 的 status()）。
+//! 本地形态：消费 `deploy status --json`（由身份校验后的 Corona 状态生成）。
 //! docker 形态：compose 容器状态（docker inspect）+ 容器内状态接口
 //! （`docker exec ... curl`——接口只接受容器回环，宿主机直连必 403）。
 //! 两种形态共用 render_inner（字段来自进程内状态接口，link 的字段有
@@ -50,10 +50,11 @@ pub fn normalize_local_status(v: &Value) -> Value {
         object.insert("state".into(), Value::String(state));
         object.insert("health".into(), health);
         object.insert("error".into(), error);
-        object.insert(
-            "endpoint".into(),
-            Value::String(STELLA_STATUS_ENDPOINT.into()),
-        );
+        let endpoint = v
+            .get("public_base_url")
+            .and_then(Value::as_str)
+            .unwrap_or(STELLA_STATUS_ENDPOINT);
+        object.insert("endpoint".into(), Value::String(endpoint.into()));
         object.insert("components".into(), components);
     }
     doc
@@ -73,14 +74,26 @@ pub fn render_local(v: &Value, root: &std::path::Path, out: &mut dyn Write) -> R
         .get("api_reachable")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let controller_reachable = v.get("controller_reachable").and_then(Value::as_bool);
+    let nucleus_ready = v.get("nucleus_ready").and_then(Value::as_bool);
+    let core_phase = v
+        .get("core")
+        .and_then(|core| core.get("phase"))
+        .and_then(Value::as_str);
     if alive {
         let pid_text = pid
             .map(|p| format!("PID {p}"))
             .unwrap_or_else(|| "PID 未知".into());
-        let api_text = if api_ok {
-            "状态接口可达"
-        } else {
-            "状态接口不可达（可能刚启动，或已关闭状态接口）"
+        let api_text = match controller_reachable {
+            Some(true) if nucleus_ready == Some(true) => {
+                "Corona 控制面在线，Nucleus 就绪".to_owned()
+            }
+            Some(true) => core_phase
+                .map(|phase| format!("Corona 控制面在线，Nucleus 阶段 {phase}"))
+                .unwrap_or_else(|| "Corona 控制面在线，Nucleus 尚未就绪".to_owned()),
+            Some(false) => "Corona 控制面不可达".to_owned(),
+            None if api_ok => "状态接口可达".to_owned(),
+            None => "状态接口不可达（可能刚启动，或已关闭状态接口）".to_owned(),
         };
         writeln!(
             out,
@@ -536,6 +549,30 @@ mod tests {
         assert_eq!(normalized["health"]["api_reachable"], true);
         assert_eq!(normalized["endpoint"], STELLA_STATUS_ENDPOINT);
         assert_eq!(normalized["alive"], true);
+    }
+
+    #[test]
+    fn local_status_uses_corona_listener_and_separates_core_readiness() {
+        let value = serde_json::json!({
+            "alive": true,
+            "controller_reachable": true,
+            "nucleus_ready": false,
+            "api_reachable": false,
+            "public_base_url": "http://127.0.0.1:19080",
+            "core": {"phase": "backoff"},
+            "runtime": {"components": {"stella": {
+                "state": "degraded",
+                "diagnostics": {"core_phase": "backoff"}
+            }}}
+        });
+        let normalized = normalize_local_status(&value);
+        assert_eq!(normalized["endpoint"], "http://127.0.0.1:19080");
+        assert_eq!(normalized["state"], "degraded");
+        let mut rendered = Vec::new();
+        render_local(&value, std::path::Path::new("."), &mut rendered).unwrap();
+        let rendered = String::from_utf8(rendered).unwrap();
+        assert!(rendered.contains("Corona 控制面在线，Nucleus 阶段 backoff"));
+        assert!(!rendered.contains("状态接口不可达"));
     }
 
     #[test]

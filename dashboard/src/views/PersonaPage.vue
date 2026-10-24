@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import { api, unwrap } from '@/api/http';
 import { toastApiError, useToast } from '@/stores/toast';
+import { useSystemStore } from '@/stores/system';
 
 interface SpaceItem {
   name: string;
@@ -45,6 +46,16 @@ const allowedGroupsSaving = ref(false);
 const allowedGroupsError = ref('');
 
 const toast = useToast();
+const system = useSystemStore();
+const loadError = ref(false);
+const loadedGeneration = ref<string | null>(null);
+const cacheStale = computed(() =>
+  loadError.value
+  || (system.managed && (
+    system.coreUnavailable
+    || Boolean(loadedGeneration.value && system.coreGeneration !== loadedGeneration.value)
+  )),
+);
 
 const availableBindingGroupIds = computed(() => {
   const ids = new Set(groups.value.map((group) => group.group_id));
@@ -74,13 +85,17 @@ function parseConfiguredGroupIds(text: string): { ids: number[]; invalidCount: n
 
 async function loadPage(): Promise<void> {
   try {
+    await system.refreshStatus();
     const [spaceData, groupData] = await Promise.all([
       unwrap<{ spaces: SpaceItem[] }>(api.get('/spaces')),
       unwrap<{ groups: GroupItem[] }>(api.get('/groups')),
     ]);
     spaces.value = spaceData.spaces.filter((space) => space.name.toLowerCase() !== WEBCHAT_SPACE);
     groups.value = groupData.groups;
+    loadedGeneration.value = system.coreGeneration;
+    loadError.value = false;
   } catch (err) {
+    loadError.value = true;
     toastApiError(toast, err);
   }
 }
@@ -302,6 +317,10 @@ onMounted(loadPage);
     <p class="text-body-2 text-medium-emphasis mb-4">
       在同一处管理群组所属空间、主动发言状态，以及空间的人格和群绑定。ALLOWED_GROUPS 控制 Stella 可响应的 QQ 群。
     </p>
+    <v-alert v-if="cacheStale" type="warning" variant="tonal" class="mb-3">
+      群组与空间列表可能来自旧核心缓存。核心恢复后可重新载入。
+      <v-btn size="small" variant="text" @click="loadPage">重新载入</v-btn>
+    </v-alert>
 
     <v-card class="mb-6">
       <v-card-title class="d-flex align-center ga-2">

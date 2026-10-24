@@ -1,0 +1,2349 @@
+{
+  "target": {
+    "id": "File:config/settings.py",
+    "name": "settings.py",
+    "type": "File",
+    "filePath": "config/settings.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 278,
+  "risk": "CRITICAL",
+  "riskSharedAxes": "CRITICAL",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 76,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 76,
+    "2": 138,
+    "3": 64
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/base.py",
+        "name": "base.py",
+        "filePath": "astrbot_compat/base.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/config.py",
+        "name": "config.py",
+        "filePath": "astrbot_compat/config.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/events.py",
+        "name": "events.py",
+        "filePath": "astrbot_compat/events.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/llm/agent.py",
+        "name": "agent.py",
+        "filePath": "astrbot_compat/llm/agent.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/llm/manager.py",
+        "name": "manager.py",
+        "filePath": "astrbot_compat/llm/manager.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/llm/provider.py",
+        "name": "provider.py",
+        "filePath": "astrbot_compat/llm/provider.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/loader.py",
+        "name": "loader.py",
+        "filePath": "astrbot_compat/loader.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/persona.py",
+        "name": "persona.py",
+        "filePath": "astrbot_compat/persona.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/render.py",
+        "name": "render.py",
+        "filePath": "astrbot_compat/render.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:astrbot_compat/shim.py",
+        "name": "shim.py",
+        "filePath": "astrbot_compat/shim.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:bot.py",
+        "name": "bot.py",
+        "filePath": "bot.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/adapters/astrbot.py",
+        "name": "astrbot.py",
+        "filePath": "capability/adapters/astrbot.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/adapters/knowledge.py",
+        "name": "knowledge.py",
+        "filePath": "capability/adapters/knowledge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/adapters/mcp.py",
+        "name": "mcp.py",
+        "filePath": "capability/adapters/mcp.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/comes/executor.py",
+        "name": "executor.py",
+        "filePath": "capability/comes/executor.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/delegation.py",
+        "name": "delegation.py",
+        "filePath": "capability/delegation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/hooks.py",
+        "name": "hooks.py",
+        "filePath": "capability/hooks.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/loader.py",
+        "name": "loader.py",
+        "filePath": "capability/loader.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/providers/knowledge.py",
+        "name": "knowledge.py",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/providers/mcp/model.py",
+        "name": "model.py",
+        "filePath": "capability/providers/mcp/model.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/router/__init__.py",
+        "name": "__init__.py",
+        "filePath": "capability/router/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/router/fallback.py",
+        "name": "fallback.py",
+        "filePath": "capability/router/fallback.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:capability/router/semantic.py",
+        "name": "semantic.py",
+        "filePath": "capability/router/semantic.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:config/__init__.py",
+        "name": "__init__.py",
+        "filePath": "config/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:config/spaces.py",
+        "name": "spaces.py",
+        "filePath": "config/spaces.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/llm/registry.py",
+        "name": "registry.py",
+        "filePath": "core/llm/registry.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/llm/usage_store.py",
+        "name": "usage_store.py",
+        "filePath": "core/llm/usage_store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/observability/turn_trace.py",
+        "name": "turn_trace.py",
+        "filePath": "core/observability/turn_trace.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/social/context_builder.py",
+        "name": "context_builder.py",
+        "filePath": "core/social/context_builder.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:core/vision.py",
+        "name": "vision.py",
+        "filePath": "core/vision.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:deploy/plugin_check.py",
+        "name": "plugin_check.py",
+        "filePath": "deploy/plugin_check.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:deploy/plugin_scaffold.py",
+        "name": "plugin_scaffold.py",
+        "filePath": "deploy/plugin_scaffold.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:design_docs/AstrBot 特性吸收对比报告.md",
+        "name": "AstrBot 特性吸收对比报告.md",
+        "filePath": "design_docs/AstrBot 特性吸收对比报告.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/reference/configuration.en.md",
+        "name": "configuration.en.md",
+        "filePath": "docs/reference/configuration.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/reference/configuration.md",
+        "name": "configuration.md",
+        "filePath": "docs/reference/configuration.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:knowledge/embedding.py",
+        "name": "embedding.py",
+        "filePath": "knowledge/embedding.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:knowledge/parsers.py",
+        "name": "parsers.py",
+        "filePath": "knowledge/parsers.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:knowledge/retrieval.py",
+        "name": "retrieval.py",
+        "filePath": "knowledge/retrieval.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/addressing_intent.py",
+        "name": "addressing_intent.py",
+        "filePath": "memory/addressing_intent.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/consolidator.py",
+        "name": "consolidator.py",
+        "filePath": "memory/consolidator.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/embeddings.py",
+        "name": "embeddings.py",
+        "filePath": "memory/embeddings.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/expression_selector.py",
+        "name": "expression_selector.py",
+        "filePath": "memory/expression_selector.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/jargon_service.py",
+        "name": "jargon_service.py",
+        "filePath": "memory/jargon_service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/migrations.py",
+        "name": "migrations.py",
+        "filePath": "memory/migrations.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/pre_processors.py",
+        "name": "pre_processors.py",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/reply_effect_service.py",
+        "name": "reply_effect_service.py",
+        "filePath": "memory/reply_effect_service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/scope_versions.py",
+        "name": "scope_versions.py",
+        "filePath": "memory/scope_versions.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/social_schema.py",
+        "name": "social_schema.py",
+        "filePath": "memory/social_schema.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/social_store.py",
+        "name": "social_store.py",
+        "filePath": "memory/social_store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:memory/social_worker.py",
+        "name": "social_worker.py",
+        "filePath": "memory/social_worker.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:scripts/probe_astrbot_llm.py",
+        "name": "probe_astrbot_llm.py",
+        "filePath": "scripts/probe_astrbot_llm.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:skills/catalog.py",
+        "name": "catalog.py",
+        "filePath": "skills/catalog.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:skills/runtime.py",
+        "name": "runtime.py",
+        "filePath": "skills/runtime.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:skills/sandbox.py",
+        "name": "sandbox.py",
+        "filePath": "skills/sandbox.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:skills/selector.py",
+        "name": "selector.py",
+        "filePath": "skills/selector.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/app.py",
+        "name": "app.py",
+        "filePath": "webui/app.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/audit.py",
+        "name": "audit.py",
+        "filePath": "webui/audit.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/auth.py",
+        "name": "auth.py",
+        "filePath": "webui/auth.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/mount.py",
+        "name": "mount.py",
+        "filePath": "webui/mount.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/security.py",
+        "name": "security.py",
+        "filePath": "webui/security.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/config.py",
+        "name": "config.py",
+        "filePath": "webui/services/config.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/conversations.py",
+        "name": "conversations.py",
+        "filePath": "webui/services/conversations.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/envfile.py",
+        "name": "envfile.py",
+        "filePath": "webui/services/envfile.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/flow.py",
+        "name": "flow.py",
+        "filePath": "webui/services/flow.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/groups.py",
+        "name": "groups.py",
+        "filePath": "webui/services/groups.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/logs.py",
+        "name": "logs.py",
+        "filePath": "webui/services/logs.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/platformcfg.py",
+        "name": "platformcfg.py",
+        "filePath": "webui/services/platformcfg.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/plugins_manage.py",
+        "name": "plugins_manage.py",
+        "filePath": "webui/services/plugins_manage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/providers.py",
+        "name": "providers.py",
+        "filePath": "webui/services/providers.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/sched.py",
+        "name": "sched.py",
+        "filePath": "webui/services/sched.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/skillsmanage.py",
+        "name": "skillsmanage.py",
+        "filePath": "webui/services/skillsmanage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/spaces.py",
+        "name": "spaces.py",
+        "filePath": "webui/services/spaces.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/trace.py",
+        "name": "trace.py",
+        "filePath": "webui/services/trace.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/source_build.py",
+        "name": "source_build.py",
+        "filePath": "webui/source_build.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/static.py",
+        "name": "static.py",
+        "filePath": "webui/static.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:README.en.md",
+        "name": "README.en.md",
+        "filePath": "README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:README.md",
+        "name": "README.md",
+        "filePath": "README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:astrbot_compat/__init__.py",
+        "name": "__init__.py",
+        "filePath": "astrbot_compat/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:astrbot_compat/context.py",
+        "name": "context.py",
+        "filePath": "astrbot_compat/context.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:astrbot_compat/conversation.py",
+        "name": "conversation.py",
+        "filePath": "astrbot_compat/conversation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:astrbot_compat/filters.py",
+        "name": "filters.py",
+        "filePath": "astrbot_compat/filters.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:astrbot_compat/llm/__init__.py",
+        "name": "__init__.py",
+        "filePath": "astrbot_compat/llm/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:astrbot_compat/pipeline.py",
+        "name": "pipeline.py",
+        "filePath": "astrbot_compat/pipeline.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:astrbot_compat/preferences.py",
+        "name": "preferences.py",
+        "filePath": "astrbot_compat/preferences.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/comes/__init__.py",
+        "name": "__init__.py",
+        "filePath": "capability/comes/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/inventory.py",
+        "name": "inventory.py",
+        "filePath": "capability/inventory.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/providers/mcp/backend.py",
+        "name": "backend.py",
+        "filePath": "capability/providers/mcp/backend.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/providers/mcp/client.py",
+        "name": "client.py",
+        "filePath": "capability/providers/mcp/client.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/providers/mcp/manager.py",
+        "name": "manager.py",
+        "filePath": "capability/providers/mcp/manager.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/providers/mcp/tool.py",
+        "name": "tool.py",
+        "filePath": "capability/providers/mcp/tool.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/router/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "capability/router/benchmark.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/context.py",
+        "name": "context.py",
+        "filePath": "core/context.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/context_budget.py",
+        "name": "context_budget.py",
+        "filePath": "core/context_budget.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/conversation.py",
+        "name": "conversation.py",
+        "filePath": "core/conversation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/llm/__init__.py",
+        "name": "__init__.py",
+        "filePath": "core/llm/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/llm/scheduler.py",
+        "name": "scheduler.py",
+        "filePath": "core/llm/scheduler.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/logging_sink.py",
+        "name": "logging_sink.py",
+        "filePath": "core/logging_sink.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/observability/message_flow.py",
+        "name": "message_flow.py",
+        "filePath": "core/observability/message_flow.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/pipeline.py",
+        "name": "pipeline.py",
+        "filePath": "core/pipeline.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/planner.py",
+        "name": "planner.py",
+        "filePath": "core/planner.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/reply_gate.py",
+        "name": "reply_gate.py",
+        "filePath": "core/reply_gate.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/runtime/facade.py",
+        "name": "facade.py",
+        "filePath": "core/runtime/facade.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/runtime/turn_service.py",
+        "name": "turn_service.py",
+        "filePath": "core/runtime/turn_service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/self_restart.py",
+        "name": "self_restart.py",
+        "filePath": "core/self_restart.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/social/delivery.py",
+        "name": "delivery.py",
+        "filePath": "core/social/delivery.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/stop_signal.py",
+        "name": "stop_signal.py",
+        "filePath": "core/stop_signal.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/__main__.py",
+        "name": "__main__.py",
+        "filePath": "deploy/__main__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/llama.py",
+        "name": "llama.py",
+        "filePath": "deploy/llama.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/migrate.py",
+        "name": "migrate.py",
+        "filePath": "deploy/migrate.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/packages.py",
+        "name": "packages.py",
+        "filePath": "deploy/packages.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/probe.py",
+        "name": "probe.py",
+        "filePath": "deploy/probe.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/process.py",
+        "name": "process.py",
+        "filePath": "deploy/process.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/runtime.py",
+        "name": "runtime.py",
+        "filePath": "deploy/runtime.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/agent/boundaries.md",
+        "name": "boundaries.md",
+        "filePath": "docs/agent/boundaries.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/capability-system.en.md",
+        "name": "capability-system.en.md",
+        "filePath": "docs/architecture/capability-system.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/capability-system.md",
+        "name": "capability-system.md",
+        "filePath": "docs/architecture/capability-system.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/integrations.en.md",
+        "name": "integrations.en.md",
+        "filePath": "docs/architecture/integrations.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/integrations.md",
+        "name": "integrations.md",
+        "filePath": "docs/architecture/integrations.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/knowledge-base.en.md",
+        "name": "knowledge-base.en.md",
+        "filePath": "docs/architecture/knowledge-base.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/memory-system.en.md",
+        "name": "memory-system.en.md",
+        "filePath": "docs/architecture/memory-system.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/memory-system.md",
+        "name": "memory-system.md",
+        "filePath": "docs/architecture/memory-system.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/message-lifecycle.en.md",
+        "name": "message-lifecycle.en.md",
+        "filePath": "docs/architecture/message-lifecycle.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/architecture/message-lifecycle.md",
+        "name": "message-lifecycle.md",
+        "filePath": "docs/architecture/message-lifecycle.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/configuration.en.md",
+        "name": "configuration.en.md",
+        "filePath": "docs/configuration.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/configuration.md",
+        "name": "configuration.md",
+        "filePath": "docs/configuration.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/contracts.en.md",
+        "name": "contracts.en.md",
+        "filePath": "docs/development/contracts.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/contracts.md",
+        "name": "contracts.md",
+        "filePath": "docs/development/contracts.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/troubleshooting.en.md",
+        "name": "troubleshooting.en.md",
+        "filePath": "docs/development/troubleshooting.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/development/troubleshooting.md",
+        "name": "troubleshooting.md",
+        "filePath": "docs/development/troubleshooting.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/deployment-docker.en.md",
+        "name": "deployment-docker.en.md",
+        "filePath": "docs/guides/deployment-docker.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/deployment-docker.md",
+        "name": "deployment-docker.md",
+        "filePath": "docs/guides/deployment-docker.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/scheduling.en.md",
+        "name": "scheduling.en.md",
+        "filePath": "docs/guides/scheduling.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/skills.en.md",
+        "name": "skills.en.md",
+        "filePath": "docs/guides/skills.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/guides/skills.md",
+        "name": "skills.md",
+        "filePath": "docs/guides/skills.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reference/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/reference/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reference/README.md",
+        "name": "README.md",
+        "filePath": "docs/reference/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reference/plugin-spec.en.md",
+        "name": "plugin-spec.en.md",
+        "filePath": "docs/reference/plugin-spec.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reference/plugin-spec.md",
+        "name": "plugin-spec.md",
+        "filePath": "docs/reference/plugin-spec.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:extensions/link_monitor/__init__.py",
+        "name": "__init__.py",
+        "filePath": "extensions/link_monitor/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:gravitas/model_calls.py",
+        "name": "model_calls.py",
+        "filePath": "gravitas/model_calls.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:knowledge/ingest.py",
+        "name": "ingest.py",
+        "filePath": "knowledge/ingest.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:knowledge/schema.py",
+        "name": "schema.py",
+        "filePath": "knowledge/schema.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:knowledge/service.py",
+        "name": "service.py",
+        "filePath": "knowledge/service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:knowledge/store.py",
+        "name": "store.py",
+        "filePath": "knowledge/store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/addressing.py",
+        "name": "addressing.py",
+        "filePath": "memory/addressing.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "memory/benchmark.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/capture_gate.py",
+        "name": "capture_gate.py",
+        "filePath": "memory/capture_gate.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/compressor.py",
+        "name": "compressor.py",
+        "filePath": "memory/compressor.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/consolidation_log.py",
+        "name": "consolidation_log.py",
+        "filePath": "memory/consolidation_log.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/conversation_identity.py",
+        "name": "conversation_identity.py",
+        "filePath": "memory/conversation_identity.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/cost_gates.py",
+        "name": "cost_gates.py",
+        "filePath": "memory/cost_gates.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/db_cleaner.py",
+        "name": "db_cleaner.py",
+        "filePath": "memory/db_cleaner.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/expression_learning.py",
+        "name": "expression_learning.py",
+        "filePath": "memory/expression_learning.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/expression_store.py",
+        "name": "expression_store.py",
+        "filePath": "memory/expression_store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/memory_manager.py",
+        "name": "memory_manager.py",
+        "filePath": "memory/memory_manager.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/participation/__init__.py",
+        "name": "__init__.py",
+        "filePath": "memory/participation/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/participation/observability.py",
+        "name": "observability.py",
+        "filePath": "memory/participation/observability.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/personal_sharing.py",
+        "name": "personal_sharing.py",
+        "filePath": "memory/personal_sharing.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/policy.py",
+        "name": "policy.py",
+        "filePath": "memory/policy.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/post_processors.py",
+        "name": "post_processors.py",
+        "filePath": "memory/post_processors.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/proactive.py",
+        "name": "proactive.py",
+        "filePath": "memory/proactive.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/proactive_gate.py",
+        "name": "proactive_gate.py",
+        "filePath": "memory/proactive_gate.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/proactive_state.py",
+        "name": "proactive_state.py",
+        "filePath": "memory/proactive_state.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/proactive_target.py",
+        "name": "proactive_target.py",
+        "filePath": "memory/proactive_target.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/prompt_builder.py",
+        "name": "prompt_builder.py",
+        "filePath": "memory/prompt_builder.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/retrieval_v2.py",
+        "name": "retrieval_v2.py",
+        "filePath": "memory/retrieval_v2.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/retriever.py",
+        "name": "retriever.py",
+        "filePath": "memory/retriever.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/schema.py",
+        "name": "schema.py",
+        "filePath": "memory/schema.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/session_compact.py",
+        "name": "session_compact.py",
+        "filePath": "memory/session_compact.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/session_context.py",
+        "name": "session_context.py",
+        "filePath": "memory/session_context.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/space_merge.py",
+        "name": "space_merge.py",
+        "filePath": "memory/space_merge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/trace.py",
+        "name": "trace.py",
+        "filePath": "memory/trace.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory_rust/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "memory_rust/benchmark.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/benchmark_capacity.py",
+        "name": "benchmark_capacity.py",
+        "filePath": "scripts/benchmark_capacity.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/benchmark_flow_overhead.py",
+        "name": "benchmark_flow_overhead.py",
+        "filePath": "scripts/benchmark_flow_overhead.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/dev_webui.py",
+        "name": "dev_webui.py",
+        "filePath": "scripts/dev_webui.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/eval_memory_replay.py",
+        "name": "eval_memory_replay.py",
+        "filePath": "scripts/eval_memory_replay.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/evaluate_dialogue_attribution.py",
+        "name": "evaluate_dialogue_attribution.py",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/probe_consolidation.py",
+        "name": "probe_consolidation.py",
+        "filePath": "scripts/probe_consolidation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/sample_windows.py",
+        "name": "sample_windows.py",
+        "filePath": "scripts/sample_windows.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/soak_longrun.py",
+        "name": "soak_longrun.py",
+        "filePath": "scripts/soak_longrun.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/validate_rust_fullchain.py",
+        "name": "validate_rust_fullchain.py",
+        "filePath": "scripts/validate_rust_fullchain.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/webui_reset_auth.py",
+        "name": "webui_reset_auth.py",
+        "filePath": "scripts/webui_reset_auth.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:skills/audit.py",
+        "name": "audit.py",
+        "filePath": "skills/audit.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:skills/runners/docker.py",
+        "name": "docker.py",
+        "filePath": "skills/runners/docker.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/__init__.py",
+        "name": "__init__.py",
+        "filePath": "stella_project/plugins/bot_main/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/gravitas_bootstrap.py",
+        "name": "gravitas_bootstrap.py",
+        "filePath": "stella_project/plugins/bot_main/gravitas_bootstrap.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/scheduling/agent.py",
+        "name": "agent.py",
+        "filePath": "stella_project/plugins/bot_main/scheduling/agent.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/status_api.py",
+        "name": "status_api.py",
+        "filePath": "stella_project/plugins/bot_main/status_api.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:tools/backfill_personal_memory.py",
+        "name": "backfill_personal_memory.py",
+        "filePath": "tools/backfill_personal_memory.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:tools/data_repair.py",
+        "name": "data_repair.py",
+        "filePath": "tools/data_repair.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/auth.py",
+        "name": "auth.py",
+        "filePath": "webui/routers/auth.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/chat.py",
+        "name": "chat.py",
+        "filePath": "webui/routers/chat.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/routers/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/config.py",
+        "name": "config.py",
+        "filePath": "webui/routers/config.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/conversations.py",
+        "name": "conversations.py",
+        "filePath": "webui/routers/conversations.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/evaluation.py",
+        "name": "evaluation.py",
+        "filePath": "webui/routers/evaluation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/logs.py",
+        "name": "logs.py",
+        "filePath": "webui/routers/logs.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/manage.py",
+        "name": "manage.py",
+        "filePath": "webui/routers/manage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/personal_memory.py",
+        "name": "personal_memory.py",
+        "filePath": "webui/routers/personal_memory.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/platform.py",
+        "name": "platform.py",
+        "filePath": "webui/routers/platform.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/plugins.py",
+        "name": "plugins.py",
+        "filePath": "webui/routers/plugins.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/plugins_mg.py",
+        "name": "plugins_mg.py",
+        "filePath": "webui/routers/plugins_mg.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/providers.py",
+        "name": "providers.py",
+        "filePath": "webui/routers/providers.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/status.py",
+        "name": "status.py",
+        "filePath": "webui/routers/status.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/trace.py",
+        "name": "trace.py",
+        "filePath": "webui/routers/trace.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/usage.py",
+        "name": "usage.py",
+        "filePath": "webui/routers/usage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/services/mcpmanage.py",
+        "name": "mcpmanage.py",
+        "filePath": "webui/services/mcpmanage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/services/personal_memory.py",
+        "name": "personal_memory.py",
+        "filePath": "webui/services/personal_memory.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/services/plugins.py",
+        "name": "plugins.py",
+        "filePath": "webui/services/plugins.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/services/system.py",
+        "name": "system.py",
+        "filePath": "webui/services/system.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/services/usage.py",
+        "name": "usage.py",
+        "filePath": "webui/services/usage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/providers/mcp/__init__.py",
+        "name": "__init__.py",
+        "filePath": "capability/providers/mcp/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:cometa/delivery.py",
+        "name": "delivery.py",
+        "filePath": "cometa/delivery.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:cometa/executor.py",
+        "name": "executor.py",
+        "filePath": "cometa/executor.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:cometa/worker.py",
+        "name": "worker.py",
+        "filePath": "cometa/worker.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/evaluation/runner.py",
+        "name": "runner.py",
+        "filePath": "core/evaluation/runner.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/llm/prefix_cache_estimator.py",
+        "name": "prefix_cache_estimator.py",
+        "filePath": "core/llm/prefix_cache_estimator.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/observability/entity_history.py",
+        "name": "entity_history.py",
+        "filePath": "core/observability/entity_history.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/observability/replay.py",
+        "name": "replay.py",
+        "filePath": "core/observability/replay.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:deploy/acquire.py",
+        "name": "acquire.py",
+        "filePath": "deploy/acquire.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:deploy/bootstrap.py",
+        "name": "bootstrap.py",
+        "filePath": "deploy/bootstrap.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:deploy/capability_view.py",
+        "name": "capability_view.py",
+        "filePath": "deploy/capability_view.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:deploy/init_wizard.py",
+        "name": "init_wizard.py",
+        "filePath": "deploy/init_wizard.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/README.md",
+        "name": "README.md",
+        "filePath": "docs/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/README.md",
+        "name": "README.md",
+        "filePath": "docs/agent/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/documentation.md",
+        "name": "documentation.md",
+        "filePath": "docs/agent/documentation.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/verification.md",
+        "name": "verification.md",
+        "filePath": "docs/agent/verification.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture.en.md",
+        "name": "architecture.en.md",
+        "filePath": "docs/architecture.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture.md",
+        "name": "architecture.md",
+        "filePath": "docs/architecture.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/architecture/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/README.md",
+        "name": "README.md",
+        "filePath": "docs/architecture/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/knowledge-base.md",
+        "name": "knowledge-base.md",
+        "filePath": "docs/architecture/knowledge-base.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/memory-rust-backend.en.md",
+        "name": "memory-rust-backend.en.md",
+        "filePath": "docs/architecture/memory-rust-backend.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/memory-rust-backend.md",
+        "name": "memory-rust-backend.md",
+        "filePath": "docs/architecture/memory-rust-backend.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/overview.en.md",
+        "name": "overview.en.md",
+        "filePath": "docs/architecture/overview.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/overview.md",
+        "name": "overview.md",
+        "filePath": "docs/architecture/overview.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/capability-system.en.md",
+        "name": "capability-system.en.md",
+        "filePath": "docs/capability-system.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/capability-system.md",
+        "name": "capability-system.md",
+        "filePath": "docs/capability-system.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/deployment-docker.en.md",
+        "name": "deployment-docker.en.md",
+        "filePath": "docs/deployment-docker.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/deployment-docker.md",
+        "name": "deployment-docker.md",
+        "filePath": "docs/deployment-docker.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development.en.md",
+        "name": "development.en.md",
+        "filePath": "docs/development.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development.md",
+        "name": "development.md",
+        "filePath": "docs/development.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/development/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/README.md",
+        "name": "README.md",
+        "filePath": "docs/development/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/deployment.en.md",
+        "name": "deployment.en.md",
+        "filePath": "docs/development/deployment.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/deployment.md",
+        "name": "deployment.md",
+        "filePath": "docs/development/deployment.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/guides/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/README.md",
+        "name": "README.md",
+        "filePath": "docs/guides/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/scheduling.md",
+        "name": "scheduling.md",
+        "filePath": "docs/guides/scheduling.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/knowledge-base.en.md",
+        "name": "knowledge-base.en.md",
+        "filePath": "docs/knowledge-base.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/memory-system.en.md",
+        "name": "memory-system.en.md",
+        "filePath": "docs/memory-system.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+
+  GitNexus Impact (1.6.12)

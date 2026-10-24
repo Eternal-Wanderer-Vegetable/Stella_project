@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-23",
-  "active_feature": "WEBUI-STARTUP-BUILD",
+  "updated_at": "2026-10-24",
+  "active_feature": "CORONA-IMPL",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -864,7 +864,7 @@
       "id": "WEBUI-STARTUP-BUILD",
       "name": "源码启动自动重建 Dashboard 与发布资源完整性",
       "description": "修复源码 bot.py 启动复用旧 WebUI dist 的问题，并保证 Docker 与 Windows 发布资产携带当前 Dashboard。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [],
       "scope": [
         "bot.py",
@@ -877,12 +877,6 @@
         ".github/workflows/docker-publish.yml",
         "docs/guides/deployment-docker.md",
         "docs/guides/deployment-docker.en.md",
-        ".github/workflows/ci.yml",
-        "tests/__init__.py",
-        "tests/cometa_helpers.py",
-        "tests/webui/conftest.py",
-        "tests/webui/test_webui_readonly.py",
-        "feature_list.json",
         "progress.md",
         "session-handoff.md"
       ],
@@ -890,7 +884,6 @@
         "源码仓库或无 release marker 的源码归档直接运行 bot.py 时先构建并同步 Dashboard；失败时中止新进程，不提供旧 bundle。",
         "Windows 的 pnpm.cmd 与 POSIX 启动路径均有实现；后台启动等待覆盖冷依赖安装和前端构建。",
         "Windows Release 继续使用 Release 工作流构建的 Dashboard 产物，Docker 镜像在构建阶段生成 Dashboard 且忽略宿主机 dist。",
-        "Docker Dashboard build stage 复制 Dashboard 对仓库根目录共享源码的显式依赖后再运行构建。",
         "Docker PR 工作流会在 Dashboard/WebUI 变更时运行，并检查镜像中存在前端入口。",
         "Python lint/编译、Dashboard typecheck/build/sync、双语文档门禁完成；Docker daemon 不可用时保留镜像构建验收缺口。"
       ],
@@ -909,31 +902,176 @@
         },
         {
           "command": "Docker target build and final image smoke",
-          "result": "The original local Docker target build was unavailable because the Docker daemon was not reachable. PR #119 hosted Docker build then exposed TS2307 for the dashboard's root-level NoneBot catalog import. A clean temporary staging directory reproduced that error before placing the catalog beside /dashboard and passed the Dashboard production build afterward; hosted Docker rerun is pending."
+          "result": "Not run: Docker CLI is present, but /var/run/docker.sock is unavailable. Docker PR workflow now covers dashboard/** and webui/** changes and checks that /app/webui/dist/index.html is bundled."
         },
         {
           "command": "GitHub PR #118 status on head fc202b9",
           "result": "PR https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/118 is open against main@08dbbb0 and mergeable. Hosted CI, Dashboard CI, and Docker Publish checks are pending on the latest PR head."
         },
         {
-          "command": "PR #119 initial hosted checks 39932294138 and 39932294215; isolated Docker dashboard-stage reproduction",
-          "result": "Ruff failed I001 at adapter_policy.py:6; pip-audit failed on cryptography 48.0.1 and aiosmtplib 3.0.2; Docker pnpm build failed TS2307 because the root-level adapter catalog was absent from the dashboard build stage. Fixed the import formatting and Docker COPY. Mail is blocked and removed from the base dependency set because its only release cannot use the patched aiosmtplib 5.1.2; the three cryptography advisories blocked by QQ's <49 upstream cap are narrowly ignored and documented. A fresh temporary dashboard build reproduced TS2307 before copying the catalog and passed pnpm build afterward."
+          "command": "2026-10-23 task handoff for Corona/Nucleus planning",
+          "result": "Implementation evidence preserved. Hosted PR #118, test-host, Windows/Linux source startup and image acceptance were not rechecked in this planning task; external acceptance remains pending. Current active scope moves to CORONA-PLAN."
+        }
+      ]
+    },
+    {
+      "id": "CORONA-PLAN",
+      "name": "Corona / Nucleus 双进程工程计划",
+      "description": "使用 GitNexus 与源码/隔离探针，形成独立控制面、可重启业务核心的实施计划；本轮不改业务代码。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+        "docs/plans/2026-10-23-corona-nucleus-inventory.json",
+        "docs/reports/evidence/corona-nucleus-20261023/",
+        "docs/history/README.md and README.en.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "计划绑定目标 HEAD 与 GitNexus query/context/upstream impact，风险与图限制可复核",
+        "12 工作包有依赖、候选文件、退出条件、配置/协议/生命周期/代理/迁移回退合同",
+        "静态路由全量归属、配置来源与动态补查边界、34 项验收矩阵齐备",
+        "隔离配置与框架探针、既有专项基线、文档/归档链接/DAG/源指纹/证据摘要/图变更门禁完成",
+        "状态与交接可恢复，明确业务实施和 live/VM/release NOT READY"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus 1.6.12 list/status + 6 topic query groups + 12 contexts + upstream file/symbol impacts + process/source audit",
+          "result": "Bound c1713e3; config/settings CRITICAL 278/76, config entry CRITICAL 205/69, spaces.reload CRITICAL 13/2/7. Initial partial/output-incomplete attempts were rerun. Limits and dynamic/cross-language omissions retained. Planning evidence scripts were separately impacted and checked before formatting; raw CRITICAL retained.",
+          "report": "docs/reports/evidence/corona-nucleus-20261023/README.md"
         },
         {
-          "command": "ruff check .; pip-audit -r requirements.txt with three scoped ignores; lock compile; docs and GitNexus gates",
-          "result": "Ruff passed. pip-audit exited 0 with no known vulnerabilities and 6 findings ignored by the three exact PYSEC IDs. uv pip compile resolved 167 packages; documentation passed (121 files / 1262 links / 577 anchors / 0 errors); JSON and git diff --check passed. GitNexus index bound to Stella_project at E:\\stella\\stella_project, commit b61b4a1: pre-edit unavailable_adapter_reasons impact HIGH (3 direct callers, 2 platform processes); BLOCKED_ADAPTERS had UNKNOWN/0 graph callers and was source-checked. detect all: 18 files / 18 symbols / 0 processes / LOW; compare main: 37 files / 369 symbols / 20 processes / CRITICAL cumulative branch scope. No partial/truncated flags. Hosted rerun is pending."
+          "command": "Isolated real config.settings and NoneBot 2.5.0 probes; .venv/bin/python -m pytest on 8 existing lifecycle/deploy/WebUI files",
+          "result": "Stale inherited environment and NoneBot secondary dotenv source reproduced; fresh/delete/external/overlay cases verified. Existing regression 83 passed / 37.20s. No production files, Bot, platform or model used."
         },
         {
-          "command": "PR #119 CI run 39935046437, Docker Publish 39935046467, Dashboard CI 39935046449; test package import reproduction",
-          "result": "Lint, security, documentation, CLI, flow-manifest, flow-closure, memory benchmark, Windows native matrix, Docker Publish, and Dashboard CI passed. Python 3.10/3.11/3.12 test jobs failed only where tests use absolute imports such as tests.astrbot_compat, tests.cometa_helpers, and tests.test_migrations: pytest could not resolve the repository tests directory as a package because tests/__init__.py was absent. Added that package marker; Python 3.10 import resolution now finds the repository package and five previously failing test helper/module paths. Hosted matrix rerun pending."
+          "command": "verify_plan.py; evidence Ruff; python3 scripts/check_docs.py; git diff --check; full structured GitNexus detect_changes all and compare main",
+          "result": "12-package DAG, 199 fingerprints, 133 routes, 426 keys, 34 scenarios, 30 archive links and 77 evidence hashes passed; dependency-cycle negative rejected. Evidence Ruff and reproduction passed. Docs 119/1259/577/0 errors; diff passed. Graph all 5 files/10 symbols/0 flows/LOW, compare main 26/47/0/LOW; structured lists complete, partial=false/truncated=false. New archives checked separately. Incremental Markdown mapping zero was rejected; forced full rebuild restored complete symbol mapping, with before/after raw evidence preserved.",
+          "report": "docs/reports/evidence/corona-nucleus-20261023/verification.json"
         },
         {
-          "command": "PR #119 CI run 39936164733 and test package follow-up commit ef85ca5",
-          "result": "Adding tests/__init__.py made Python 3.10 and 3.11 test jobs pass. Python 3.12 then exposed one separate isolation failure: test_query_daily_reads_temp_db expected one row but got six because query_daily flushes usage_store's process-global pending rows into the monkeypatched SQLite path. Added a scoped WebUI test fixture to reset usage_store before and after this database-boundary test. In an isolated Python 3.12 environment, the targeted test passed both normally and with a plugin that seeded a pending usage row immediately before fixture setup. Hosted rerun for the fixture is pending. Docker Publish and Dashboard CI passed on commit ef85ca5."
+          "report": "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+          "command": "Planning completion / implementation handoff",
+          "result": "Plan delivered only. CORONA-IMPL remains planned; new architecture, live model/QQ/WebChat, Windows/Linux clean VM, Docker and release acceptance NOT READY. Start CN00 with actual HEAD/GitNexus binding and snapshot-only Driver spike."
+        }
+      ]
+    },
+    {
+      "id": "CORONA-IMPL",
+      "name": "Corona / Nucleus 双进程实施",
+      "description": "依工程计划执行 CN00–CN11，按阶段验收并切换默认入口；规划不等于实现。",
+      "status": "in_progress",
+      "dependencies": [
+        "CORONA-PLAN"
+      ],
+      "scope": [
+        "stella_bootstrap/ and stella_contracts/",
+        "corona/ and nucleus/",
+        "bot.py / config / webui / deploy",
+        "Dashboard / CLI / desktop / runtime-manager",
+        "Docker / release payload / tests / bilingual docs"
+      ],
+      "done_criteria": [
+        "CN00–CN11 各包退出条件均有绑定目标提交的验证证据",
+        "单一配置版本、单活动核心/监管、独立管理面、故障恢复与鉴权/代理边界通过",
+        "34 场景 L0/L1/L2 验收与全量 Python/Dashboard/Rust 门禁完成",
+        "必要 QQ/WebChat/模型 live、Windows/Linux clean VM、容器和六类 final 产品验收完成",
+        "默认切换和 legacy 兼容回退有证据，用户数据与业务库合同不被隐式回滚"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+          "command": "Planning handoff only",
+          "result": "Planning baseline at c1713e3. CN00 implementation starts on codex/corona-nucleus-implementation after preserving the plan/evidence commit; runtime/release remain NOT READY."
         },
         {
-          "command": "GitHub PR #119 latest-head workflows on 019824d2d23995ac23b91ddd8795d1e31fe96958",
-          "result": "All workflows passed: CI run 39937656864 completed 12/12 jobs, including Python 3.10, 3.11 and 3.12; Docker Publish run 39937656868 succeeded; Dashboard CI run 39937656943 succeeded. The test package marker resolved absolute tests.* imports; the clean_usage_store fixture fixed the Python 3.12 temp-database test contamination. Local isolated Python 3.12 validation passed with and without a seeded pending usage row. The PR CI repair is complete; UI/browser and real-platform acceptance remain separate."
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn00.md",
+          "command": "CN00: GitNexus rebind/impact + isolated baseline and framework tests + Ruff + detect-changes all/compare",
+          "result": "At HEAD 864c08f, GitNexus status is up-to-date; config/settings.py CRITICAL 278/76, bot.py UNKNOWN/0 with source callers confirmed, adapter registration LOW/1. Isolated existing baseline 83 passed/35.75s; new source/Driver contracts 3 passed/0.86s; Ruff passed. Plan verifier reconfirmed 199 source fingerprints, 133 routes, 426 keys, 34 scenarios and 77 hashes. Docs 119/1266/577/0 errors. Detect-changes all: 9 files / 27 symbols / 0 processes / LOW; compare main: 112 files / 141 symbols / 0 processes / LOW. One parallel compare returned PARTIAL and was discarded; standalone rerun completed. NoneBot 2.5.0 snapshot Driver spike preserves cwd and rejects dotenv rereads. No live Bot or user database. CN00 complete; CN01 next; overall CORONA-IMPL NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn01.md",
+          "command": "CN01: GitNexus upstream impacts + isolated config/env/release regressions + Ruff + compileall + docs + detect-changes all/compare",
+          "result": "Based on f9d6920. Before edits: config/__init__.py CRITICAL 205/69, config/home.py CRITICAL 236/5, config/instance.py CRITICAL 218/2, config/settings.py CRITICAL 278/76; parser/schema/envfile low; release packager UNKNOWN/0 supplemented by workflow/script/test references. Focused tests passed: 148/3.12s with isolated STELLA_HOME; repository Ruff and compileall passed. Full suite attempts: 4027 passed/29 skipped/2 failed, then 4028 passed/29 skipped/1 failed; all three distinct failed tests passed individually, but root cause is unconfirmed and full-suite status remains NOT GREEN. Final forced index: 106,344 nodes / 265,516 edges / 1,115 clusters / 823 flows, 1,926 covered files matching. Precommit staged all: 28 files / 154 symbols / 57 processes / CRITICAL; compare main: 135 files / 287 symbols / 57 processes / CRITICAL, serial and no partial/truncated reported. Docs 119/1269/577/0. Added pure stella_bootstrap sources and immutable stella_contracts.ConfigRevision, explicit managed revision loading, legacy compatibility exports, and release payload inclusion. Windows ACL, managed Nucleus process, live platform and VM acceptance remain unverified. CN01 complete; CN02 next; overall feature NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn02.md",
+          "command": "CN02: GitNexus upstream impacts + managed Nucleus process/lifecycle tests + full Python + Ruff/compileall/docs/flow + staged detect-changes all/compare",
+          "result": "Added opt-in python -m nucleus, immutable revision bootstrap, NoneBot 2.5.0 bridge, canonical DB OS lock, private health/drain/stop, admission gate and shared shutdown budget. Targeted Nucleus tests 9 passed; real OS-process case 1 passed; startup/restart 7 passed. Ruff, compileall, message-flow and docs passed. Full suite 4037 passed/29 skipped/1 failed in 239.71s: WebUI Cometa stale-revision case returned 401 vs 202 in suite order; isolated rerun passed, cause unknown. Runtime tests used temporary STELLA_HOME/tmp_path; no user DB/config or live platform. Legacy remains default; CN03 process-tree fencing and external acceptance remain NOT READY. Staged GitNexus all: 16 files/9 symbols/1 process/MEDIUM; compare main: 146 files/291 symbols/58 processes/CRITICAL cumulative. Both ran serially without partial/truncated indicators. Docs 119/1272/577/0; Ruff, compileall, flow and diff passed."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn03.md",
+          "command": "CN03: GitNexus upstream impacts + Corona/Nucleus real-process tests + full Python + Ruff/compileall/flow/docs + staged detect-changes all/compare",
+          "result": "Based on CN02 HEAD 73d7c60. Pre-edit impacts: webui.auth HIGH 20/17; webui.security.auth_file CRITICAL 15/4/5 flows; create_token HIGH 5; audit._append CRITICAL 30/1/26 processes/3 modules (untouched). Added independent Corona auth/static control app, process-held instance lock, identity-checked single-core supervisor, private startup logs, bounded crash retries, POSIX owner-watch/process-group fencing and Windows Job Object assignment code. Desktop-session capability is excluded from Nucleus. Restored the test-only per-case social DB isolation fixture after three shared-STELLA_HOME DeliveryPlan failures. Targeted Corona/Nucleus/WebUI 44 passed/6.10s; message-flow runtime file 16 passed/1.80s. Full suite 4050 passed/29 skipped/2 failed/251.81s: trace-message list returned null and Cometa endpoint returned 401 vs 202; each exact node passed alone, but isolated whole-module runs exposed different trace-data / Cometa-auth failures, cause unknown, so not green. Ruff, compileall and message-flow passed. Docs 119/1275/577/0. Final staged GitNexus all 24/36/7/HIGH; compare main 163/423/65/CRITICAL cumulative; serial post-evidence rerun matched, with no partial/truncated marker and CLI remainder counts. Windows/macOS/BSD, live platforms, Docker and clean VM remain NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn04.md",
+          "command": "CN04: GitNexus impacts + protocol/identity/local-control regressions + full Python + Ruff/compileall/flow/docs + staged detect-changes all/compare",
+          "result": "Implemented protocol v1 and Nucleus capability/actor guard, Corona JWT-derived header client, generation/operation-checked lifecycle ACKs, and separate loopback deploy-control listener/capability record. Focused Corona/Nucleus regression: 29 passed / 5.21s; Ruff, compileall and message-flow passed. Full Python rerun with initialized isolated STELLA_HOME: 4057 passed / 29 skipped / 2 failed / 249.00s; trace-dead-incarnation and standalone-doctor failures each passed alone, so suite remains NOT GREEN from unresolved order/state behavior. Docs 119/1280/577/0. Repeated serial staged GitNexus all: 21 files / 31–32 symbols / 420–492 processes / CRITICAL; compare main: 172/363–382/509–518 / CRITICAL. Counts varied without partial/truncated output. The first compare was PARTIAL and discarded, then rerun serially without partial/truncated markers. No user data/live acceptance."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn05.md",
+          "command": "CN05: GitNexus upstream impact/source audit + config transaction/API/recovery and real-core regressions + full Python + Ruff/compileall/flow/docs + staged detect-changes all/compare",
+          "result": "Added revision CAS, PREPARED/COMMITTED crash recovery, conditional external-edit-safe rollback, serialized idempotent apply/restart/start/stop operations, revision-bound process readiness, startup recovery and authenticated config/operation/status/SSE APIs. Legacy remains default. Focused Corona/Nucleus regressions: 40 passed / 6.43s; Ruff, compileall, message-flow and docs passed. Full suite: 4072 passed / 29 skipped / 4 failed / 1 warning / 251.38s; all four exact failures passed alone (4 passed / 6.03s), but root cause remains unknown and full suite is NOT GREEN. Tests used temporary isolated STELLA_HOME; no user data or live platforms. Staged GitNexus all: 17 files / 17 symbols / 13 processes / HIGH; compare main: 182 / 720 / 88 / CRITICAL cumulative, serial and without partial/truncated markers. Overall CORONA-IMPL remains in progress / NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn06.md",
+          "command": "CN06: GitNexus upstream impact + route ownership/proxy/group saga regressions + full Python + Ruff/compileall/flow/docs + staged detect-changes all/compare",
+          "result": "Based on 5ae639b. Added exact 21 Corona / 111 Nucleus / 1 mixed route ownership and filtered business app, JWT-verified generation-bound HTTP proxy, and durable group-binding saga with a separate Nucleus space journal, conditional compensation, and reconcile/apply guard. Focused tests: 25 passed/12.42s; Corona/WebUI/personal-memory: 192 passed/29.24s; Ruff, compileall, message-flow passed. Full Python: 4087 passed/29 skipped/1 failed/3 warnings/256.16s; test_command_full_text_via_receipt_path failed in suite order, but exact node passed alone (1/0.59s) and containing module passed (24/2.90s); cause unknown, so NOT GREEN. Validation used isolated /tmp STELLA_HOME and pytest tmp paths only. Docs 119/1275/577/0. Staged GitNexus all: 21 files/51 symbols/745 processes/CRITICAL; compare main: 193/442/745/CRITICAL cumulative; serial, no partial/truncated markers. Legacy remains default and CN07 is next."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn07.md",
+          "command": "CN07: generation-bound adapter route catalog, managed HTTP/SSE/WebSocket proxy, raw-peer status guard, real OneBot V11 fake-process reconnection, focused/full regressions, docs and staged GitNexus all/compare",
+          "result": "Implemented from CN06 eb7f889. Pre-edit impacts: ManagedNucleusASGI CRITICAL 17/4/124/20; NucleusClient HIGH 7/3/3, proxy_http exact CRITICAL 300/1/130/20; create_corona_app CRITICAL 301/2/130/20; CoreSnapshot LOW 2 direct; nucleus main LOW 1; adapter_loader UNKNOWN with source/real Driver audit. Added a generation/revision-bound digest catalog, private route endpoint, health-then-catalog ready handshake and atomic snapshot; HTTP/SSE/WS proxy with raw platform headers, redirect/path/namespace protections, bounded WS backpressure and original-peer status gate. Real NoneBot OneBot V11 route shapes and Supervisor-managed local fake process verified. Final focused regression 42 passed/5.61s. Full Python 4103 passed/29 skipped/1 failed/3 warnings/278.93s; one WebUI Cometa status test returned 401 in suite order but exact node (1/0.44s) and module (29/4.81s) passed; full gate NOT GREEN. Ruff, compileall, diff check, message-flow, and docs passed (119/1278/577/0). Final staged GitNexus all: 20 files/39 symbols/12 processes/HIGH; compare main: 200/553/605/CRITICAL cumulative; latest complete output had no partial/truncated markers; repeated counts varied slightly. No live QQ/platform or other-adapter certification."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn08.md",
+          "command": "CN08 Dashboard control-plane/store/banner integration; typecheck/Vitest/build/sync; loopback browser fault injection; documentation and staged GitNexus all/compare",
+          "result": "Based on CN07 6ba8bdd. Added managed status/operation recovery, global status banner, revision-CAS/idempotent config and platform/provider writes, stale business cache and control-vs-proxy 401 handling. Dashboard typecheck passed; Vitest 8 files/107 passed; build and sync:webui passed; source, webui and desktop dist are identical. Docs passed with 119 files/1280 local links/577 migration anchors/0 errors. Loopback browser mock verified one apply, core-down config repair, rollback/recovery failure, controller reconnect with login retained, and chat 401 without retry or logout. Serial staged GitNexus all was CRITICAL (20 files, 19–25 symbols, 489–498 processes); compare main was CRITICAL (217 files, 644–722 symbols, 573–574 processes). One interrupted compare was discarded and rerun; complete outputs had no partial/truncated markers, counts varied by run. Full Python was not rerun; CN07 suite remains 4103 passed/29 skipped/1 failed/3 warnings, NOT GREEN. Corona live core/Tauri/QQ/model/clean-VM acceptance remains open; legacy is still default. CN08 focused implementation complete; CN09 next."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn09.md",
+          "command": "CN09 live-owner deploy/Runtime/CLI/Tauri control; isolated Python tests; Dashboard Vitest/build/sync; Ruff/docs/flow; staged GitNexus all/compare",
+          "result": "Based on CN08 6050bae. Added authenticated Corona live-owner control, pure deploy dispatch, Runtime schema-v1 Python/Rust fixture contract, fail-closed CLI/Tauri ownership, and gated Tauri desktop-session exchange. Focused Python 34 passed; Dashboard 9 files/110 passed; build/sync, repository Ruff, docs 119/1277/577/0, and message-flow passed. Full Python not rerun; latest remains 4103/29/1/3 NOT GREEN. cargo/rustc/rustup are absent, so Rust fmt/clippy/test and compiler validation are NOT RUN; Windows native owner-lock/Job acceptance is NOT RUN. These required phase criteria remain open; overall CORONA-IMPL is NOT READY. Final staged GitNexus all: 26 files/CRITICAL; compare main: 236 files/CRITICAL cumulative; symbol/process totals varied, no partial/truncated marker, and CLI omitted names at its display limit. See the bilingual CN09 report. Legacy default remains unchanged."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn10.md",
+          "command": "CN10 Linux real-process soak and proxy measurements; A01-A34 classification; isolated focused/full Python; Dashboard test/build/sync; Ruff/docs/message-flow; staged GitNexus all/compare",
+          "result": "Implemented real fake-core 100-cycle resource/sole-writer checks, actual child-process proxy HTTP/SSE/WS/upload tests, control-health timing, cross-process lifecycle flow contracts, and A01-A34 ledger (12 pass/17 partial/5 not_run). Focused Python 142 passed/4 warnings; Dashboard 9 files/110 passed, build/sync passed; Ruff and message-flow passed; docs 119/1279/577/0. Full Python 4114 passed/29 skipped/1 failed/3 warnings: one suite-order Cometa API-key test received 401 instead of 400 but passed alone; root cause unknown, NOT GREEN. Rust/Cargo and Windows-native/clean-VM/product acceptance NOT RUN; overall remains NOT READY. See bilingual CN10 reports and raw evidence. Staged GitNexus serial all: 18 files/41 symbols/0 processes/LOW; compare main: 248 files/1501 symbols/150 processes/CRITICAL, with capped display list and no partial/truncated marker. Final docs: 119 files/1279 links/577 anchors/0 errors. Implementation/evidence package committed as a300151; post-commit message-flow manifest regenerated with source_revision a300151 and --check passed."
+        },
+        {
+          "report": "docs/reports/2026-10-23-corona-nucleus-cn11.md",
+          "command": "CN11: isolated full Python and targeted regressions; real Standalone/OneClick staging/archive checks; Docker scratch filter and compose YAML parse; Ruff/docs/flow/dist parity; GitNexus all/compare commit gates",
+          "result": "Implementation commit a225aa8 adds the four Corona/Nucleus packages to release allowlists, excludes runtime state/secrets, updates Docker liveness and 65s stop grace, bilingual docs, and a WebUI test-auth isolation fixture. Full Python: 4115 passed/29 skipped/3 warnings/281.94s; focused release/install 60 passed, WebUI Cometa/config 43 passed; Ruff, flow check, docs 119/1288/577/0 and dashboard dist parity passed. Standalone archive 561 members with required assets and zero forbidden hits; installer staging 5/5; Docker scratch exclusion sentinels passed. Real Docker build failed at Docker Hub TLS pull; compose plugin, Rust/native Windows, clean VMs, six final products, live QQ/WebChat/model, and rollback acceptance remain NOT RUN. Legacy remains default; CORONA-IMPL stays in_progress / NOT READY. Historical fresh-index status/evidence all runs were 6/11/0/LOW, with intermediate 6/1/774/CRITICAL and 6/1/213/CRITICAL. One current-tree gate was 6/4/3/MEDIUM with three unresolved Skill_* → _is_user_layer attributions; literal/source audit found no matching identifiers and impact/context Skill_delete returned not found. The latest all gate said no indexed symbols overlap the six changed files and explicitly “not a clean tree”; treat it as NOT GREEN. Serial compare main samples include 259 files/315 and 259/240 symbols/processes as CRITICAL (--limit 10 for the latter; output lists 230 more symbols and 776 more flows). Other reindexed outputs varied; preserve every CRITICAL result without waiver. No partial/truncated marker surfaced. Graph limitations are in the report."
+        },
+        {
+          "command": "PR #120 CI follow-up on e45c4d7: inspect failed hosted run 39957269907; fix Python 3.10 typing import, owner-loss readiness race, and deterministic process-soak thread measurement; run CI-equivalent full pytest matrix",
+          "result": "Hosted failures were: Python 3.10 cannot import typing.Self; Python 3.11 owner-loss test closes its pipe before the child lifecycle is ready; Python 3.12 thread-count assertion includes lazy asyncio.to_thread executor growth. Switched Self to the locked typing_extensions dependency, wait for an explicit child-ready marker, and prewarm a fixed four-worker executor in the resource soak. Full CI-equivalent matrix: Python 3.10.21 4116 passed/29 skipped/7 warnings; Python 3.11.16 4116/29/7; Python 3.12.14 4116/29/5. Targeted failed-test set passed on 3.10 and 3.11 (10 each); full repository Ruff, changed-file compileall, docs (121 files/1303 links/577 anchors/0 errors), message-flow check and diff check passed. One initial 3.12 run had an unrelated Cometa lease timing failure; its isolated rerun and the second full 3.12 run passed. All tests used isolated /tmp STELLA_HOME. Fresh GitNexus upstream impacts: CoronaOwnershipLock LOW/1 direct caller, NucleusLifecycle LOW/4 direct and 9 total, ManagedProcessTree LOW/1 direct; the test-file impact is UNKNOWN/0 and was supplemented with source-reference checks. Detect-changes all: 5 files/7 symbols/0 processes/LOW. Compare main: 282 files/1929 symbols/165 processes/CRITICAL; the changed-symbol listing remained capped after rerunning with --limit 2000. The refreshed graph has 28,817 nodes/65,297 edges/796 flows and omits 3,200/3,400 entry candidates, 953 callees, 43 walks and 23 depth-capped traces; retain the cumulative critical result and graph limits. Hosted CI rerun is pending push. CORONA-IMPL remains in_progress / NOT READY for external acceptance."
+        },
+        {
+          "report": "progress.md#2026-10-23--pr-120-python-310-ci-follow-up",
+          "command": "Hosted PR #120 run 39961432424 failure inspection; focused deadline and Linux supervisor soak tests on Python 3.10/3.11/3.12; full coverage-enabled CI-equivalent pytest matrix",
+          "result": "Hosted run 39961432424 passed all jobs except Python 3.10 test_send_deadline_after_callback_starts_is_unknown_and_stops: the 30ms deadline expired before callback start. Test timing now allows 2s for setup/scheduling while simulated send lasts 3s. Linux 100-cycle supervisor soak now triggers generation-specific child crash only after parent observes ready, removing the fixed-100ms race. Final full suites: Python 3.10.21 4116 passed/29 skipped/7 warnings; 3.11.16 4116/29/6; 3.12.14 4116/29/4 (diagnostic plugin only under /tmp). Focused deadline and supervisor restart/soak tests passed on all three. Earlier intermittent Cometa clock and WebUI auth/timing failures passed isolated reruns and successful complete retries. Follow-up commit and hosted CI run remain pending; CORONA-IMPL remains in_progress / NOT READY. Static gates passed: Ruff, changed-file compileall, docs 121/1303/577/0, message-flow --check, feature JSON and diff check. Refreshed GitNexus index 28,818 nodes/65,298 edges/796 flows; scope=all 5 files/10 symbols/0 processes/LOW; compare main 283 files/1933 symbols/165 processes/CRITICAL (listing capped). Graph omitted 3200/3400 entry candidates, skipped 953 callees, cut 43 walks and depth-capped 23 traces; keep cumulative risk and graph limits explicit."
+        },
+        {
+          "report": "progress.md#2026-10-23--pr-120-memory-evidence-concurrency-follow-up",
+          "command": "Inspect hosted CI run 39968262036; targeted memory regressions on Python 3.10/3.11/3.12; full CI coverage runs; regenerate and check flow manifest",
+          "result": "Hosted run 39968262036 failed only Python 3.10 TestConcurrentEvidence.test_concurrent_replay_bounded_by_unique_constraint: one of two simultaneous inserts leaked the composite memory_evidence UNIQUE IntegrityError. GitNexus pre-edit impact for MemoryConsolidator._write_memory_candidates was HIGH (1 direct caller; 4 impacted nodes; main and consolidation_drain_job processes). Added a targeted SQLite ON CONFLICT for the evidence identity and reloads/reuses the winning row, preserving digest verification upgrades. Regenerated core/observability/flows/message-flow.7cf97057f767.json (144 nodes/142 source-resolved/9646 closure sites/15736 reachable symbols). Focused memory tests: 74 passed on each of Python 3.10/3.11/3.12; exact concurrent replay passed 10 consecutive runs on 3.10. Full coverage: Python 3.10.21 4116 passed/29 skipped/4 warnings/149.69s; Python 3.11.16 4116/29/5/153.38s. Python 3.12.14 final full retry 4115 passed/29 skipped/1 failed/5 warnings/138.33s; the sole G09 policy ACK failure reports policy_clock_jump, also reproduced in two isolated runs. Host sample observed 24.54s wall/monotonic skew in one 200ms interval; policy remains fail-closed. Other isolated nodes passed. Ruff, compileall, docs 121/1303/577/0, Python 3.10/3.12 flow checks, JSON and diff checks passed. Final GitNexus detect-changes and hosted validation await push; CORONA-IMPL remains in_progress / NOT READY. Final refreshed GitNexus gate: all 4 files/8 symbols/0 processes/LOW; compare main 284/1936/165/CRITICAL with capped listing. The new 3.9MB flow manifest exceeds the analyzer 512KB file cap and is not represented in these counts. Graph omission limits remain 3200/3400 entry candidates, 953 callees, 43 walks and 23 depth-capped traces."
+        },
+        {
+          "report": "progress.md#2026-10-23--pr-120-memory-evidence-concurrency-follow-up",
+          "command": "Push commit 13d837e; inspect PR #120 hosted CI, Docker Publish, and Dashboard CI workflows",
+          "result": "Final hosted CI run 39973270572 passed 12/12 jobs. Python 3.10.15, 3.11.14 and 3.12.15 each reported 4116 passed / 29 skipped (4/5/5 warnings; 219.51s/239.54s/270.96s). Flow-manifest/closure, lint, docs, security, CLI, Windows native reliability, public memory benchmark and notify passed. Docker Publish 39973270444 and Dashboard CI 39973270399 passed. This resolves the current hosted CI failures. Local Python 3.12 policy_clock_jump did not reproduce in hosted CI; fail-closed policy was preserved. Product live/VM/rollback acceptance remains NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-24-pr120-windows-validation.md",
+          "command": "Windows Python 3.11.16 full suite and tests/windows; Windows Rust/Tauri and Dashboard gates; GitNexus pre-edit impacts",
+          "result": "Windows full Python: 4117 passed/32 skipped/6 warnings; Windows-native: 10 passed/1 skipped (STELLA_INSTALL_TEST_EXE absent). Shutdown-budget regression passed 10 consecutive runs. CLI fmt/clippy/tests (22), runtime-manager (9), Tauri (25), release CLI build, Ruff, compileall, flow check, Dashboard 110 tests/build/sync passed. Hosted CI run 40044987734 on f1cc1fd passed 12/12 jobs (including Windows native reliability matrix and Python 3.10/3.11/3.12); Docker Publish 40044987747 and Dashboard CI 40044987735 passed. Desktop-wide rustfmt check still reports existing differences. Refreshed GitNexus compares varied: against 2d1eb736, 22 files/10-27 symbols/782-790 processes/CRITICAL; against main, 282 files/488-833 symbols/784-791 processes/CRITICAL. Status-document scope=all samples included 5/10/0 LOW, 5/1/783 CRITICAL, and 5/8/0 LOW; final indexed scope=all reported no uncommitted changes. Generic __call__ flows remain unclosed by source review and no CRITICAL result is waived. Installer EXE, clean VMs, Docker runtime/build, live QQ/WebChat/model, final lifecycle/rollback acceptance remain NOT RUN; CORONA-IMPL remains in_progress / NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-10-24-pr120-windows-validation.md",
+          "command": "PR #120 follow-up: align version 6.3.0, repair GitNexus process attribution, build/install the real Windows NSIS EXE in Windows Sandbox, then build and run the Docker image; defer QQ acceptance until after merge to main",
+          "result": "Version sources are 6.3.0; DB schema 19, Rust API 3, and legacy default remain unchanged. GitNexus 1.6.12 forced full reindex: 3,230 Method nodes / 0 empty IDs; both target __call__ symbols now have empty process lists. Final all-scope: 18 files/35 symbols/0 processes/LOW. Against baseline 2d1eb736: 35 files/73 symbols/12 processes/HIGH; compare main: 292 files/1,945 symbols/165 affected processes/CRITICAL cumulative, listing capped. Windows Sandbox NSIS install harness passed for oneclick-python online payload; EXE is unsigned and GUI first boot, catalog/bootstrap, upgrade, and rollback remain open. Docker image built and ran with a dedicated named volume; container health is healthy, JSON-aware healthcheck rejects SPA HTML false positives, and status JSON reports 6.3.0. No QQ adapter, token, or live model was connected. Clean VM lifecycle, Compose deployment, model/WebChat, and post-merge QQ acceptance remain open; CORONA-IMPL stays in_progress / NOT READY. Postcommit forced GitNexus rebuild at 4422804 is up-to-date (114608 nodes/288477 edges/796 flows; 3230 Methods/0 empty IDs); direct contexts for both affected __call__ methods have no process memberships. Clean indexed all-scope reports no changes; fresh compare main is 294/1945/165 CRITICAL with capped listing. Latest hosted run 40051788830 passed 12/12 jobs; Docker Publish 40051788823 and Dashboard CI 40051788829 passed."
         }
       ]
     },

@@ -45,14 +45,18 @@ COMMON_DIRS = (
     "capability",
     "config",
     "core",
+    "corona",
     "deploy",
     "extensions",
     "gravitas",
     "knowledge",
     "memory",
+    "nucleus",
     "skills",
     "system_prompts",
     "runtime-manager",
+    "stella_bootstrap",
+    "stella_contracts",
     "stella_project",
     # 内置技能在 assets/skills 下（SKILLS_BUILTIN_DIR 默认指这里）
     "assets",
@@ -72,6 +76,12 @@ INSTALLER_FILES = (
 INSTALLER_DIRS = COMMON_DIRS
 FORBIDDEN_PARTS = (
     "StellaData",
+    # Local managed-controller state is user data: owner/client capabilities,
+    # immutable revisions, control SQLite, generation metadata and logs must
+    # never be copied from a source checkout into a product payload.
+    ".stella",
+    "control-client.json",
+    "ownership.json",
     # 注意：这里没有 "runtime"——顶层 runtime/（开发机嵌入式运行时）不在
     # allowlist、本就不可能进树；而 core/runtime/ 是 runtime-manager 工作
     # 的 Python 包，按组件名过滤会把它剥掉（v6.0.1 CI 实测：Standalone
@@ -146,8 +156,26 @@ def _ignore_release_entries(_path: str, names: list[str]) -> set[str]:
     for name in names:
         if (
             name in FORBIDDEN_PARTS
-            or name in {".env", ".env.dev", ".env.prod", ".env.bak"}
-            or name.endswith((".db", ".log", ".jsonl", ".pyc"))
+            or name in {".env", ".env.dev", ".env.prod", ".env.bak", ".env.backup"}
+            or name.endswith(
+                (
+                    ".db",
+                    ".db-wal",
+                    ".db-shm",
+                    ".db-journal",
+                    ".sqlite",
+                    ".sqlite-wal",
+                    ".sqlite-shm",
+                    ".sqlite-journal",
+                    ".sqlite3",
+                    ".sqlite3-wal",
+                    ".sqlite3-shm",
+                    ".sqlite3-journal",
+                    ".log",
+                    ".jsonl",
+                    ".pyc",
+                )
+            )
         ):
             ignored.add(name)
     return ignored
@@ -157,9 +185,33 @@ def _assert_clean(root: Path) -> None:
     for path in root.rglob("*"):
         relative = path.relative_to(root).as_posix()
         parts = set(relative.split("/"))
-        if parts.intersection(FORBIDDEN_PARTS) or path.name.endswith((".db", ".log", ".jsonl")):
+        if parts.intersection(FORBIDDEN_PARTS) or path.name.endswith(
+            (
+                ".db",
+                ".db-wal",
+                ".db-shm",
+                ".db-journal",
+                ".sqlite",
+                ".sqlite-wal",
+                ".sqlite-shm",
+                ".sqlite-journal",
+                ".sqlite3",
+                ".sqlite3-wal",
+                ".sqlite3-shm",
+                ".sqlite3-journal",
+                ".log",
+                ".jsonl",
+            )
+        ):
             raise ValueError(f"forbidden release content: {relative}")
-        if path.name in {".env", ".env.dev", ".env.prod", ".env.bak", "deploy.answers.toml"}:
+        if path.name in {
+            ".env",
+            ".env.dev",
+            ".env.prod",
+            ".env.bak",
+            ".env.backup",
+            "deploy.answers.toml",
+        }:
             raise ValueError(f"secret or user data in release content: {relative}")
 
 

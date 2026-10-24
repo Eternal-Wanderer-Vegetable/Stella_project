@@ -56,7 +56,9 @@ def test_mount_adds_root_catchup_and_is_idempotent(isolated_home):
     ]
     assert len(mounts) == 1
     status_idx = next(
-        i for i, r in enumerate(app.router.routes) if getattr(r, "path", None) == "/stella/status"
+        i
+        for i, r in enumerate(app.router.routes)
+        if getattr(r, "path", None) == "/stella/status"
     )
     # 顺序即安全边界：catch-all 必须在既有路由之后
     assert _mount_index(app) > status_idx
@@ -86,6 +88,42 @@ def test_mount_hook_log_has_no_loguru_markup(isolated_home, monkeypatch):
     msg = captured.get("msg", "")
     assert "8080" in msg  # 端口取真实值，而不是 <PORT> 字面量
     assert not re.search(r"<[A-Z][A-Z_]*>", msg)  # 无色彩标记形状的尖括号
+
+
+def test_managed_mount_hook_uses_nucleus_business_app(isolated_home, monkeypatch):
+    app = _main_app()
+    captured = {}
+    fake_logger = types.SimpleNamespace(
+        success=lambda message: captured.setdefault("message", message),
+        error=lambda message: captured.setdefault("error", message),
+    )
+    fake_nonebot = types.ModuleType("nonebot")
+    fake_nonebot.get_app = lambda: app
+    fake_nonebot.get_driver = lambda: types.SimpleNamespace(
+        config=types.SimpleNamespace(port=8080)
+    )
+    fake_nonebot.logger = fake_logger
+    monkeypatch.setitem(sys.modules, "nonebot", fake_nonebot)
+    monkeypatch.setenv("STELLA_MANAGED_CORE", "1")
+
+    import nucleus.routes
+    from webui import mount as webui_mount
+
+    monkeypatch.setattr(nucleus.routes, "create_nucleus_business_app", FastAPI)
+    asyncio.run(webui_mount._mount_hook())
+
+    root_mount = next(
+        route
+        for route in app.router.routes
+        if isinstance(route, Mount) and route.path in ("", "/")
+    )
+    assert root_mount.name == "nucleus-business"
+    assert _mount_index(app) > next(
+        index
+        for index, route in enumerate(app.router.routes)
+        if getattr(route, "path", None) == "/stella/status"
+    )
+    assert "WebUI 已就绪" in captured["message"]
 
 
 def test_four_path_classes_coexist(isolated_home, monkeypatch):
@@ -237,9 +275,7 @@ def test_dist_health_warns_on_version_mismatch(
     monkeypatch.setattr(webui_static, "_dist_health_reported", False)
     make_dist()
     # 程序版本判据 = 隔离树里的 pyproject.toml（program_version 读它）
-    (isolated_home / "pyproject.toml").write_text(
-        'version = "9.9.9"', encoding="utf-8"
-    )
+    (isolated_home / "pyproject.toml").write_text('version = "9.9.9"', encoding="utf-8")
     dist = isolated_home / "webui" / "dist"
     (dist / "assets" / "version").write_text("0.0.1", encoding="utf-8")
     (dist / "index.html").write_text(
@@ -248,7 +284,9 @@ def test_dist_health_warns_on_version_mismatch(
     client = _spa_client(monkeypatch, isolated_home)
     with caplog.at_level(logging.WARNING, logger="webui.static"):
         assert client.get("/").status_code == 200
-    assert any("版本" in r.getMessage() and "不一致" in r.getMessage() for r in caplog.records)
+    assert any(
+        "版本" in r.getMessage() and "不一致" in r.getMessage() for r in caplog.records
+    )
 
 
 def test_dist_health_silent_when_version_unknown(

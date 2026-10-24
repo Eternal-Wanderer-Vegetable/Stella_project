@@ -1,0 +1,47 @@
+{
+  "scope": "CN10 A31 Linux real child process soak",
+  "platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.12.14",
+  "cycles": 100,
+  "cycle_pattern": [
+    "exclusive_ready",
+    "exclusive_crash",
+    "exclusive_crash_after_ready"
+  ],
+  "warmup_cycles_excluded": 40,
+  "comparison_windows": {
+    "warm": "cycles 41-60",
+    "final": "cycles 81-100"
+  },
+  "tolerance": {
+    "fd_median_delta": 2,
+    "fd_final_max_delta": 4,
+    "thread_median_delta": 1,
+    "thread_final_max_delta": 2,
+    "pending_async_task_median_delta": 1,
+    "pending_async_task_final_max_delta": 2
+  },
+  "resource_windows": {
+    "fd_count": {
+      "warm": 15.0,
+      "final": 15.0,
+      "final_max": 15
+    },
+    "thread_count": {
+      "warm": 19.0,
+      "final": 20.0,
+      "final_max": 20
+    },
+    "pending_async_tasks": {
+      "warm": 1.0,
+      "final": 1.0,
+      "final_max": 1
+    }
+  },
+  "peak_controller_rss_kib": 435344,
+  "orphan_child_processes": 0,
+  "per_generation_log_files": 100,
+  "log_queue": "not_applicable; supervisor redirects each child to a generation log file",
+  "unique_child_pids": 100,
+  "single_writer_flock": "100/100 child processes acquired exclusive lock serially"
+}

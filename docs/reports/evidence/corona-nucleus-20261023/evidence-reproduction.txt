@@ -1,0 +1,1 @@
+After Ruff formatting/import cleanup, config_probe.py and framework_probe.py reproduced their frozen JSON results exactly; build_inventory.py reproduced the 12/199/133/426/34 inventory exactly. No production state accessed.

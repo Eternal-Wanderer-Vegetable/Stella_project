@@ -1,0 +1,25 @@
+{
+  "summary": {
+    "changed_count": 2,
+    "affected_count": 0,
+    "changed_files": 26,
+    "risk_level": "low"
+  },
+  "changed_symbols": [
+    {
+      "id": "Variable:deploy/process.py:STARTUP_TIMEOUT_SECONDS",
+      "name": "STARTUP_TIMEOUT_SECONDS",
+      "type": "Variable",
+      "filePath": "deploy/process.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Class:scripts/sync_test_repo.py:SyncError",
+      "name": "SyncError",
+      "type": "Class",
+      "filePath": "scripts/sync_test_repo.py",
+      "change_type": "touched"
+    }
+  ],
+  "affected_processes": []
+}

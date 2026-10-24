@@ -24,6 +24,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from stella_bootstrap.env import parse_env
+
 from . import env_keys
 
 # 匹配 `KEY=`、`# KEY=`、`#KEY=`（模板里大量键是注释掉的默认值）
@@ -77,22 +79,6 @@ class EnvMergeReport:
         if sensitive:
             lines += ["", f"敏感项已沿用（值不打印）：{ '、'.join(sensitive) }"]
         return "\n".join(lines)
-
-
-def parse_env(text: str) -> dict[str, str]:
-    """解析 ``.env`` 文本为「键 → 右侧原文」。
-
-    刻意保留右侧**原文**（含引号与行尾注释）：写回去时逐字节还原用户的值，
-    不做任何规范化——引号脱不脱、有没有空格，都不是升级该管的事。
-    """
-    values: dict[str, str] = {}
-    for line in text.splitlines():
-        if line.lstrip().startswith("#"):
-            continue
-        match = _ASSIGN.match(line)
-        if match:
-            values[match.group(1)] = match.group(2).strip()
-    return values
 
 
 def template_keys(template: str) -> set[str]:

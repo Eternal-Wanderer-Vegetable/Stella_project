@@ -1,0 +1,12 @@
+{
+  "scope": "Actual config.settings in isolated STELLA_HOME; no Bot, model or network",
+  "inherited_environment": {
+    "parent": 11.0,
+    "new_file": 22,
+    "successor": 11.0
+  },
+  "fresh_bootstrap_environment": 22.0,
+  "deleted_key_default": 90.0,
+  "explicit_external_environment": 44.0,
+  "production_overlay_overrides_external": 33.0
+}

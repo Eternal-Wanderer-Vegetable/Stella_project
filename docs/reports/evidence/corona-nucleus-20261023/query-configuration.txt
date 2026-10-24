@@ -1,0 +1,335 @@
+{
+  "processes": [
+    {
+      "id": "proc_222_space_delete",
+      "summary": "Space_delete → Reload",
+      "priority": 0.111,
+      "symbol_count": 2,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_776_providers_endpoints_",
+      "summary": "Providers_endpoints_put → Env_file",
+      "priority": 0.106,
+      "symbol_count": 4,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_541_config_update",
+      "summary": "Config_update → Deprecation_reason",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_542_config_update",
+      "summary": "Config_update → Superseded_by",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_543_config_update",
+      "summary": "Config_update → _env_key",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_544_config_update",
+      "summary": "Config_update → _sections_by_line",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_786_providers_roles_put",
+      "summary": "Providers_roles_put → Env_file",
+      "priority": 0.096,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 4
+    },
+    {
+      "id": "proc_724_providers_endpoints_",
+      "summary": "Providers_endpoints_put → Deprecation_reason",
+      "priority": 0.093,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_725_providers_endpoints_",
+      "summary": "Providers_endpoints_put → Superseded_by",
+      "priority": 0.093,
+      "symbol_count": 3,
+      "process_type": "cross_community",
+      "step_count": 5
+    },
+    {
+      "id": "proc_142_groups_bindings",
+      "summary": "Groups_bindings → Prompt_path",
+      "priority": 0.093,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 5
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:webui/services/spaces.py:_reload",
+      "name": "_reload",
+      "filePath": "webui/services/spaces.py",
+      "startLine": 71,
+      "endLine": 74,
+      "module": "Services",
+      "process_id": "proc_222_space_delete",
+      "step_index": 3
+    },
+    {
+      "id": "Function:config/spaces.py:reload",
+      "name": "reload",
+      "filePath": "config/spaces.py",
+      "startLine": 253,
+      "endLine": 263,
+      "module": "Tests",
+      "process_id": "proc_222_space_delete",
+      "step_index": 4
+    },
+    {
+      "id": "Function:webui/services/providers.py:update_endpoints",
+      "name": "update_endpoints",
+      "filePath": "webui/services/providers.py",
+      "startLine": 61,
+      "endLine": 90,
+      "module": "Services",
+      "process_id": "proc_776_providers_endpoints_",
+      "step_index": 2
+    },
+    {
+      "id": "Function:webui/routers/config.py:providers_endpoints_put",
+      "name": "providers_endpoints_put",
+      "filePath": "webui/routers/config.py",
+      "startLine": 64,
+      "endLine": 71,
+      "module": "Services",
+      "process_id": "proc_776_providers_endpoints_",
+      "step_index": 1
+    },
+    {
+      "id": "Function:webui/services/envfile.py:env_file",
+      "name": "env_file",
+      "filePath": "webui/services/envfile.py",
+      "startLine": 26,
+      "endLine": 27,
+      "module": "Services",
+      "process_id": "proc_776_providers_endpoints_",
+      "step_index": 4
+    },
+    {
+      "id": "Function:webui/services/envfile.py:write_values",
+      "name": "write_values",
+      "filePath": "webui/services/envfile.py",
+      "startLine": 55,
+      "endLine": 90,
+      "module": "Services",
+      "process_id": "proc_776_providers_endpoints_",
+      "step_index": 3
+    },
+    {
+      "id": "Function:webui/routers/config.py:config_update",
+      "name": "config_update",
+      "filePath": "webui/routers/config.py",
+      "startLine": 46,
+      "endLine": 53,
+      "module": "Services",
+      "process_id": "proc_541_config_update",
+      "step_index": 1
+    },
+    {
+      "id": "Function:deploy/env_schema.py:build_schema",
+      "name": "build_schema",
+      "filePath": "deploy/env_schema.py",
+      "startLine": 56,
+      "endLine": 116,
+      "module": "Deploy",
+      "process_id": "proc_541_config_update",
+      "step_index": 5
+    },
+    {
+      "id": "Function:webui/services/config.py:schema",
+      "name": "schema",
+      "filePath": "webui/services/config.py",
+      "startLine": 27,
+      "endLine": 37,
+      "module": "Services",
+      "process_id": "proc_541_config_update",
+      "step_index": 4
+    },
+    {
+      "id": "Function:webui/services/providers.py:update_roles",
+      "name": "update_roles",
+      "filePath": "webui/services/providers.py",
+      "startLine": 116,
+      "endLine": 153,
+      "module": "Services",
+      "process_id": "proc_786_providers_roles_put",
+      "step_index": 2
+    },
+    {
+      "id": "Function:webui/services/groups.py:set_bindings",
+      "name": "set_bindings",
+      "filePath": "webui/services/groups.py",
+      "startLine": 72,
+      "endLine": 111,
+      "module": "Services",
+      "process_id": "proc_142_groups_bindings",
+      "step_index": 2
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/webui/test_webui_config.py:test_config_update_accepts_json_bools",
+      "name": "test_config_update_accepts_json_bools",
+      "filePath": "tests/webui/test_webui_config.py",
+      "startLine": 88,
+      "endLine": 94
+    },
+    {
+      "id": "Function:tests/webui/test_webui_config.py:test_groups_bindings_write_env",
+      "name": "test_groups_bindings_write_env",
+      "filePath": "tests/webui/test_webui_config.py",
+      "startLine": 188,
+      "endLine": 209
+    },
+    {
+      "id": "File:tests/webui/test_webui_config.py",
+      "name": "test_webui_config.py",
+      "filePath": "tests/webui/test_webui_config.py"
+    },
+    {
+      "id": "File:webui/services/spaces.py",
+      "name": "spaces.py",
+      "filePath": "webui/services/spaces.py"
+    },
+    {
+      "id": "Function:deploy/probe.py:_probe_spaces",
+      "name": "_probe_spaces",
+      "filePath": "deploy/probe.py",
+      "startLine": 648,
+      "endLine": 704
+    },
+    {
+      "id": "Function:deploy/probe.py:collect",
+      "name": "collect",
+      "filePath": "deploy/probe.py",
+      "startLine": 844,
+      "endLine": 956,
+      "module": "Deploy"
+    },
+    {
+      "id": "File:deploy/probe.py",
+      "name": "probe.py",
+      "filePath": "deploy/probe.py"
+    },
+    {
+      "id": "File:stella-installer/src-tauri/src/commands.rs",
+      "name": "commands.rs",
+      "filePath": "stella-installer/src-tauri/src/commands.rs"
+    },
+    {
+      "id": "File:webui/services/providers.py",
+      "name": "providers.py",
+      "filePath": "webui/services/providers.py"
+    },
+    {
+      "id": "Function:tests/test_spaces.py:test_explicit_vs_ledger_conflict_warns",
+      "name": "test_explicit_vs_ledger_conflict_warns",
+      "filePath": "tests/test_spaces.py",
+      "startLine": 67,
+      "endLine": 78,
+      "module": "Tests"
+    },
+    {
+      "id": "Function:tests/test_spaces.py:test_ledger_corrupt_falls_back_without_allocating",
+      "name": "test_ledger_corrupt_falls_back_without_allocating",
+      "filePath": "tests/test_spaces.py",
+      "startLine": 90,
+      "endLine": 97,
+      "module": "Tests"
+    },
+    {
+      "id": "File:tests/test_spaces.py",
+      "name": "test_spaces.py",
+      "filePath": "tests/test_spaces.py"
+    },
+    {
+      "id": "File:desktop/src-tauri/src/commands.rs",
+      "name": "commands.rs",
+      "filePath": "desktop/src-tauri/src/commands.rs"
+    },
+    {
+      "id": "Variable:config/settings.py:MCP_CONFIG_FILE",
+      "name": "MCP_CONFIG_FILE",
+      "filePath": "config/settings.py",
+      "startLine": 1479,
+      "endLine": 1479
+    },
+    {
+      "id": "Variable:config/settings.py:COMETA_CONFIG_FILE",
+      "name": "COMETA_CONFIG_FILE",
+      "filePath": "config/settings.py",
+      "startLine": 1711,
+      "endLine": 1711
+    },
+    {
+      "id": "File:config/settings.py",
+      "name": "settings.py",
+      "filePath": "config/settings.py"
+    },
+    {
+      "id": "Function:deploy/__main__.py:_cmd_config_schema",
+      "name": "_cmd_config_schema",
+      "filePath": "deploy/__main__.py",
+      "startLine": 293,
+      "endLine": 296
+    },
+    {
+      "id": "Function:deploy/__main__.py:_cmd_paths",
+      "name": "_cmd_paths",
+      "filePath": "deploy/__main__.py",
+      "startLine": 319,
+      "endLine": 362,
+      "module": "Config"
+    },
+    {
+      "id": "File:deploy/__main__.py",
+      "name": "__main__.py",
+      "filePath": "deploy/__main__.py"
+    },
+    {
+      "id": "Property:memory/migrations.py:MigrationContext.seen_spaces",
+      "name": "seen_spaces",
+      "filePath": "memory/migrations.py",
+      "startLine": 90,
+      "endLine": 90
+    }
+  ],
+  "timing": {
+    "vector": 6.5,
+    "bm25": 1430.4,
+    "merge": 0.4,
+    "symbol_lookup": 98.2,
+    "ranking": 0.2,
+    "formatting": 0.1,
+    "wall": 1530.4
+  }
+}
+
+  GitNexus Query (1.6.12)

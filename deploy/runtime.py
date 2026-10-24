@@ -619,6 +619,16 @@ def execute_operation(
     force = request["parameters"].get("force", False)
     if not isinstance(force, bool):
         raise ValueError("Runtime parameters.force 必须是布尔值")
+    if component == "stella" and operation in {"start", "stop", "restart", "status"}:
+        from . import control_client
+
+        return redact_value(
+            control_client.runtime_operation(
+                operation,
+                component,
+                request["parameters"],
+            )
+        )
     if component == "llama" and operation in {"start", "stop", "restart"}:
         if embedding_endpoint_config() is None:
             return {

@@ -45,3 +45,11 @@ gate in `proactive_gate.py` and does not call an LLM. External weights live in `
 decision logs go to runtime logs and the v13 `participation_log` table.
 
 Addressing preferences form another small branch beside the memory layer: `memory/addressing.py` stores user-defined addressing preferences (the v14 `user_address_preferences` table, kept separate from `user_profiles.nickname` and ordinary memories), while `memory/addressing_intent.py` recognizes intents such as “call me X” from natural language — rules do the cheap pre-screening, an embedding decides semantics, and the module only returns structured requests; model output is never treated as an executable command.
+
+## Corona / Nucleus process boundary (2026-10-23)
+
+Corona is the independent control process. It owns the local management API, authentication, configuration recovery, and Nucleus child-process supervision. Nucleus hosts the Bot, business WebUI routes, models, and business databases. Corona validates browser identity before proxying business requests to Nucleus; their interprocess APIs use versioned contracts from `stella_contracts/`. Both receive an explicit `STELLA_HOME`, while control state, business SQLite data, and runtime logs retain their defined boundaries.
+
+Docker's `/_corona/v1/health` means the Corona controller can respond. Its `core_phase` field reports the Nucleus phase separately, so container `healthy` does not mean the Bot has connected to QQ, a model is available, or business readiness has been reached. Compose allows 65 seconds for shutdown, covering the 45-second drain, 10-second force/reap budget, and host margin. The Docker healthcheck still falls back to the legacy status route when Corona's probe fails, for compatibility with the current default entrypoint.
+
+As of this record, `bot.py` and the Compose default entrypoint remain legacy. CN11 package checks and isolated tests do not constitute a rollout or external product acceptance. Keep `CORONA-IMPL` NOT READY until clean Windows/Linux VMs, a real Docker startup, QQ/WebChat, and model acceptance are complete. See the [implementation plan](../plans/2026-10-23-corona-nucleus-engineering-plan.md) and [CN11 report](../reports/2026-10-23-corona-nucleus-cn11.en.md) for scope and evidence.

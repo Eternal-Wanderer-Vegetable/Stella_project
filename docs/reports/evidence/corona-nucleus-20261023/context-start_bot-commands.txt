@@ -1,0 +1,83 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:desktop/src-tauri/src/commands.rs:start_bot",
+    "name": "start_bot",
+    "kind": "Function",
+    "filePath": "desktop/src-tauri/src/commands.rs",
+    "startLine": 172,
+    "endLine": 207
+  },
+  "epistemic": "exact",
+  "incoming": {},
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:desktop/src-tauri/src/commands.rs:runtime_failure",
+        "name": "runtime_failure",
+        "filePath": "desktop/src-tauri/src/commands.rs"
+      },
+      {
+        "uid": "Function:desktop/src-tauri/src/commands.rs:runtime_message",
+        "name": "runtime_message",
+        "filePath": "desktop/src-tauri/src/commands.rs"
+      },
+      {
+        "uid": "Function:desktop/src-tauri/src/commands.rs:try_runtime_operation",
+        "name": "try_runtime_operation",
+        "filePath": "desktop/src-tauri/src/commands.rs"
+      },
+      {
+        "uid": "Function:desktop/src-tauri/src/python.rs:run_deploy",
+        "name": "run_deploy",
+        "filePath": "desktop/src-tauri/src/python.rs"
+      }
+    ]
+  },
+  "processes": [
+    {
+      "id": "proc_510_start_bot",
+      "name": "Start_bot → Args",
+      "step_index": 1,
+      "step_count": 10
+    },
+    {
+      "id": "proc_672_start_bot",
+      "name": "Start_bot → Sha256_hex",
+      "step_index": 1,
+      "step_count": 9
+    },
+    {
+      "id": "proc_673_start_bot",
+      "name": "Start_bot → Emit_progress",
+      "step_index": 1,
+      "step_count": 9
+    },
+    {
+      "id": "proc_674_start_bot",
+      "name": "Start_bot → Profile_marker_matches",
+      "step_index": 1,
+      "step_count": 9
+    },
+    {
+      "id": "proc_678_start_bot",
+      "name": "Start_bot → Profile_id",
+      "step_index": 1,
+      "step_count": 8
+    },
+    {
+      "id": "proc_679_start_bot",
+      "name": "Start_bot → Rust_wheel",
+      "step_index": 1,
+      "step_count": 8
+    },
+    {
+      "id": "proc_680_start_bot",
+      "name": "Start_bot → Activation_tree_from",
+      "step_index": 1,
+      "step_count": 7
+    }
+  ]
+}
+
+  GitNexus Context (1.6.12)

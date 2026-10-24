@@ -13,57 +13,61 @@ use std::path::{Path, PathBuf};
 ///
 /// doctor 的退出码 1 表示「发现阻塞性问题」，不是调用失败——这里必须放行，
 /// 否则有 error 时前端会收到错误而不是检查结果。
-/// 在线面板的基地址：HOST/PORT 读自 STELLA_HOME/.env（0.0.0.0 → 127.0.0.1）。
-fn live_base_url() -> String {
-    let path = python::data_root().join(".env");
-    let values = std::fs::read_to_string(&path)
-        .map(|text| parse_env(&text))
-        .unwrap_or_default();
-    let host = values.get("HOST").cloned().unwrap_or_else(|| "127.0.0.1".into());
-    let port = values.get("PORT").cloned().unwrap_or_else(|| "8080".into());
-    let host = if host == "0.0.0.0" || host == "::" {
-        "127.0.0.1".to_string()
-    } else {
-        host
-    };
-    format!("http://{host}:{port}")
+/// 通过 deploy 的 live ownership 取得 Corona 实际监听地址；不从可变 .env 猜端口。
+fn deploy_control_status() -> Result<serde_json::Value, String> {
+    let (stdout, stderr, code) = python::run_deploy_without_prepare(&["status", "--json"])?;
+    let payload = extract_json(&stdout)
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
+        .filter(serde_json::Value::is_object)
+        .ok_or_else(|| {
+            format!(
+                "deploy status 未返回有效控制面 JSON（code {code}）：\n{}",
+                if stderr.trim().is_empty() { stdout.clone() } else { stderr.clone() }
+            )
+        })?;
+    Ok(payload)
 }
 
-/// 轮询状态接口直到 Bot 就绪（或超时），返回在线面板基地址。
+/// 轮询 Corona 控制面及其实际公开入口（或超时），返回在线管理面基地址。
 ///
-/// 离线页的「启动 Bot」按钮走完 start_bot 后调用它：就绪即把 WebView 导航到
-/// 在线面板（由 Bot 同端口托管，登录态存在该源下可跨壳重启保留）。
+/// Nucleus 未就绪时 Corona 仍应保留管理页；因此这里等待控制面，而不等待业务核心。
 #[tauri::command]
 pub async fn wait_bot_ready(timeout_secs: Option<u64>) -> Result<String, String> {
     let timeout = timeout_secs.unwrap_or(120).max(1);
     tauri::async_runtime::spawn_blocking(move || {
-        let base = live_base_url();
-        let status_url = format!("{base}/stella/status");
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
         loop {
-            // 状态接口 200 = Bot 进程活着且 WebUI 已挂载
-            if ureq::get(&status_url)
-                .timeout(std::time::Duration::from_secs(1))
-                .call()
-                .is_ok()
-            {
-                return Ok(base);
+            if let Ok(status) = deploy_control_status() {
+                if status.get("controller_reachable").and_then(serde_json::Value::as_bool)
+                    == Some(true)
+                {
+                    if status.get("webui_enabled").and_then(serde_json::Value::as_bool)
+                        == Some(false)
+                    {
+                        return Err("Corona 浏览器管理面已关闭。".to_string());
+                    }
+                    if let Some(base) = status
+                        .get("public_base_url")
+                        .and_then(serde_json::Value::as_str)
+                    {
+                        if ureq::get(&format!("{base}/"))
+                            .timeout(std::time::Duration::from_secs(1))
+                            .call()
+                            .is_ok()
+                        {
+                            return Ok(base.to_string());
+                        }
+                    }
+                }
             }
             if std::time::Instant::now() >= deadline {
-                return Err(format!("等待 Bot 就绪超时（{timeout}s）。请查看日志排查。"));
+                return Err(format!("等待 Corona 管理面就绪超时（{timeout}s）。请查看日志排查。"));
             }
             std::thread::sleep(std::time::Duration::from_millis(800));
         }
     })
     .await
     .map_err(|e| format!("等待任务失败：{e}"))?
-}
-
-#[tauri::command]
-pub fn desktop_session_secret() -> String {
-    // 供打包进壳的 dashboard 在 tauri:// 源下换取正式 JWT（方案 §4 D5）；
-    // 秘钥本身只在壳与 Bot 子进程环境之间传递，不落盘。
-    crate::desktop_session_secret().to_string()
 }
 
 /// 读取首启进度（加载视图轮询用，2026-09-25 用户要求：启动不能只有一句
@@ -137,63 +141,43 @@ pub async fn run_doctor() -> Result<String, String> {
 /// status 只报告状态，不判断成败，因此非零退出码才是异常。
 #[tauri::command]
 pub async fn get_status() -> Result<String, String> {
-    let runtime =
-        tauri::async_runtime::spawn_blocking(|| try_runtime_operation("status", false, true))
-            .await
-            .map_err(|e| format!("Runtime 状态任务未能完成：{e}"))?;
-    if let Some((envelope, _stdout, stderr, code)) = runtime {
-        if let Some(data) = envelope.get("data") {
-            return serde_json::to_string(data)
-                .map_err(|e| format!("Runtime status 结果无效：{e}"));
-        }
-        return Err(runtime_failure(
-            &envelope,
-            &format!("Runtime status 异常退出（code {code}）：{stderr}"),
-        ));
-    }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
-        python::run_deploy(&["status", "--json"])
+        python::run_deploy_without_prepare(&["status", "--json"])
     })
     .await
-    .map_err(|e| format!("状态任务未能完成：{e}"))??;
-    if code != 0 {
-        return Err(format!(
-            "deploy status 异常退出（code {code}）：\n{}",
-            if stderr.trim().is_empty() { stdout.clone() } else { stderr }
-        ));
-    }
-    extract_json(&stdout)
-        .map(str::to_owned)
-        .ok_or_else(|| format!("deploy status 未输出 JSON。\nstdout: {stdout}\nstderr: {stderr}"))
+    .map_err(|e| format!("Corona 状态任务未能完成：{e}"))??;
+    let payload = extract_json(&stdout)
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
+        .filter(serde_json::Value::is_object)
+        .ok_or_else(|| {
+            format!(
+                "deploy status 响应无效（code {code}）：\n{}",
+                if stderr.trim().is_empty() { stdout.clone() } else { stderr.clone() }
+            )
+        })?;
+    serde_json::to_string(&payload).map_err(|e| format!("Corona status 结果无效：{e}"))
 }
 
-/// 后台启动 Bot。对应 `deploy start --detach`。
+/// Product profiles share one Corona lifecycle command regardless of payload variant.
+fn deploy_start_arguments(force: bool) -> Vec<&'static str> {
+    let mut args = vec!["start", "--detach"];
+    if force {
+        args.push("--force");
+    }
+    args
+}
+
+#[tauri::command]
+pub fn desktop_session_secret() -> String {
+    crate::desktop_session_secret().to_owned()
+}
+
+/// 后台启动 Corona。对应 `deploy start --detach`。
 #[tauri::command]
 pub async fn start_bot(force: bool) -> Result<String, String> {
-    let runtime = tauri::async_runtime::spawn_blocking(move || {
-        try_runtime_operation("start", force, true)
-    })
-    .await
-    .map_err(|e| format!("Runtime 启动任务未能完成：{e}"))?;
-    if let Some((envelope, _stdout, stderr, code)) = runtime {
-        if !envelope
-            .get("ok")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false)
-        {
-            return Err(runtime_failure(
-                &envelope,
-                &format!("Runtime 启动异常退出（code {code}）：{stderr}"),
-            ));
-        }
-        return Ok(runtime_message(&envelope));
-    }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(move || {
-        let mut args = vec!["start", "--detach"];
-        if force {
-            args.push("--force");
-        }
-        python::run_deploy(&args)
+        let args = deploy_start_arguments(force);
+        python::run_deploy_with_desktop_secret(&args, crate::desktop_session_secret())
     })
     .await
     .map_err(|e| format!("启动任务未能完成：{e}"))??;
@@ -206,33 +190,13 @@ pub async fn start_bot(force: bool) -> Result<String, String> {
     Ok(stdout)
 }
 
-/// 停止 Stella。对应 `deploy stop` / runtime stop，可能等待在途任务收尾。
+/// 停止本实例 Corona 与完整受管进程树。对应 `deploy stop` / Runtime stella stop。
 ///
-/// 不设「Bot 是否由本 GUI 进程启动」的门卫：Bot 是 detach 的常驻进程，GUI
-/// 重启后进程内记忆即丢失；若据此拒绝停止，关闭窗口就会留下孤儿 Bot 占住
-/// 服务端口（2026-09-24 实测：上次会话的 Bot 存活，GUI 关闭后 8080 一直
-/// 被占）。跨安装的安全边界由 Python 侧 ownership 校验把守——instance_id /
-/// project_root / launch_token 不匹配（别的安装或手工启动的进程）时
-/// `deploy stop` 会拒绝，宁可不动也不误杀。
+/// 不根据当前 GUI 进程是否曾启动 Corona 来决定停止；窗口重启后也由 deploy
+/// 从私有实例记录定位 live owner，再经 capability 保护的本机 API 请求停机。
+/// 缺失/不匹配的身份或协议会 fail closed，不按端口、PID 或进程名结束进程。
 #[tauri::command]
 pub async fn stop_bot() -> Result<String, String> {
-    let runtime =
-        tauri::async_runtime::spawn_blocking(|| try_runtime_operation("stop", false, false))
-            .await
-            .map_err(|e| format!("Runtime 停止任务未能完成：{e}"))?;
-    if let Some((envelope, _stdout, stderr, code)) = runtime {
-        if !envelope
-            .get("ok")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false)
-        {
-            return Err(runtime_failure(
-                &envelope,
-                &format!("Runtime 停止异常退出（code {code}）：{stderr}"),
-            ));
-        }
-        return Ok(runtime_message(&envelope));
-    }
     let (stdout, stderr, code) = tauri::async_runtime::spawn_blocking(|| {
         python::run_deploy_without_prepare(&["stop"])
     })
@@ -1112,7 +1076,10 @@ fn runtime_failure(envelope: &serde_json::Value, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{canonical_plain, extract_json, resolve_log_path, runtime_failure, runtime_message};
+    use super::{
+        canonical_plain, deploy_start_arguments, extract_json, resolve_log_path, runtime_failure,
+        runtime_message,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1159,6 +1126,30 @@ mod tests {
             "error": {"code": "operation_failed", "message": "启动失败"}
         });
         assert_eq!(runtime_failure(&envelope, "fallback"), "启动失败");
+    }
+
+    #[test]
+    fn six_release_products_share_corona_start_arguments() {
+        let products = [
+            ("oneclick-python", "online"),
+            ("oneclick-python", "offline"),
+            ("oneclick-rust", "online"),
+            ("oneclick-rust", "offline"),
+            ("standalone-python", "online"),
+            ("standalone-rust", "online"),
+        ];
+        for (profile, payload) in products {
+            assert!(matches!(
+                profile,
+                "oneclick-python" | "oneclick-rust" | "standalone-python" | "standalone-rust"
+            ));
+            assert!(matches!(payload, "online" | "offline"));
+            assert_eq!(deploy_start_arguments(false), vec!["start", "--detach"]);
+            assert_eq!(
+                deploy_start_arguments(true),
+                vec!["start", "--detach", "--force"]
+            );
+        }
     }
 
     #[test]
@@ -1213,12 +1204,7 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
-    /// 关闭窗口时的停止不得设「Bot 是否由本 GUI 进程启动」的进程内门卫。
-    ///
-    /// Bot 是 detach 的常驻进程，GUI 重启后进程内标志即丢失；曾经的进程内
-    /// 门卫让「上次会话留下的 Bot」在关窗时被有意跳过，孤儿进程一直占着
-    /// 服务端口（2026-09-24 实测）。跨安装安全由 Python 侧 ownership 校验
-    /// 把守，Rust 侧不再重复一道会误伤的防线。
+    /// 关窗停止依赖 deploy 的 live-owner 身份和受保护本机 API，不看 GUI 进程历史。
     #[test]
     fn stop_bot_has_no_process_local_ownership_gate() {
         let src = fs::read_to_string(Path::new(file!())).expect("无法读取 commands.rs");

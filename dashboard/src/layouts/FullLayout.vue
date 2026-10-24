@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { useTheme } from 'vuetify';
 
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { useDisplay } from 'vuetify';
 
 import { useAuthStore } from '@/stores/auth';
 import { useCustomizerStore, type ThemeMode } from '@/stores/customizer';
+import { useSystemStore } from '@/stores/system';
 import { useToast } from '@/stores/toast';
+import SystemBanner from '@/components/SystemBanner.vue';
 
 // 侧栏信息架构对齐 AstrBot Dashboard（方案 §6）；带里程碑徽标的条目在
 // 对应里程碑落地前不可点——导航即路线图，避免「空白占位页」。
@@ -16,6 +18,7 @@ const { t } = useI18n();
 const router = useRouter();
 const auth = useAuthStore();
 const customizer = useCustomizerStore();
+const system = useSystemStore();
 const toast = useToast();
 const theme = useTheme();
 const { mdAndDown } = useDisplay();
@@ -89,6 +92,11 @@ const groups: { header?: string; items: NavItem[] }[] = [
 ];
 
 const isDark = computed(() => theme.global.name.value === 'StellaThemeDark');
+
+onMounted(() => {
+  void system.startMonitoring();
+});
+onBeforeUnmount(() => system.stopMonitoring());
 
 function toggleTheme(): void {
   customizer.setThemeMode((isDark.value ? 'light' : 'dark') as ThemeMode);
@@ -189,6 +197,7 @@ function closeTemporaryDrawer(temporary: boolean): void {
     </template>
 
     <v-main class="page-min-height">
+      <SystemBanner />
       <router-view />
     </v-main>
   </v-layout>

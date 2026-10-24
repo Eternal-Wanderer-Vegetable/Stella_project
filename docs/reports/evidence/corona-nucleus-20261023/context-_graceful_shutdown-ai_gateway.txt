@@ -1,0 +1,58 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_graceful_shutdown",
+    "name": "_graceful_shutdown",
+    "kind": "Function",
+    "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+    "startLine": 5482,
+    "endLine": 5516
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_trigger_shutdown",
+        "name": "_trigger_shutdown",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:core/observability/message_flow.py:flush",
+        "name": "flush",
+        "filePath": "core/observability/message_flow.py"
+      },
+      {
+        "uid": "Function:core/observability/message_flow.py:flush",
+        "name": "flush",
+        "filePath": "core/observability/message_flow.py"
+      },
+      {
+        "uid": "Function:memory/capture_gate.py:stop_gate",
+        "name": "stop_gate",
+        "filePath": "memory/capture_gate.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_graceful_shutdown_body",
+        "name": "_graceful_shutdown_body",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_lifecycle_end",
+        "name": "_lifecycle_end",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      },
+      {
+        "uid": "Function:stella_project/plugins/bot_main/ai_gateway.py:_lifecycle_root",
+        "name": "_lifecycle_root",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

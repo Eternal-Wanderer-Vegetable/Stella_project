@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { api, unwrap } from '@/api/http';
+import { useSystemStore } from '@/stores/system';
 
 // 欢迎页：后端可达时展示一帧真实状态（复用 /stella/status 的聚合），
 // Onboarding 时间线的每一步可点击跳转到对应功能页。
@@ -11,17 +12,29 @@ const { t } = useI18n();
 const router = useRouter();
 
 interface StatusPayload {
-  version: string;
-  pid: number;
-  uptime_seconds: number;
-  allowed_group_count: number;
-  link: { connected?: boolean } | null;
-  usage: { totals: { prompt_tokens: number; completion_tokens: number } | null } | null;
+  version?: string;
+  pid?: number;
+  uptime_seconds?: number;
+  allowed_group_count?: number;
+  link?: { connected?: boolean } | null;
+  usage?: { totals: { prompt_tokens: number; completion_tokens: number } | null } | null;
+  control?: { phase: string };
+  core?: {
+    phase: string;
+    pid?: number | null;
+    revision_id?: string;
+    generation_id?: string | null;
+    error?: string | null;
+    stale?: boolean;
+  };
+  desired_revision?: string;
+  applied_revision?: string;
   webui?: { username: string };
 }
 
 const status = ref<StatusPayload | null>(null);
 const loadError = ref('');
+const system = useSystemStore();
 
 // 今日 token：与统计页同一口径（totals.prompt + totals.completion，来自
 // usage 日账的当日累计）。status.usage 里没有现成的 tokens_today 字段，
@@ -81,7 +94,7 @@ async function checkEndpointsReady(): Promise<void> {
 
 const uptimeText = computed(() => {
   if (!status.value) return '—';
-  const s = Math.floor(status.value.uptime_seconds);
+  const s = Math.floor(status.value.uptime_seconds ?? 0);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m ${s % 60}s`;
@@ -93,7 +106,7 @@ const uptimeText = computed(() => {
 const steps = computed(() => [
   { key: 'step1', to: '/providers', done: endpointsReady.value === true },
   { key: 'step2', to: '/persona', done: (status.value?.allowed_group_count ?? 0) > 0 },
-  { key: 'step3', to: '/platforms', done: !!status.value?.pid },
+  { key: 'step3', to: '/platforms', done: system.managed ? system.coreReady : !!status.value?.pid },
 ]);
 
 function goStep(to: string) {
@@ -151,7 +164,28 @@ onMounted(async () => {
       <div class="text-subtitle-1 font-weight-medium mb-3">
         {{ $t('features.welcome.statusTitle') }}
       </div>
-      <v-row v-if="status">
+      <v-row v-if="status && system.managed">
+        <v-col cols="6" sm="4" md="3">
+          <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.corePhase') }}</div>
+          <div class="text-h6">{{ status.core?.phase ?? $t('core.status.unknown') }}</div>
+        </v-col>
+        <v-col cols="6" sm="4" md="3">
+          <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.pid') }}</div>
+          <div class="text-h6">{{ status.core?.pid ?? '—' }}</div>
+        </v-col>
+        <v-col cols="6" sm="4" md="3">
+          <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.savedRevision') }}</div>
+          <div class="text-body-2">{{ status.desired_revision?.slice(0, 8) ?? '—' }}</div>
+        </v-col>
+        <v-col cols="6" sm="4" md="3">
+          <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.appliedRevision') }}</div>
+          <div class="text-body-2">{{ status.applied_revision?.slice(0, 8) ?? '—' }}</div>
+        </v-col>
+        <v-col v-if="status.core?.error" cols="12">
+          <v-alert type="error" variant="tonal" density="compact">{{ status.core.error }}</v-alert>
+        </v-col>
+      </v-row>
+      <v-row v-else-if="status">
         <v-col cols="6" sm="4" md="3">
           <div class="text-caption text-medium-emphasis">{{ $t('features.welcome.version') }}</div>
           <div class="text-h6">v{{ status.version }}</div>

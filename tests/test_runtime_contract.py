@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy import checks, probe, process, runtime
+from deploy import runtime
 
 
 def test_default_manifest_has_optional_components():
@@ -155,6 +155,22 @@ def test_schema_fixtures_match_python_defaults():
     assert state["components"] == runtime.default_state()["components"]
 
 
+def test_corona_runtime_v1_fixture_is_valid_for_python_and_keeps_phase_diagnostic():
+    path = (
+        Path(__file__).parents[1]
+        / "runtime-manager"
+        / "schemas"
+        / "fixtures"
+        / "runtime-state-corona-backoff.json"
+    )
+    state = json.loads(path.read_text(encoding="utf-8"))
+    runtime.validate_state_payload(state)
+    assert state["schema_version"] == 1
+    assert state["components"]["stella"]["state"] == "degraded"
+    assert "pid" not in state["components"]["stella"]
+    assert state["components"]["stella"]["diagnostics"]["core_phase"] == "backoff"
+
+
 def test_onebot_link_maps_to_degraded_without_restarting_stella(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime, "INSTANCE_RUNTIME_DIR", tmp_path)
     monkeypatch.setattr(runtime, "INSTANCE_ID", "test")
@@ -198,14 +214,18 @@ def test_onebot_diagnostics_reject_non_object():
 
 
 def test_execute_status_uses_shared_operation_envelope(monkeypatch):
-    monkeypatch.setattr(process, "status", lambda: {"alive": False})
-    result = runtime.execute_operation("status")
-    assert result == {
+    from deploy import control_client
+
+    expected = {
         "ok": True,
         "operation": "status",
         "component": "stella",
-        "data": {"alive": False},
+        "exit_code": 0,
+        "data": {"controller_reachable": True},
     }
+    monkeypatch.setattr(control_client, "runtime_operation", lambda *args: expected)
+    result = runtime.execute_operation("status")
+    assert result == expected
 
 
 def test_execute_rejects_unconfigured_llama_component(monkeypatch):
@@ -215,17 +235,16 @@ def test_execute_rejects_unconfigured_llama_component(monkeypatch):
     assert result["error"]["code"] == "unsupported_component_operation"
 
 
-def test_execute_start_captures_legacy_output(monkeypatch):
-    monkeypatch.setattr(
-        runtime,
-        "prepare_optional_runtime",
-        lambda: {"ok": False, "source": "unavailable"},
-    )
-    monkeypatch.setattr(probe, "collect", lambda: object())
-    monkeypatch.setattr(checks, "run_all", lambda facts: [])
-    monkeypatch.setattr(process, "start_detached", lambda: (print("started"), 0)[1])
-    monkeypatch.setattr(runtime, "snapshot", lambda: {"components": {"stella": {"state": "starting"}}})
+def test_execute_start_delegates_to_corona_control_client(monkeypatch):
+    from deploy import control_client
+
+    expected = {
+        "ok": True,
+        "operation": "start",
+        "component": "stella",
+        "exit_code": 0,
+        "phase": "started",
+    }
+    monkeypatch.setattr(control_client, "runtime_operation", lambda *args: expected)
     result = runtime.execute_operation("start")
-    assert result["ok"] is True
-    assert result["exit_code"] == 0
-    assert result["message"] == "started"
+    assert result == expected

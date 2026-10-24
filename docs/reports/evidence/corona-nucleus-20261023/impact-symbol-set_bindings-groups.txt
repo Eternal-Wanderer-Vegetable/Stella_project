@@ -1,0 +1,76 @@
+{
+  "target": {
+    "id": "Function:webui/services/groups.py:set_bindings",
+    "name": "set_bindings",
+    "type": "Function",
+    "filePath": "webui/services/groups.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 1,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 1,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 1
+  },
+  "affected_processes": [
+    {
+      "name": "groups_bindings",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Services",
+      "hits": 1,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:webui/routers/config.py:groups_bindings",
+        "name": "groups_bindings",
+        "filePath": "webui/routers/config.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_142_groups_bindings",
+            "label": "Groups_bindings → Prompt_path",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_221_groups_bindings",
+            "label": "Groups_bindings → _validate_name",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_91_groups_bindings",
+            "label": "Groups_bindings → Spaces_dir",
+            "processType": "intra_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  }
+}
+
+  GitNexus Impact (1.6.12)

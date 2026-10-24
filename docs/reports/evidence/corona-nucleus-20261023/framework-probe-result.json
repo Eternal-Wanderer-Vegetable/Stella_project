@@ -1,0 +1,10 @@
+{
+  "nonebot_version": "2.5.0",
+  "init_signature": "(*, _env_file: pathlib.Path | str | list[pathlib.Path | str] | tuple[pathlib.Path | str, ...] | None = None, **kwargs: Any) -> None",
+  "init_none_parameter_is_not_disable": true,
+  "default_config_port": 19001,
+  "explicit_config_no_files_port": 8080,
+  "explicit_env_no_files_environment": "prod",
+  "default_config_reads_synthetic_extra": "live-file",
+  "no_files_config_reads_synthetic_extra": null
+}

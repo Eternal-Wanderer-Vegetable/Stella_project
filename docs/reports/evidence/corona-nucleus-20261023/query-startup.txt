@@ -1,0 +1,248 @@
+{
+  "processes": [
+    {
+      "id": "proc_510_start_bot",
+      "summary": "Start_bot → Args",
+      "priority": 0.014,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 10
+    },
+    {
+      "id": "proc_672_start_bot",
+      "summary": "Start_bot → Sha256_hex",
+      "priority": 0.014,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 9
+    },
+    {
+      "id": "proc_673_start_bot",
+      "summary": "Start_bot → Emit_progress",
+      "priority": 0.014,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 9
+    },
+    {
+      "id": "proc_674_start_bot",
+      "summary": "Start_bot → Profile_marker_matches",
+      "priority": 0.014,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 9
+    },
+    {
+      "id": "proc_678_start_bot",
+      "summary": "Start_bot → Profile_id",
+      "priority": 0.014,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 8
+    },
+    {
+      "id": "proc_679_start_bot",
+      "summary": "Start_bot → Rust_wheel",
+      "priority": 0.014,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 8
+    },
+    {
+      "id": "proc_680_start_bot",
+      "summary": "Start_bot → Activation_tree_from",
+      "priority": 0.014,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 7
+    },
+    {
+      "id": "proc_105_plugins_reload",
+      "summary": "Plugins_reload → _call_hook",
+      "priority": 0.012,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_106_plugins_reload",
+      "summary": "Plugins_reload → Get_handlers_by_event_type",
+      "priority": 0.012,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    },
+    {
+      "id": "proc_107_plugins_reload",
+      "summary": "Plugins_reload → _owned_by",
+      "priority": 0.012,
+      "symbol_count": 1,
+      "process_type": "cross_community",
+      "step_count": 6
+    }
+  ],
+  "process_symbols": [
+    {
+      "id": "Function:desktop/src-tauri/src/commands.rs:start_bot",
+      "name": "start_bot",
+      "filePath": "desktop/src-tauri/src/commands.rs",
+      "startLine": 172,
+      "endLine": 207,
+      "process_id": "proc_510_start_bot",
+      "step_index": 1
+    },
+    {
+      "id": "Function:astrbot_compat/loader.py:reload_plugin",
+      "name": "reload_plugin",
+      "filePath": "astrbot_compat/loader.py",
+      "startLine": 1035,
+      "endLine": 1117,
+      "process_id": "proc_105_plugins_reload",
+      "step_index": 3
+    }
+  ],
+  "definitions": [
+    {
+      "id": "Function:tests/test_deploy_process.py:test_start_detached_cleans_up_process_after_startup_probe_failure",
+      "name": "test_start_detached_cleans_up_process_after_startup_probe_failure",
+      "filePath": "tests/test_deploy_process.py",
+      "startLine": 141,
+      "endLine": 173
+    },
+    {
+      "id": "Function:tests/test_deploy_process.py:test_start_detached_replaces_running_instance_and_transfers_ownership",
+      "name": "test_start_detached_replaces_running_instance_and_transfers_ownership",
+      "filePath": "tests/test_deploy_process.py",
+      "startLine": 597,
+      "endLine": 635
+    },
+    {
+      "id": "File:tests/test_deploy_process.py",
+      "name": "test_deploy_process.py",
+      "filePath": "tests/test_deploy_process.py"
+    },
+    {
+      "id": "Function:deploy/process.py:stop",
+      "name": "stop",
+      "filePath": "deploy/process.py",
+      "startLine": 408,
+      "endLine": 440
+    },
+    {
+      "id": "Function:deploy/process.py:preflight_for_foreground_start",
+      "name": "preflight_for_foreground_start",
+      "filePath": "deploy/process.py",
+      "startLine": 522,
+      "endLine": 537
+    },
+    {
+      "id": "File:deploy/process.py",
+      "name": "process.py",
+      "filePath": "deploy/process.py"
+    },
+    {
+      "id": "Variable:stella_project/plugins/bot_main/status_api.py:_STARTUP_HOOK_REGISTERED",
+      "name": "_STARTUP_HOOK_REGISTERED",
+      "filePath": "stella_project/plugins/bot_main/status_api.py",
+      "startLine": 44,
+      "endLine": 44
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/status_api.py:_register_status_route_on_startup",
+      "name": "_register_status_route_on_startup",
+      "filePath": "stella_project/plugins/bot_main/status_api.py",
+      "startLine": 345,
+      "endLine": 354
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/status_api.py:setup_status_api",
+      "name": "setup_status_api",
+      "filePath": "stella_project/plugins/bot_main/status_api.py",
+      "startLine": 357,
+      "endLine": 398
+    },
+    {
+      "id": "Function:desktop/src-tauri/src/commands.rs:apply_advanced_env",
+      "name": "apply_advanced_env",
+      "filePath": "desktop/src-tauri/src/commands.rs",
+      "startLine": 969,
+      "endLine": 1052
+    },
+    {
+      "id": "File:desktop/src-tauri/src/commands.rs",
+      "name": "commands.rs",
+      "filePath": "desktop/src-tauri/src/commands.rs"
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_hot_reload.py:test_reload_purges_the_module_tree",
+      "name": "test_reload_purges_the_module_tree",
+      "filePath": "tests/astrbot_compat/test_hot_reload.py",
+      "startLine": 301,
+      "endLine": 314
+    },
+    {
+      "id": "Function:tests/astrbot_compat/test_hot_reload.py:test_reload_cancels_registered_tasks",
+      "name": "test_reload_cancels_registered_tasks",
+      "filePath": "tests/astrbot_compat/test_hot_reload.py",
+      "startLine": 317,
+      "endLine": 342
+    },
+    {
+      "id": "File:tests/astrbot_compat/test_hot_reload.py",
+      "name": "test_hot_reload.py",
+      "filePath": "tests/astrbot_compat/test_hot_reload.py"
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_start_hot_reload_watcher",
+      "name": "_start_hot_reload_watcher",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 3718,
+      "endLine": 3723
+    },
+    {
+      "id": "Function:stella_project/plugins/bot_main/ai_gateway.py:_start_stop_watcher",
+      "name": "_start_stop_watcher",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+      "startLine": 5357,
+      "endLine": 5367
+    },
+    {
+      "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+      "name": "ai_gateway.py",
+      "filePath": "stella_project/plugins/bot_main/ai_gateway.py"
+    },
+    {
+      "id": "Method:tests/gravitas/test_g02_control_loop.py:_FakeDriver.on_startup#1",
+      "name": "on_startup",
+      "filePath": "tests/gravitas/test_g02_control_loop.py",
+      "startLine": 353,
+      "endLine": 354
+    },
+    {
+      "id": "Function:tests/gravitas/test_g02_control_loop.py:test_bootstrap_refuses_enforce_and_starts_stops_shadow_loop",
+      "name": "test_bootstrap_refuses_enforce_and_starts_stops_shadow_loop",
+      "filePath": "tests/gravitas/test_g02_control_loop.py",
+      "startLine": 365,
+      "endLine": 386
+    },
+    {
+      "id": "File:tests/gravitas/test_g02_control_loop.py",
+      "name": "test_g02_control_loop.py",
+      "filePath": "tests/gravitas/test_g02_control_loop.py"
+    }
+  ],
+  "timing": {
+    "vector": 6.7,
+    "bm25": 1414.9,
+    "merge": 0.4,
+    "symbol_lookup": 97.4,
+    "ranking": 0.2,
+    "formatting": 0.1,
+    "wall": 1514.3
+  },
+  "warning": "Symbol enrichment partially failed — some process/cohesion/content data may be missing from these results (see server logs).",
+  "partial": true
+}
+
+  GitNexus Query (1.6.12)
+{"level":40,"time":1792719607259,"name":"gitnexus","context":"query:cluster-info","err":"Interrupted.","msg":"GitNexus query failed (degraded)"}

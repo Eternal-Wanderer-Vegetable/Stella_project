@@ -32,7 +32,6 @@ from pathlib import Path
 
 import jwt
 
-import config.settings as settings
 from webui.responses import ApiError
 
 # scrypt 参数（RFC 7914 推荐量级；n/r/p 与 dklen 全部写进序列化串）
@@ -42,11 +41,38 @@ _SCRYPT_P = 1
 _DKLEN = 32
 
 COOKIE_NAME = "stella_webui_jwt"
+_AUTH_HOME_OVERRIDE: Path | None = None
+_TOKEN_TTL_HOURS_OVERRIDE: int | None = None
+
+
+def configure_auth_runtime(*, stella_home: Path, token_ttl_hours: int) -> None:
+    """Inject Corona auth settings without importing business configuration."""
+    if isinstance(token_ttl_hours, bool) or not isinstance(token_ttl_hours, int):
+        raise ValueError("token TTL must be an integer")
+    if token_ttl_hours < 1:
+        raise ValueError("token TTL must be positive")
+    global _AUTH_HOME_OVERRIDE, _TOKEN_TTL_HOURS_OVERRIDE
+    _AUTH_HOME_OVERRIDE = Path(stella_home)
+    _TOKEN_TTL_HOURS_OVERRIDE = token_ttl_hours
+
+
+def reset_auth_runtime() -> None:
+    """Restore lazy legacy configuration after a managed app shuts down."""
+    global _AUTH_HOME_OVERRIDE, _TOKEN_TTL_HOURS_OVERRIDE
+    _AUTH_HOME_OVERRIDE = None
+    _TOKEN_TTL_HOURS_OVERRIDE = None
+
+
+def _legacy_settings():
+    import config.settings as settings
+
+    return settings
 
 
 def auth_file() -> Path:
     """凭据文件路径。STELLA_HOME 在调用时读取（见模块 docstring）。"""
-    return Path(settings.STELLA_HOME) / "webui" / "auth.json"
+    home = _AUTH_HOME_OVERRIDE or Path(_legacy_settings().STELLA_HOME)
+    return home / "webui" / "auth.json"
 
 
 def setup_required() -> bool:
@@ -156,7 +182,9 @@ def update_credentials(
 
 
 def token_ttl_hours() -> int:
-    return int(settings.WEBUI_TOKEN_TTL_HOURS)
+    if _TOKEN_TTL_HOURS_OVERRIDE is not None:
+        return _TOKEN_TTL_HOURS_OVERRIDE
+    return int(_legacy_settings().WEBUI_TOKEN_TTL_HOURS)
 
 
 def create_token(record: dict, *, ttl_hours: int | None = None) -> tuple[str, str]:

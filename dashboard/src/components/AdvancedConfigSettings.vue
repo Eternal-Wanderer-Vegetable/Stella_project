@@ -2,7 +2,9 @@
 import { computed, onMounted, ref } from 'vue';
 
 import { api, unwrap } from '@/api/http';
+import { idempotencyKey, revisionWriteOptions } from '@/api/system';
 import { toastApiError, useToast } from '@/stores/toast';
+import { useSystemStore } from '@/stores/system';
 import ConfigForm, { type FormField } from '@/components/ConfigForm.vue';
 
 // 设置页中的高级配置：schema 驱动表单、字段分组、搜索、JSON 源码视图与按需重启。
@@ -48,7 +50,9 @@ const jsonText = ref('');
 const jsonError = ref('');
 const busy = ref(false);
 const openSections = ref<string[]>([]);
+const desiredRevision = ref('');
 const toast = useToast();
+const system = useSystemStore();
 
 const filtered = computed(() => {
   if (!search.value) return rawFields.value;
@@ -77,8 +81,12 @@ function seedValues(fields: EnvField[]): Record<string, unknown> {
 
 async function load(): Promise<void> {
   try {
+    await system.refreshStatus();
     const data = await unwrap<{ fields: EnvField[] }>(api.get('/config'));
     rawFields.value = data.fields;
+    desiredRevision.value = (data as { desired_revision?: string }).desired_revision
+      ?? system.status?.desired_revision
+      ?? '';
     values.value = seedValues(data.fields);
     saved.value = { ...values.value };
     // 折叠面板的展开状态必须是受控的：之前绑定静态 :model-value="[0]"，
@@ -143,10 +151,28 @@ async function save(): Promise<void> {
   busy.value = true;
   let needRestart = false;
   try {
-    const data = await unwrap<{ restart_required: boolean }>(api.put('/config', changed));
+    await system.refreshStatus();
+    const managed = system.managed;
+    const revision = desiredRevision.value || system.status?.desired_revision || '';
+    const options = managed
+      ? revisionWriteOptions(revision, idempotencyKey('config-save'))
+      : undefined;
+    const data = await unwrap<{
+      restart_required?: boolean;
+      revision_id?: string;
+      desired_revision?: string;
+    }>(api.put('/config', changed, options));
     saved.value = { ...values.value };
-    needRestart = data.restart_required;
-    toast.success(needRestart ? '已保存，正在重启生效…' : '已保存');
+    needRestart = !managed && data.restart_required === true;
+    const nextRevision = data.desired_revision ?? data.revision_id ?? revision;
+    if (managed) {
+      desiredRevision.value = nextRevision;
+      system.noteDesiredRevision(nextRevision);
+      await system.applyRevision(nextRevision);
+      toast.success('配置已保存；核心正在应用。');
+    } else {
+      toast.success(needRestart ? '已保存，正在重启生效…' : '已保存');
+    }
   } catch (err) {
     toastApiError(toast, err);
   } finally {

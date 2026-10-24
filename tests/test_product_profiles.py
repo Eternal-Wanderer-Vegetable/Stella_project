@@ -18,10 +18,20 @@ from deploy.profiles import (
     validate_profile,
 )
 from scripts.build_release_package import (
+    COMMON_DIRS,
     build_oneclick,
     build_standalone,
     stage_installer_resources,
 )
+
+
+def _create_common_package_dirs(source):
+    """Create a minimal release tree, preserving nucleus's namespace entry."""
+    for directory in COMMON_DIRS:
+        filename = "__main__.py" if directory == "nucleus" else "__init__.py"
+        init_file = source / directory / filename
+        init_file.parent.mkdir(parents=True, exist_ok=True)
+        init_file.write_text("", encoding="utf-8")
 
 
 def test_all_profiles_match_project_version_and_are_non_overlapping():
@@ -117,27 +127,7 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in (
-        "astrbot_compat",
-        "capability",
-        "config",
-        "core",
-        "deploy",
-        "extensions",
-        "gravitas",
-        "memory",
-        "system_prompts",
-        "runtime-manager",
-        "stella_project",
-        "knowledge",
-        "skills",
-        "assets",
-        "webui",
-        "desktop",
-    ):
-        path = source / directory / "__init__.py"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("", encoding="utf-8")
+    _create_common_package_dirs(source)
     # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
     dist = source / "webui" / "dist" / "index.html"
     dist.parent.mkdir(parents=True, exist_ok=True)
@@ -160,6 +150,23 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     (source / "runtime-manager" / "target" / "debug" / "build.bin").write_bytes(
         b"must not ship"
     )
+    controller_state = source / "corona"
+    for relative in (
+        "control-client.json",
+        "ownership.json",
+        "control.sqlite3",
+        "control.sqlite3-wal",
+        "control.sqlite3-shm",
+        "control.sqlite3-journal",
+        "controller.log",
+        ".env",
+        ".env.backup",
+        ".stella/instances/default/revisions/current/revision.json",
+        ".stella/instances/default/generations/gen-1/metadata.json",
+    ):
+        state_file = controller_state / relative
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text("must not ship", encoding="utf-8")
 
     archive = build_standalone(
         source,
@@ -173,6 +180,23 @@ def test_release_builder_keeps_standalone_allowlist_separate(tmp_path):
     assert "astrbot_compat/__init__.py" in names
     assert "capability/__init__.py" in names
     assert "stella_project/__init__.py" in names
+    assert "corona/__init__.py" in names
+    assert "nucleus/__main__.py" in names
+    assert not any(
+        name.startswith("corona/.stella/")
+        or name in {
+            "corona/control-client.json",
+            "corona/ownership.json",
+            "corona/control.sqlite3",
+            "corona/control.sqlite3-wal",
+            "corona/control.sqlite3-shm",
+            "corona/control.sqlite3-journal",
+            "corona/controller.log",
+            "corona/.env",
+            "corona/.env.backup",
+        }
+        for name in names
+    )
     assert "runtime/python.exe" not in names
     assert "models/chat.gguf" not in names
     assert "deploy/napcat.py" in names
@@ -213,27 +237,7 @@ def test_stager_prunes_output_inside_desktop_dir(tmp_path):
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in (
-        "astrbot_compat",
-        "capability",
-        "config",
-        "core",
-        "deploy",
-        "extensions",
-        "gravitas",
-        "memory",
-        "system_prompts",
-        "runtime-manager",
-        "stella_project",
-        "knowledge",
-        "skills",
-        "assets",
-        "webui",
-        "desktop",
-    ):
-        path = source / directory / "__init__.py"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("", encoding="utf-8")
+    _create_common_package_dirs(source)
     # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
     dist = source / "webui" / "dist" / "index.html"
     dist.parent.mkdir(parents=True, exist_ok=True)
@@ -277,14 +281,7 @@ def test_stager_falls_back_to_shell_dashboard_dist(tmp_path):
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in (
-        "astrbot_compat", "capability", "config", "core", "deploy", "extensions", "gravitas",
-        "knowledge", "memory", "skills", "system_prompts", "runtime-manager",
-        "stella_project", "assets", "webui",
-    ):
-        path = source / directory / "__init__.py"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("", encoding="utf-8")
+    _create_common_package_dirs(source)
     # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
     dist = source / "webui" / "dist" / "index.html"
     dist.parent.mkdir(parents=True, exist_ok=True)
@@ -339,27 +336,24 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in (
-        "astrbot_compat",
-        "capability",
-        "config",
-        "core",
-        "deploy",
-        "extensions",
-        "gravitas",
-        "memory",
-        "system_prompts",
-        "runtime-manager",
-        "stella_project",
-        "knowledge",
-        "skills",
-        "assets",
-        "webui",
-        "desktop",
+    _create_common_package_dirs(source)
+    controller_state = source / "corona"
+    for relative in (
+        "control-client.json",
+        "ownership.json",
+        "control.sqlite3",
+        "control.sqlite3-wal",
+        "control.sqlite3-shm",
+        "control.sqlite3-journal",
+        "controller.log",
+        ".env",
+        ".env.backup",
+        ".stella/instances/default/revisions/current/revision.json",
+        ".stella/instances/default/generations/gen-1/metadata.json",
     ):
-        path = source / directory / "__init__.py"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("", encoding="utf-8")
+        state_file = controller_state / relative
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text("must not ship", encoding="utf-8")
     # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
     dist = source / "webui" / "dist" / "index.html"
     dist.parent.mkdir(parents=True, exist_ok=True)
@@ -379,7 +373,25 @@ def test_installer_resources_are_allowlisted_and_profile_pinned(tmp_path):
     )
     assert (output / "astrbot_compat" / "__init__.py").exists()
     assert (output / "capability" / "__init__.py").exists()
+    assert (output / "stella_bootstrap" / "__init__.py").exists()
+    assert (output / "stella_contracts" / "__init__.py").exists()
     assert (output / "stella_project" / "__init__.py").exists()
+    assert (output / "corona" / "__init__.py").exists()
+    assert (output / "nucleus" / "__main__.py").exists()
+    assert (output / ".env.example").exists()
+    assert not (output / "corona" / ".stella").exists()
+    assert not (output / "corona" / ".env").exists()
+    assert not (output / "corona" / ".env.backup").exists()
+    for filename in (
+        "control-client.json",
+        "ownership.json",
+        "control.sqlite3",
+        "control.sqlite3-wal",
+        "control.sqlite3-shm",
+        "control.sqlite3-journal",
+        "controller.log",
+    ):
+        assert not (output / "corona" / filename).exists()
     assert (output / "deploy" / "__init__.py").exists()
     assert (output / "release_assets" / "product-profiles" / "oneclick-rust.json").exists()
     assert not (output / "tests").exists()
@@ -408,27 +420,7 @@ def test_installer_resources_include_bundled_catalog_when_present(tmp_path):
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in (
-        "astrbot_compat",
-        "capability",
-        "config",
-        "core",
-        "deploy",
-        "extensions",
-        "gravitas",
-        "memory",
-        "system_prompts",
-        "runtime-manager",
-        "stella_project",
-        "knowledge",
-        "skills",
-        "assets",
-        "webui",
-        "desktop",
-    ):
-        path = source / directory / "__init__.py"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("", encoding="utf-8")
+    _create_common_package_dirs(source)
     # 打包脚本硬校验 webui/dist/index.html（Bot 托管面板），假树必须能过
     dist = source / "webui" / "dist" / "index.html"
     dist.parent.mkdir(parents=True, exist_ok=True)
@@ -482,27 +474,7 @@ def test_stage_installer_resources_fails_hard_without_webui_dist(tmp_path):
     import pytest
 
     source = tmp_path / "source"
-    for directory in (
-        "astrbot_compat",
-        "capability",
-        "config",
-        "core",
-        "deploy",
-        "extensions",
-        "gravitas",
-        "memory",
-        "system_prompts",
-        "runtime-manager",
-        "stella_project",
-        "knowledge",
-        "skills",
-        "assets",
-        "webui",
-        "desktop",
-    ):
-        path = source / directory / "__init__.py"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("", encoding="utf-8")
+    _create_common_package_dirs(source)
     for profile_id in PROFILE_IDS:
         path = source / "release_assets" / "product-profiles" / f"{profile_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -551,15 +523,7 @@ def test_oneclick_rust_stages_memory_rust_python_half(tmp_path):
         path = source / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(relative, encoding="utf-8")
-    for directory in (
-        "astrbot_compat", "capability", "config", "core", "deploy",
-        "extensions", "gravitas", "memory", "system_prompts", "runtime-manager",
-        "stella_project", "knowledge", "skills", "assets", "webui",
-        "desktop",
-    ):
-        path = source / directory / "__init__.py"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("", encoding="utf-8")
+    _create_common_package_dirs(source)
     dist = source / "webui" / "dist" / "index.html"
     dist.parent.mkdir(parents=True, exist_ok=True)
     dist.write_text("panel", encoding="utf-8")

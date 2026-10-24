@@ -1,8 +1,8 @@
 import axios, { type AxiosInstance } from 'axios';
 
 // API 客户端：envelope 约定见 webui/responses.py（{status,message,data}）。
-// 拦截器只管 HTTP 语义：附 Bearer、401 时清登录态回登录页（对齐 AstrBot
-// http.ts 的行为，方案 §4 D4）。envelope 的 status 字段由页面自行检查。
+// 拦截器只管 HTTP 语义：附 Bearer、控制面 401 时清登录态回登录页；业务代理
+// 401 保持为业务请求错误（方案 §4 D4）。envelope 的 status 字段由页面自行检查。
 const TOKEN_KEY = 'stella-token';
 
 export function getToken(): string | null {
@@ -20,6 +20,30 @@ export function clearToken(): void {
   void import('@/stores/auth').then(({ useAuthStore }) => {
     useAuthStore().evict();
   });
+}
+
+/**
+ * Core-proxied business routes can return 401 for a core-side authorization or
+ * identity failure. Only a 401 from the control-plane surface proves that the
+ * Dashboard session itself is invalid.
+ */
+export function isControlPlaneEndpoint(url: string): boolean {
+  const path = url
+    .split('?')[0]
+    .replace(/^https?:\/\/[^/]+/i, '')
+    .replace(/^\/api\/v1(?=\/|$)/, '')
+    .replace(/^\/+/, '/');
+  const prefixes = [
+    '/auth',
+    '/config',
+    '/status',
+    '/system',
+    '/providers/endpoints',
+    '/providers/roles',
+    '/platform/adapters',
+    '/platform/onebot',
+  ];
+  return prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 export const api: AxiosInstance = axios.create({ baseURL: '/api/v1' });
@@ -41,7 +65,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const url: string = error.config?.url ?? '';
       const isAuthChallenge = AUTH_ENDPOINTS.some((p) => url.includes(p));
-      if (!isAuthChallenge) {
+      if (!isAuthChallenge && isControlPlaneEndpoint(url)) {
         clearToken();
         if (!window.location.hash.startsWith('#/auth/login')) {
           window.location.hash = '/auth/login';

@@ -1,0 +1,63 @@
+{
+  "status": "found",
+  "symbol": {
+    "uid": "Function:webui/app.py:create_webui_app",
+    "name": "create_webui_app",
+    "kind": "Function",
+    "filePath": "webui/app.py",
+    "startLine": 67,
+    "endLine": 144
+  },
+  "epistemic": "exact",
+  "incoming": {
+    "calls": [
+      {
+        "uid": "Function:scripts/dev_webui.py:main",
+        "name": "main",
+        "filePath": "scripts/dev_webui.py"
+      },
+      {
+        "uid": "Function:tests/scheduling/test_webui_sched.py:scheduling_webui",
+        "name": "scheduling_webui",
+        "filePath": "tests/scheduling/test_webui_sched.py"
+      },
+      {
+        "uid": "Function:tests/webui/conftest.py:client",
+        "name": "client",
+        "filePath": "tests/webui/conftest.py"
+      },
+      {
+        "uid": "Function:tests/webui/test_webui_auth.py:create_webui_app_from_settings",
+        "name": "create_webui_app_from_settings",
+        "filePath": "tests/webui/test_webui_auth.py"
+      },
+      {
+        "uid": "Function:tests/webui/test_webui_redaction.py:_client_with_stubbed_status",
+        "name": "_client_with_stubbed_status",
+        "filePath": "tests/webui/test_webui_redaction.py"
+      },
+      {
+        "uid": "Function:webui/mount.py:mount_webui",
+        "name": "mount_webui",
+        "filePath": "webui/mount.py"
+      }
+    ]
+  },
+  "outgoing": {
+    "calls": [
+      {
+        "uid": "Function:webui/app.py:_project_version",
+        "name": "_project_version",
+        "filePath": "webui/app.py"
+      },
+      {
+        "uid": "Function:webui/static.py:register_static",
+        "name": "register_static",
+        "filePath": "webui/static.py"
+      }
+    ]
+  },
+  "processes": []
+}
+
+  GitNexus Context (1.6.12)

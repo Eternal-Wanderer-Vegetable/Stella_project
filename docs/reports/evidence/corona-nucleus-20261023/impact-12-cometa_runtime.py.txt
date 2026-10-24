@@ -1,0 +1,138 @@
+{
+  "target": {
+    "id": "File:cometa/runtime.py",
+    "name": "runtime.py",
+    "type": "File",
+    "filePath": "cometa/runtime.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 10,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 4,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 4,
+    "2": 4,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:capability/delegation.py",
+        "name": "delegation.py",
+        "filePath": "capability/delegation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:stella_project/plugins/bot_main/cometa_bridge.py",
+        "name": "cometa_bridge.py",
+        "filePath": "stella_project/plugins/bot_main/cometa_bridge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/services/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:capability/hooks.py",
+        "name": "hooks.py",
+        "filePath": "capability/hooks.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/__init__.py",
+        "name": "__init__.py",
+        "filePath": "stella_project/plugins/bot_main/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/routers/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:webui/app.py",
+        "name": "app.py",
+        "filePath": "webui/app.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/routers/chat.py",
+        "name": "chat.py",
+        "filePath": "webui/routers/chat.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  }
+}
+
+  GitNexus Impact (1.6.12)

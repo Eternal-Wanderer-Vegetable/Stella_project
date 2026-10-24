@@ -1,0 +1,444 @@
+{
+  "target": {
+    "id": "Function:config/spaces.py:reload",
+    "name": "reload",
+    "type": "Function",
+    "filePath": "config/spaces.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 13,
+  "risk": "CRITICAL",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 7,
+    "modules_affected": 3
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 5,
+    "3": 6
+  },
+  "affected_processes": [
+    {
+      "name": "space_delete",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "space_prompt_put",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "spaces_create",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "chat",
+      "type": "Function",
+      "filePath": "webui/routers/chat.py",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 2
+    },
+    {
+      "name": "groups_bindings",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 3,
+      "total_hits": 4,
+      "earliest_broken_step": 2
+    },
+    {
+      "name": "space_bindings_put",
+      "type": "Function",
+      "filePath": "webui/routers/config.py",
+      "affected_process_count": 2,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "stream",
+      "type": "Function",
+      "filePath": "webui/routers/chat.py",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Services",
+      "hits": 11,
+      "impact": "direct"
+    },
+    {
+      "name": "Bot_main",
+      "hits": 1,
+      "impact": "indirect"
+    },
+    {
+      "name": "Routers",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:webui/chat_ingress.py:_ensure_webchat_space",
+        "name": "_ensure_webchat_space",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:webui/services/spaces.py:_reload",
+        "name": "_reload",
+        "filePath": "webui/services/spaces.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_222_space_delete",
+            "label": "Space_delete → Reload",
+            "processType": "cross_community",
+            "step": 3
+          }
+        ]
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Function:webui/chat_ingress.py:run_turn",
+        "name": "run_turn",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:webui/services/spaces.py:create_space",
+        "name": "create_space",
+        "filePath": "webui/services/spaces.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_583_spaces_create",
+            "label": "Spaces_create → Prompts_dir",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_705_spaces_create",
+            "label": "Spaces_create → _validate_name",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_691_spaces_create",
+            "label": "Spaces_create → Spaces_dir",
+            "processType": "intra_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 2,
+        "id": "Function:webui/services/spaces.py:delete_space",
+        "name": "delete_space",
+        "filePath": "webui/services/spaces.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_545_space_delete",
+            "label": "Space_delete → Spaces_dir",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_222_space_delete",
+            "label": "Space_delete → Reload",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_582_space_delete",
+            "label": "Space_delete → _validate_name",
+            "processType": "intra_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 2,
+        "id": "Function:webui/services/spaces.py:put_bindings",
+        "name": "put_bindings",
+        "filePath": "webui/services/spaces.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_472_space_bindings_put",
+            "label": "Space_bindings_put → _validate_name",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_417_space_bindings_put",
+            "label": "Space_bindings_put → Spaces_dir",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_221_groups_bindings",
+            "label": "Groups_bindings → _validate_name",
+            "processType": "intra_community",
+            "step": 3
+          }
+        ]
+      },
+      {
+        "depth": 2,
+        "id": "Function:webui/services/spaces.py:put_prompt",
+        "name": "put_prompt",
+        "filePath": "webui/services/spaces.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_223_space_prompt_put",
+            "label": "Space_prompt_put → Prompts_dir",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_633_space_prompt_put",
+            "label": "Space_prompt_put → Spaces_dir",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_659_space_prompt_put",
+            "label": "Space_prompt_put → _validate_name",
+            "processType": "intra_community",
+            "step": 2
+          }
+        ]
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "Function:webui/routers/chat.py:chat.stream@137:4",
+        "name": "stream",
+        "filePath": "webui/routers/chat.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_685_chat",
+            "label": "Chat → _new_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_559_chat",
+            "label": "Chat → Next_seq",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_683_chat",
+            "label": "Chat → _row_trace_id",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_796_stream",
+            "label": "Stream → Alive",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_558_chat",
+            "label": "Chat → Sanitize_text",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_797_stream",
+            "label": "Stream → _row_trace_id",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_681_chat",
+            "label": "Chat → Alive",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:webui/routers/config.py:space_bindings_put",
+        "name": "space_bindings_put",
+        "filePath": "webui/routers/config.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_417_space_bindings_put",
+            "label": "Space_bindings_put → Spaces_dir",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_472_space_bindings_put",
+            "label": "Space_bindings_put → _validate_name",
+            "processType": "intra_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:webui/routers/config.py:space_delete",
+        "name": "space_delete",
+        "filePath": "webui/routers/config.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_222_space_delete",
+            "label": "Space_delete → Reload",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_582_space_delete",
+            "label": "Space_delete → _validate_name",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_545_space_delete",
+            "label": "Space_delete → Spaces_dir",
+            "processType": "intra_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:webui/routers/config.py:space_prompt_put",
+        "name": "space_prompt_put",
+        "filePath": "webui/routers/config.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_223_space_prompt_put",
+            "label": "Space_prompt_put → Prompts_dir",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_659_space_prompt_put",
+            "label": "Space_prompt_put → _validate_name",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_633_space_prompt_put",
+            "label": "Space_prompt_put → Spaces_dir",
+            "processType": "intra_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:webui/routers/config.py:spaces_create",
+        "name": "spaces_create",
+        "filePath": "webui/routers/config.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_691_spaces_create",
+            "label": "Spaces_create → Spaces_dir",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_583_spaces_create",
+            "label": "Spaces_create → Prompts_dir",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_705_spaces_create",
+            "label": "Spaces_create → _validate_name",
+            "processType": "intra_community",
+            "step": 1
+          }
+        ]
+      },
+      {
+        "depth": 3,
+        "id": "Function:webui/services/groups.py:set_bindings",
+        "name": "set_bindings",
+        "filePath": "webui/services/groups.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_142_groups_bindings",
+            "label": "Groups_bindings → Prompt_path",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_221_groups_bindings",
+            "label": "Groups_bindings → _validate_name",
+            "processType": "intra_community",
+            "step": 2
+          },
+          {
+            "id": "proc_91_groups_bindings",
+            "label": "Groups_bindings → Spaces_dir",
+            "processType": "intra_community",
+            "step": 2
+          }
+        ]
+      }
+    ]
+  }
+}
+
+  GitNexus Impact (1.6.12)

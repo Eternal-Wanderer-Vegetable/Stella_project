@@ -1,0 +1,246 @@
+{
+  "target": {
+    "id": "File:webui/security.py",
+    "name": "security.py",
+    "type": "File",
+    "filePath": "webui/security.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 22,
+  "risk": "LOW",
+  "riskSharedAxes": "LOW",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 4,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {
+    "1": 4,
+    "2": 16,
+    "3": 2
+  },
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "File:scripts/webui_reset_auth.py",
+        "name": "webui_reset_auth.py",
+        "filePath": "scripts/webui_reset_auth.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/auth.py",
+        "name": "auth.py",
+        "filePath": "webui/auth.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/routers/auth.py",
+        "name": "auth.py",
+        "filePath": "webui/routers/auth.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:webui/services/system.py",
+        "name": "system.py",
+        "filePath": "webui/services/system.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "File:webui/app.py",
+        "name": "app.py",
+        "filePath": "webui/app.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/chat.py",
+        "name": "chat.py",
+        "filePath": "webui/routers/chat.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/cometa.py",
+        "name": "cometa.py",
+        "filePath": "webui/routers/cometa.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/config.py",
+        "name": "config.py",
+        "filePath": "webui/routers/config.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/conversations.py",
+        "name": "conversations.py",
+        "filePath": "webui/routers/conversations.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/evaluation.py",
+        "name": "evaluation.py",
+        "filePath": "webui/routers/evaluation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/logs.py",
+        "name": "logs.py",
+        "filePath": "webui/routers/logs.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/manage.py",
+        "name": "manage.py",
+        "filePath": "webui/routers/manage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/personal_memory.py",
+        "name": "personal_memory.py",
+        "filePath": "webui/routers/personal_memory.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/platform.py",
+        "name": "platform.py",
+        "filePath": "webui/routers/platform.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/plugins.py",
+        "name": "plugins.py",
+        "filePath": "webui/routers/plugins.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/plugins_mg.py",
+        "name": "plugins_mg.py",
+        "filePath": "webui/routers/plugins_mg.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/providers.py",
+        "name": "providers.py",
+        "filePath": "webui/routers/providers.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/status.py",
+        "name": "status.py",
+        "filePath": "webui/routers/status.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/trace.py",
+        "name": "trace.py",
+        "filePath": "webui/routers/trace.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:webui/routers/usage.py",
+        "name": "usage.py",
+        "filePath": "webui/routers/usage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:scripts/dev_webui.py",
+        "name": "dev_webui.py",
+        "filePath": "scripts/dev_webui.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/mount.py",
+        "name": "mount.py",
+        "filePath": "webui/mount.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  }
+}
+
+  GitNexus Impact (1.6.12)

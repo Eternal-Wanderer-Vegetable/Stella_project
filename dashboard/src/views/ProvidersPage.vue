@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 import { api, unwrap } from '@/api/http';
+import { idempotencyKey, revisionWriteOptions } from '@/api/system';
 import CodexAuthCard from '@/components/CodexAuthCard.vue';
 import { toastApiError, useToast } from '@/stores/toast';
+import { useSystemStore } from '@/stores/system';
 
 // 提供商页（M1 只读运行态）：调度器闸门排队 + 降级状态；端点/角色配置编辑属 M2
 interface GateState {
@@ -51,7 +54,11 @@ const testResult = ref<{ ok: boolean; error?: string } | null>(null);
 const testing = ref(false);
 const apiKeyInputs = ref<Record<string, string>>({});
 const fetchedModels = ref<Record<string, string[]>>({});
+const desiredRevision = ref('');
+const saving = ref(false);
 const toast = useToast();
+const system = useSystemStore();
+const { t } = useI18n();
 
 // 端点槽中文名：按用途划分的三槽（CHAT 对话 / MEMORY 记忆 / VISION 视觉），
 // 出现在表格与编辑卡标题里，未知槽名回落原始名。
@@ -64,10 +71,11 @@ const slotLabel = (slot: string): string => SLOT_LABELS[slot] ?? slot;
 
 async function loadConfig(): Promise<void> {
   try {
-    const e = await unwrap<{ endpoints: Endpoint[] }>(api.get('/providers/endpoints'));
+    const e = await unwrap<{ endpoints: Endpoint[]; desired_revision?: string }>(api.get('/providers/endpoints'));
     endpoints.value = e.endpoints;
-    const r = await unwrap<{ roles: Role[] }>(api.get('/providers/roles'));
+    const r = await unwrap<{ roles: Role[]; desired_revision?: string }>(api.get('/providers/roles'));
     roles.value = r.roles;
+    desiredRevision.value = r.desired_revision ?? e.desired_revision ?? system.status?.desired_revision ?? '';
   } catch (err) {
     toastApiError(toast, err);
   }
@@ -115,13 +123,46 @@ async function testEp(ep: Endpoint): Promise<void> {
 }
 
 async function saveConfig(): Promise<void> {
+  if (saving.value) return;
+  saving.value = true;
   try {
-    await unwrap(api.put('/providers/endpoints', endpoints.value));
-    await unwrap(api.put('/providers/roles', roles.value));
-    toast.success('已保存，需重启生效');
+    await system.refreshStatus();
+    const managed = system.managed;
+    let revision = desiredRevision.value || system.status?.desired_revision || '';
+    const endpointPayload = endpoints.value.map((endpoint) => ({
+      ...endpoint,
+      api_key: apiKeyInputs.value[endpoint.slot] ?? '',
+    }));
+    const endpointOptions = managed
+      ? revisionWriteOptions(revision, idempotencyKey('providers-endpoints'))
+      : undefined;
+    const endpointResult = await unwrap<{
+      revision_id?: string;
+      desired_revision?: string;
+    }>(api.put('/providers/endpoints', endpointPayload, endpointOptions));
+    revision = endpointResult.desired_revision ?? endpointResult.revision_id ?? revision;
+    const roleOptions = managed
+      ? revisionWriteOptions(revision, idempotencyKey('providers-roles'))
+      : undefined;
+    const roleResult = await unwrap<{
+      revision_id?: string;
+      desired_revision?: string;
+    }>(api.put('/providers/roles', roles.value, roleOptions));
+    revision = roleResult.desired_revision ?? roleResult.revision_id ?? revision;
+    desiredRevision.value = revision;
+    if (managed) {
+      system.noteDesiredRevision(revision);
+      await system.applyRevision(revision);
+      toast.success('提供商配置已保存；核心正在应用。');
+    } else {
+      toast.success('已保存，需重启生效');
+    }
+    apiKeyInputs.value = {};
     editing.value = false;
   } catch (err) {
     toastApiError(toast, err);
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -143,7 +184,8 @@ onBeforeUnmount(() => {
     </div>
     <p class="text-body-2 text-medium-emphasis mb-4">
       在此编辑模型端点（Base URL / 模型 / API Key）与角色绑定，并测试连通性；
-    下方为调度器的实时闸门与降级状态。保存写入 .env，重启后生效。
+      下方为调度器的实时闸门与降级状态。
+      {{ system.managed ? t('features.providers.managedSaveHint') : t('features.providers.legacySaveHint') }}
     外部 Agent（Codex）的登录与自定义端点认证在下方「外部 Agent」卡片配置，即时生效。
     </p>
     <v-alert v-if="error" type="error" variant="tonal" class="mb-3">{{ error }}</v-alert>
@@ -298,7 +340,7 @@ onBeforeUnmount(() => {
         <v-card-actions>
           <v-spacer />
           <v-btn @click="editing = false">取消</v-btn>
-          <v-btn color="primary" @click="saveConfig">保存</v-btn>
+          <v-btn color="primary" :loading="saving" :disabled="system.operationPending" @click="saveConfig">保存</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

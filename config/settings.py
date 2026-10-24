@@ -29,8 +29,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from . import home
-from .instance import (
+from stella_bootstrap.config import get_managed_revision
+from stella_bootstrap.home import HomeResolution
+from stella_bootstrap.home import resolve as resolve_home
+from stella_bootstrap.identity import (
     LAUNCH_TOKEN_ENV,
     manifest_path,
     pid_path,
@@ -38,6 +40,29 @@ from .instance import (
     runtime_dir,
     stop_sentinel_path,
 )
+
+_MANAGED_REVISION = get_managed_revision()
+_MANAGED_CONTROL_ENV_KEYS = frozenset(
+    {
+        "STELLA_INSTANCE_ID",
+        "STELLA_LAUNCH_TOKEN",
+        "STELLA_STOP_SENTINEL",
+        "STELLA_GENERATION_ID",
+        "STELLA_CONTROLLER_BOOT_ID",
+        "STELLA_INTERNAL_HOST",
+        "STELLA_INTERNAL_PORT",
+    }
+)
+
+
+def _getenv(key: str, default: str = "") -> str:
+    """Read a user value from the selected revision in managed mode."""
+    if _MANAGED_REVISION is not None:
+        if key.upper() == "STELLA_HOME":
+            return _MANAGED_REVISION.stella_home
+        if key.upper() not in _MANAGED_CONTROL_ENV_KEYS:
+            return _MANAGED_REVISION.values.get(key, default)
+    return os.getenv(key, default)
 
 # ============================================================
 # Stella Project — 集中配置
@@ -55,6 +80,9 @@ while _PROJECT_ROOT.parent != _PROJECT_ROOT:
     _PROJECT_ROOT = _PROJECT_ROOT.parent
 PROJECT_ROOT = _PROJECT_ROOT
 
+if _MANAGED_REVISION is not None and Path(_MANAGED_REVISION.project_root) != PROJECT_ROOT:
+    raise RuntimeError("managed configuration revision belongs to a different project root")
+
 # ---------- 用户数据根目录（STELLA_HOME） ----------
 # PROJECT_ROOT 是**程序目录**（升级时整体替换），STELLA_HOME 是**用户数据目录**
 # （升级时不动）。定位顺序见 config/home.py：环境变量 → 便携模式（安装目录内的
@@ -64,19 +92,25 @@ PROJECT_ROOT = _PROJECT_ROOT
 # 旧布局下 STELLA_HOME == PROJECT_ROOT，所有路径与 2026-08-27 之前完全一致，
 # 存量安装原地继续工作。刻意在这里不创建目录：import config 不该有副作用，
 # 真正落盘由 deploy init / deploy migrate 显式触发。
-_HOME = home.resolve(PROJECT_ROOT)
+_HOME = (
+    HomeResolution(Path(_MANAGED_REVISION.stella_home), "managed configuration revision")
+    if _MANAGED_REVISION is not None
+    else resolve_home(PROJECT_ROOT)
+)
 STELLA_HOME = _HOME.path
 STELLA_HOME_SOURCE = _HOME.source
 
-# 加载 .env（在用户数据目录里；不覆盖已有环境变量）
-load_dotenv(STELLA_HOME / ".env", override=False)
-
-# 根据 ENVIRONMENT 加载环境覆盖文件（覆盖 .env 中的值）
-_ENVIRONMENT = os.getenv("ENVIRONMENT", "").strip().lower()
-if _ENVIRONMENT in ("dev", "development"):
-    load_dotenv(STELLA_HOME / ".env.dev", override=True)
-elif _ENVIRONMENT in ("prod", "production"):
-    load_dotenv(STELLA_HOME / ".env.prod", override=True)
+if _MANAGED_REVISION is None:
+    # Legacy mode retains dotenv's existing process-environment behavior.
+    load_dotenv(STELLA_HOME / ".env", override=False)
+    _ENVIRONMENT = os.getenv("ENVIRONMENT", "").strip().lower()
+    if _ENVIRONMENT in ("dev", "development"):
+        load_dotenv(STELLA_HOME / ".env.dev", override=True)
+    elif _ENVIRONMENT in ("prod", "production"):
+        load_dotenv(STELLA_HOME / ".env.prod", override=True)
+else:
+    # Managed revisions are already fully resolved; no live dotenv file is read.
+    _ENVIRONMENT = _getenv("ENVIRONMENT", "").strip().lower()
 
 # 进程控制身份。它只隔离 PID / 停止哨兵 / ownership manifest，不改变
 # STELLA_HOME 下的记忆、人格、空间与配置共享语义。
@@ -84,7 +118,7 @@ INSTANCE_ID = resolve_instance_id(PROJECT_ROOT)
 INSTANCE_RUNTIME_DIR = runtime_dir(STELLA_HOME, INSTANCE_ID)
 INSTANCE_PID_FILE = pid_path(STELLA_HOME, INSTANCE_ID)
 INSTANCE_MANIFEST_PATH = manifest_path(STELLA_HOME, INSTANCE_ID)
-_custom_stop_sentinel = os.getenv("STELLA_STOP_SENTINEL", "").strip()
+_custom_stop_sentinel = _getenv("STELLA_STOP_SENTINEL", "").strip()
 if _custom_stop_sentinel:
     _custom_stop_path = Path(_custom_stop_sentinel).expanduser().resolve()
     STELLA_STOP_SENTINEL = _custom_stop_path.with_name(
@@ -92,7 +126,7 @@ if _custom_stop_sentinel:
     )
 else:
     STELLA_STOP_SENTINEL = stop_sentinel_path(STELLA_HOME, INSTANCE_ID)
-STELLA_LAUNCH_TOKEN = os.getenv(LAUNCH_TOKEN_ENV, "").strip()
+STELLA_LAUNCH_TOKEN = _getenv(LAUNCH_TOKEN_ENV, "").strip()
 
 
 def _env(key: str, default: str = "") -> str:
@@ -109,7 +143,7 @@ def _env(key: str, default: str = "") -> str:
     一刀切回落会让用户无法表达它。**默认值需要继承另一个配置项时，用
     ``_env_inherit``**，那里空值才等同未设置。
     """
-    return os.getenv(key, default)
+    return _getenv(key, default)
 
 
 def _env_inherit(key: str, inherited: str) -> str:
@@ -132,7 +166,7 @@ def _env_inherit(key: str, inherited: str) -> str:
     本函数（空值回落）、``env_schema`` 输出 ``inherits`` 标记、GUI 对这类字段留空时
     **不写入** ``.env``。
     """
-    return os.getenv(key, "").strip() or inherited
+    return _getenv(key, "").strip() or inherited
 
 
 def _env_int_inherit(key: str, inherited: int) -> int:
@@ -169,7 +203,7 @@ def _env_int(key: str, default: int = 0) -> int:
     返回:
         解析成功返回整数；否则返回 default 并告警日志。
     """
-    raw = os.getenv(key, "")
+    raw = _getenv(key, "")
     if not raw:
         return default
     try:
@@ -189,7 +223,7 @@ def _env_float(key: str, default: float = 0.0) -> float:
     返回:
         浮点环境变量值；解析失败时返回 default 并告警日志。
     """
-    raw = os.getenv(key, "")
+    raw = _getenv(key, "")
     if not raw:
         return default
     try:
@@ -205,7 +239,7 @@ def _env_path(key: str, default: Path) -> Path:
 
     路径统一解析为绝对路径，避免不同工作目录下相对路径漂移。
     """
-    raw = os.getenv(key, "").strip()
+    raw = _getenv(key, "").strip()
     if not raw:
         return default
     return Path(raw).expanduser().resolve()
@@ -219,7 +253,7 @@ def _env_bool(key: str, default: str = "true") -> bool:
     真值集与 deploy/env_keys.py 的 _bool 保持一致（true/1/yes，大小写不敏感，
     容忍首尾空白与成对引号），并有测试锁定两处口径不漂移；其余值告警回默认。
     """
-    raw = os.getenv(key, "").strip().strip("\"'")
+    raw = _getenv(key, "").strip().strip("\"'")
     if not raw:
         return default == "true"
     lowered = raw.lower()
@@ -242,7 +276,7 @@ def _env_int_set(key: str, default: str = "") -> set[int]:
     全角逗号混进来会把两段数字粘成一个片段而被静默丢弃——用户以为群已加白，
     实则没生效且无报错（2026-09-24 实测）。
     """
-    raw = os.getenv(key, "").strip() or default
+    raw = _getenv(key, "").strip() or default
     result: set[int] = set()
     for fragment in raw.replace("，", ",").split(","):
         fragment = fragment.strip()
@@ -258,7 +292,7 @@ def _env_int_set(key: str, default: str = "") -> set[int]:
 
 def _env_str_list(key: str, default: str = "", upper: bool = False) -> list[str]:
     """读取逗号分隔的字符串列表环境变量；保序、去空片段，upper=True 时统一大写。"""
-    raw = os.getenv(key, "").strip() or default
+    raw = _getenv(key, "").strip() or default
     result = [fragment.strip() for fragment in raw.split(",") if fragment.strip()]
     return [fragment.upper() for fragment in result] if upper else result
 
@@ -273,7 +307,7 @@ def _env_choice(
     而默认是 enforce），用 on_invalid 表达，替代各自手写的 if 改写。
     choices 用字面量元组：deploy/env_schema.py 靠 AST 读它生成 GUI 下拉选项。
     """
-    raw = os.getenv(key, "").strip().lower()
+    raw = _getenv(key, "").strip().lower()
     if not raw:
         return default
     if raw in choices:
@@ -1126,11 +1160,11 @@ ASTRBOT_LLM_MAX_TOOL_STEPS = _env_int("ASTRBOT_LLM_MAX_TOOL_STEPS", 10)
 def _endpoint_slot(prefix: str, field: str, default: str, *legacy_prefixes: str) -> str:
     """读一个端点字段：新键（LLM_ENDPOINT_CHAT_BASE_URL 这类）优先，依次回落
     legacy 前缀的同名字段（存量 .env 兼容），全空才用默认值。"""
-    value = os.getenv(prefix + field, "").strip()
+    value = _getenv(prefix + field, "").strip()
     if value:
         return value
     for legacy in legacy_prefixes:
-        value = os.getenv(legacy + field, "").strip()
+        value = _getenv(legacy + field, "").strip()
         if value:
             return value
     return default

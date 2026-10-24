@@ -1,0 +1,3408 @@
+{
+  "target": {
+    "id": "File:docs/reports/evidence/corona-nucleus-20261023/framework_probe.py",
+    "name": "framework_probe.py",
+    "type": "File",
+    "filePath": "docs/reports/evidence/corona-nucleus-20261023/framework_probe.py"
+  },
+  "direction": "upstream",
+  "impactedCount": 391,
+  "risk": "CRITICAL",
+  "riskSharedAxes": "CRITICAL",
+  "riskScale": {
+    "comparableAcrossKinds": false,
+    "unusedAxes": [
+      {
+        "axis": "processes",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      },
+      {
+        "axis": "modules",
+        "reason": "file-nodes-have-no-process-or-community-membership"
+      }
+    ]
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 2,
+    "processes_affected": 179,
+    "modules_affected": 20
+  },
+  "byDepthCounts": {
+    "1": 2,
+    "2": 256,
+    "3": 133
+  },
+  "affected_processes": [
+    {
+      "name": "text_chat_stream",
+      "type": "Function",
+      "filePath": "astrbot_compat/llm/provider.py",
+      "affected_process_count": 22,
+      "total_hits": 30,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "maybe_plan",
+      "type": "Function",
+      "filePath": "core/planner.py",
+      "affected_process_count": 16,
+      "total_hits": 24,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "chat",
+      "type": "Function",
+      "filePath": "webui/routers/chat.py",
+      "affected_process_count": 14,
+      "total_hits": 21,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_reload → _read_toml",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 14,
+      "total_hits": 14,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_api_key → _custom_config_present",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Execute_operation → State_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _source_signature",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_install_upload → _blank_literals",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_reload → _call_hook",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Status → _validate_checksum",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 11,
+      "total_hits": 11,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "List_plugins → _keep",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 10,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → Current_version",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 10,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_install → Run_all",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 10,
+      "total_hits": 10,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Bench_long_run_drain → _register",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Collect_status → Redact_value",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Consolidation_drain_job → _get_message_table",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_plugin → Sanitize_text",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_toggle → Create_group_runtime_state_table",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _register",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Proactive_speak_job → Sanitize_text",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_production_batch → _active_embedding_record",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skill_detail → _index_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 9,
+      "total_hits": 9,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_device_login → _gc_device_sessions",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_logout → Clear_managed_auth",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_migrate_legacy → _ensure",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Config_update → _scalar_to_str",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_capability_query → Text_segment",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_chat → Delivery_target",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Is_addressing_command → _mean_vector",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → Docker_available",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _ensure_epoch",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _row_trace_id",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skill_delete → _merge",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skill_save → _scalar_str",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skills_list → Availability",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 8,
+      "total_hits": 8,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Bench_prune → _register",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_custom_endpoint → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Config_current → Is_sensitive",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Config_schema → Deprecation_reason",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Desktop_session → _append",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_config → Profile_id",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_config → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_personas → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_personas → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Get_status → Sha256_hex",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_private_chat → Delivery_target",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_grant → _encode",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_retrieve → Normalize_text",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _atomic_json",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Replay_turn → _current_input_block",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run → Trace",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_doctor → Args",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Start_bot → Args",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "main",
+      "type": "Function",
+      "filePath": "scripts/build_offline_payload.py",
+      "affected_process_count": 7,
+      "total_hits": 7,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_device_login_status → _account_brief",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_status → Legacy_auth_home",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_message_context → Connect_ro",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Handle_addressing → _decode",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_add_document → Get_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_detail → Fingerprint_matches",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_endpoints_put → _normalize_slot",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_roles_put → _normalize_slot",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Trim_messages_job → _connect",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Update_account → _verify_password",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "chat_reset",
+      "type": "Function",
+      "filePath": "webui/routers/chat.py",
+      "affected_process_count": 6,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "stream",
+      "type": "Function",
+      "filePath": "webui/routers/chat.py",
+      "affected_process_count": 4,
+      "total_hits": 6,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Create_task → Load",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_entity_history → Connect_sqlite",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_message_detail → Connect_ro",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_messages → _live_status",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_spec → _bundled_spec",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_archive → Can_manage_kb",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_list → Role_at_least",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_revoke → _consider",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Login → Auth_file",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → Default",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → _sha256",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_apply → Register_backend",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_test → Catalog",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Platform_adapters_put → Parse_adapter_modules",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Probe_conversation → Create_astrbot_conversations_table",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Result → _backoff_delay",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_provider_request → Get_group_id",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Setup → _hash_password",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Usage_today → _date_key",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 5,
+      "total_hits": 5,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Build → Log",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Decorator → Resort",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_message_events → Connect_ro",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_trace_entities → Connect_sqlite",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Groups_list → Allocate_space_name",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Link_monitor_task → _trim",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_create → Sanitize_name_part",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_update → Sanitize_name_part",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Memory_trace_detail → _loads",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Memory_traces → _loads",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Participation_traces → _loads",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Platform_link → _current_bots",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Platform_onebot_put → Deprecation_reason",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_config_put → Save_config",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Probe_tools → _to_image_data_url",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_create → Legacy_qq_target",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Turn_detail → _init_schema",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Turn_detail_payloads → _init_schema",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Turn_traces → _init_schema",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Usage_daily → _settings",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 4,
+      "total_hits": 4,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_auth_test_endpoint → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Edit_task → Load",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Enumeration_sorts_newest_first_and_drops_incomplete → Trace",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Execute_role_model_call → _backoff_delay",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Flow_spec_version → Connect_ro",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Groups_bindings → Prompt_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "History → Load",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Kb_create → _encode",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_delete → Default_config_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Migrate_v8 → Legacy_space_name",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Platform_adapters → Parse_adapter_modules",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_config → Load_conf_schema",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_enabled → _registry_meta",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_uninstall → _default_plugins_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_now → Load",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_cancel → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_edit → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_list → _all_groups_with_tasks",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_pause → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_resume → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Skills_upload → _front_matter_name",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Space_delete → Reload",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Space_prompt_put → Prompts_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Spaces_create → Prompts_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "System_restart → Bot_entry",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 3,
+      "total_hits": 3,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_artifact_download → Task_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_cancel_task → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_get_task → _iso",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_list_tasks → _iso",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_respond_input → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Conversation_context → _memory_db",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Conversation_groups → _memory_db",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Delete_personal_memory → Bump",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "List_messages → _memory_db",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Logs_history → _parse_line",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Market → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Mcp_servers → Default_config_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Platform_onebot → Parse_env",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Plugins_readme → _registry_meta",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_endpoints → Cfg",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_roles → Cfg",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Providers_runtime → Snapshot",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Record_group_chat → Clear_proactive_skips",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Save_config → Parse_groups",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_audit → _all_groups_with_tasks",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_detail → _task_dict",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_run_now → _ensure_enabled",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sources_add → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sources_delete → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sources_list → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sources_update → _default_sources",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Space_bindings_put → Spaces_dir",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Space_prompt → Prompt_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Spaces_list → Prompt_path",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "System_doctor → _recount_summary",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "refreshTraceBundle",
+      "type": "Function",
+      "filePath": "dashboard/src/stores/flow.ts",
+      "affected_process_count": 2,
+      "total_hits": 2,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_backends → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_health → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_submit_task → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_task_events → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Cometa_task_result → Current_service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Create_evaluation_run → _utcnow",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Export_personal_memories → _connect",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "List_personal_memories → _connect",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → MessageBoxW",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Main → MessageBoxW",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Prepare_runtime → Args",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Run_worker → Resolve_under",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "SaveAndStart → Tauri",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Save_config → Parse_groups",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_bots → _active_onebot_bots",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Sched_history → _service",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Setup_status → Auth_file",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    },
+    {
+      "name": "Status → _project_version",
+      "type": "Function",
+      "filePath": "",
+      "affected_process_count": 1,
+      "total_hits": 1,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Knowledge",
+      "hits": 25,
+      "impact": "direct"
+    },
+    {
+      "name": "Memory",
+      "hits": 24,
+      "impact": "direct"
+    },
+    {
+      "name": "Tests",
+      "hits": 16,
+      "impact": "direct"
+    },
+    {
+      "name": "Cometa",
+      "hits": 14,
+      "impact": "direct"
+    },
+    {
+      "name": "Observability",
+      "hits": 12,
+      "impact": "direct"
+    },
+    {
+      "name": "Gravitas",
+      "hits": 11,
+      "impact": "direct"
+    },
+    {
+      "name": "Astrbot_compat",
+      "hits": 9,
+      "impact": "direct"
+    },
+    {
+      "name": "Capability",
+      "hits": 7,
+      "impact": "direct"
+    },
+    {
+      "name": "Llm",
+      "hits": 7,
+      "impact": "direct"
+    },
+    {
+      "name": "Participation",
+      "hits": 6,
+      "impact": "direct"
+    },
+    {
+      "name": "Routers",
+      "hits": 6,
+      "impact": "direct"
+    },
+    {
+      "name": "Stores",
+      "hits": 6,
+      "impact": "direct"
+    },
+    {
+      "name": "Transport",
+      "hits": 5,
+      "impact": "direct"
+    },
+    {
+      "name": "Bot_main",
+      "hits": 4,
+      "impact": "direct"
+    },
+    {
+      "name": "Scheduling",
+      "hits": 4,
+      "impact": "direct"
+    },
+    {
+      "name": "Api",
+      "hits": 3,
+      "impact": "direct"
+    },
+    {
+      "name": "Deploy",
+      "hits": 3,
+      "impact": "direct"
+    },
+    {
+      "name": "Social",
+      "hits": 3,
+      "impact": "direct"
+    },
+    {
+      "name": "Cluster_275",
+      "hits": 2,
+      "impact": "direct"
+    },
+    {
+      "name": "Runners",
+      "hits": 2,
+      "impact": "direct"
+    }
+  ],
+  "pagination": {
+    "limit": 100,
+    "offset": 0,
+    "truncated": true
+  },
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "filePath": "",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "File:docs/reports/evidence/corona-nucleus-20261023/README.md",
+        "name": "README.md",
+        "filePath": "docs/reports/evidence/corona-nucleus-20261023/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Class:core/observability/message_flow.py:FlowContext",
+        "name": "FlowContext",
+        "filePath": "core/observability/message_flow.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:astrbot_compat/filters.py",
+        "name": "filters.py",
+        "filePath": "astrbot_compat/filters.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:bot.py",
+        "name": "bot.py",
+        "filePath": "bot.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:capability/router/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "capability/router/benchmark.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:cli/src/style.rs",
+        "name": "style.rs",
+        "filePath": "cli/src/style.rs",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:cometa/worker.py",
+        "name": "worker.py",
+        "filePath": "cometa/worker.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:config/settings.py",
+        "name": "settings.py",
+        "filePath": "config/settings.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:core/llm/registry.py",
+        "name": "registry.py",
+        "filePath": "core/llm/registry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/api/http.ts",
+        "name": "http.ts",
+        "filePath": "dashboard/src/api/http.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/components/CodexAuthCard.vue",
+        "name": "CodexAuthCard.vue",
+        "filePath": "dashboard/src/components/CodexAuthCard.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/layouts/FullLayout.vue",
+        "name": "FullLayout.vue",
+        "filePath": "dashboard/src/layouts/FullLayout.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/main.ts",
+        "name": "main.ts",
+        "filePath": "dashboard/src/main.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/BackendOfflinePage.vue",
+        "name": "BackendOfflinePage.vue",
+        "filePath": "dashboard/src/views/BackendOfflinePage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/ChatPage.vue",
+        "name": "ChatPage.vue",
+        "filePath": "dashboard/src/views/ChatPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/CometaPage.vue",
+        "name": "CometaPage.vue",
+        "filePath": "dashboard/src/views/CometaPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/ConfigPage.vue",
+        "name": "ConfigPage.vue",
+        "filePath": "dashboard/src/views/ConfigPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/CronPage.vue",
+        "name": "CronPage.vue",
+        "filePath": "dashboard/src/views/CronPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/GroupsPage.vue",
+        "name": "GroupsPage.vue",
+        "filePath": "dashboard/src/views/GroupsPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/PersonaPage.vue",
+        "name": "PersonaPage.vue",
+        "filePath": "dashboard/src/views/PersonaPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/PlatformsPage.vue",
+        "name": "PlatformsPage.vue",
+        "filePath": "dashboard/src/views/PlatformsPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/ProvidersPage.vue",
+        "name": "ProvidersPage.vue",
+        "filePath": "dashboard/src/views/ProvidersPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/SettingsPage.vue",
+        "name": "SettingsPage.vue",
+        "filePath": "dashboard/src/views/SettingsPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/WelcomePage.vue",
+        "name": "WelcomePage.vue",
+        "filePath": "dashboard/src/views/WelcomePage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/auth/LoginPage.vue",
+        "name": "LoginPage.vue",
+        "filePath": "dashboard/src/views/auth/LoginPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/auth/SetupPage.vue",
+        "name": "SetupPage.vue",
+        "filePath": "dashboard/src/views/auth/SetupPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/data/ConversationsPage.vue",
+        "name": "ConversationsPage.vue",
+        "filePath": "dashboard/src/views/data/ConversationsPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/data/FlowPage.vue",
+        "name": "FlowPage.vue",
+        "filePath": "dashboard/src/views/data/FlowPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.9,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/data/LogsPage.vue",
+        "name": "LogsPage.vue",
+        "filePath": "dashboard/src/views/data/LogsPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/data/StatisticsPage.vue",
+        "name": "StatisticsPage.vue",
+        "filePath": "dashboard/src/views/data/StatisticsPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/data/TracePage.vue",
+        "name": "TracePage.vue",
+        "filePath": "dashboard/src/views/data/TracePage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/extension/ExtensionPage.vue",
+        "name": "ExtensionPage.vue",
+        "filePath": "dashboard/src/views/extension/ExtensionPage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:dashboard/src/views/knowledge/KnowledgePage.vue",
+        "name": "KnowledgePage.vue",
+        "filePath": "dashboard/src/views/knowledge/KnowledgePage.vue",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/__main__.py",
+        "name": "__main__.py",
+        "filePath": "deploy/__main__.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:deploy/nsis_bootstrap_helper.py",
+        "name": "nsis_bootstrap_helper.py",
+        "filePath": "deploy/nsis_bootstrap_helper.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:desktop/src-tauri/src/lib.rs",
+        "name": "lib.rs",
+        "filePath": "desktop/src-tauri/src/lib.rs",
+        "relationType": "CALLS",
+        "confidence": 0.5,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:desktop/src-tauri/src/python.rs",
+        "name": "python.rs",
+        "filePath": "desktop/src-tauri/src/python.rs",
+        "relationType": "CALLS",
+        "confidence": 0.5,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/history/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/history/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/history/README.md",
+        "name": "README.md",
+        "filePath": "docs/history/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+        "name": "2026-10-23-corona-nucleus-engineering-plan.md",
+        "filePath": "docs/plans/2026-10-23-corona-nucleus-engineering-plan.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reports/evidence/gravitas-20261021/probe_baseline.py",
+        "name": "probe_baseline.py",
+        "filePath": "docs/reports/evidence/gravitas-20261021/probe_baseline.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reports/evidence/gravitas-20261021/probe_cleanup.py",
+        "name": "probe_cleanup.py",
+        "filePath": "docs/reports/evidence/gravitas-20261021/probe_cleanup.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:docs/reports/evidence/gravitas-20261021/validate_plan.py",
+        "name": "validate_plan.py",
+        "filePath": "docs/reports/evidence/gravitas-20261021/validate_plan.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:knowledge/schema.py",
+        "name": "schema.py",
+        "filePath": "knowledge/schema.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "memory/benchmark.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/db_cleaner.py",
+        "name": "db_cleaner.py",
+        "filePath": "memory/db_cleaner.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory/social_worker.py",
+        "name": "social_worker.py",
+        "filePath": "memory/social_worker.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:memory_rust/benchmark.py",
+        "name": "benchmark.py",
+        "filePath": "memory_rust/benchmark.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:progress.md",
+        "name": "progress.md",
+        "filePath": "progress.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/adapt_personamem.py",
+        "name": "adapt_personamem.py",
+        "filePath": "scripts/adapt_personamem.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/benchmark_capacity.py",
+        "name": "benchmark_capacity.py",
+        "filePath": "scripts/benchmark_capacity.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/benchmark_flow_overhead.py",
+        "name": "benchmark_flow_overhead.py",
+        "filePath": "scripts/benchmark_flow_overhead.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/build_embedding_fixture.py",
+        "name": "build_embedding_fixture.py",
+        "filePath": "scripts/build_embedding_fixture.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/build_llama_package.py",
+        "name": "build_llama_package.py",
+        "filePath": "scripts/build_llama_package.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/build_release_catalog.py",
+        "name": "build_release_catalog.py",
+        "filePath": "scripts/build_release_catalog.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/build_release_manifest.py",
+        "name": "build_release_manifest.py",
+        "filePath": "scripts/build_release_manifest.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/build_release_package.py",
+        "name": "build_release_package.py",
+        "filePath": "scripts/build_release_package.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/build_windows_runtime.py",
+        "name": "build_windows_runtime.py",
+        "filePath": "scripts/build_windows_runtime.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/check_docs.py",
+        "name": "check_docs.py",
+        "filePath": "scripts/check_docs.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/check_installer_size.py",
+        "name": "check_installer_size.py",
+        "filePath": "scripts/check_installer_size.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/check_release_archive.py",
+        "name": "check_release_archive.py",
+        "filePath": "scripts/check_release_archive.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/check_release_hashes.py",
+        "name": "check_release_hashes.py",
+        "filePath": "scripts/check_release_hashes.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/check_release_layout.py",
+        "name": "check_release_layout.py",
+        "filePath": "scripts/check_release_layout.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/check_windows_runtime.py",
+        "name": "check_windows_runtime.py",
+        "filePath": "scripts/check_windows_runtime.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/dev_webui.py",
+        "name": "dev_webui.py",
+        "filePath": "scripts/dev_webui.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/eval_memory_replay.py",
+        "name": "eval_memory_replay.py",
+        "filePath": "scripts/eval_memory_replay.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/evaluate_dialogue_attribution.py",
+        "name": "evaluate_dialogue_attribution.py",
+        "filePath": "scripts/evaluate_dialogue_attribution.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/fetch_personamem.py",
+        "name": "fetch_personamem.py",
+        "filePath": "scripts/fetch_personamem.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/generate_benchmark_cases.py",
+        "name": "generate_benchmark_cases.py",
+        "filePath": "scripts/generate_benchmark_cases.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/generate_message_flow.py",
+        "name": "generate_message_flow.py",
+        "filePath": "scripts/generate_message_flow.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/probe_astrbot_llm.py",
+        "name": "probe_astrbot_llm.py",
+        "filePath": "scripts/probe_astrbot_llm.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/probe_consolidation.py",
+        "name": "probe_consolidation.py",
+        "filePath": "scripts/probe_consolidation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/probe_embedding.py",
+        "name": "probe_embedding.py",
+        "filePath": "scripts/probe_embedding.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/run_flow_evaluation.py",
+        "name": "run_flow_evaluation.py",
+        "filePath": "scripts/run_flow_evaluation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/run_gravitas_evaluation.py",
+        "name": "run_gravitas_evaluation.py",
+        "filePath": "scripts/run_gravitas_evaluation.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/smoke_nonebot_entry.py",
+        "name": "smoke_nonebot_entry.py",
+        "filePath": "scripts/smoke_nonebot_entry.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/soak_longrun.py",
+        "name": "soak_longrun.py",
+        "filePath": "scripts/soak_longrun.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/sync_test_repo.py",
+        "name": "sync_test_repo.py",
+        "filePath": "scripts/sync_test_repo.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/validate_rust_fullchain.py",
+        "name": "validate_rust_fullchain.py",
+        "filePath": "scripts/validate_rust_fullchain.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/verify_llama_package.py",
+        "name": "verify_llama_package.py",
+        "filePath": "scripts/verify_llama_package.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:scripts/webui_reset_auth.py",
+        "name": "webui_reset_auth.py",
+        "filePath": "scripts/webui_reset_auth.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:session-handoff.md",
+        "name": "session-handoff.md",
+        "filePath": "session-handoff.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella-installer/src-tauri/src/commands.rs",
+        "name": "commands.rs",
+        "filePath": "stella-installer/src-tauri/src/commands.rs",
+        "relationType": "CALLS",
+        "confidence": 0.5,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella-installer/src-tauri/src/lib.rs",
+        "name": "lib.rs",
+        "filePath": "stella-installer/src-tauri/src/lib.rs",
+        "relationType": "CALLS",
+        "confidence": 0.5,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella-installer/src-tauri/src/python.rs",
+        "name": "python.rs",
+        "filePath": "stella-installer/src-tauri/src/python.rs",
+        "relationType": "CALLS",
+        "confidence": 0.5,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:stella_project/plugins/bot_main/ai_gateway.py",
+        "name": "ai_gateway.py",
+        "filePath": "stella_project/plugins/bot_main/ai_gateway.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "File:tools/backfill_personal_memory.py",
+        "name": "backfill_personal_memory.py",
+        "filePath": "tools/backfill_personal_memory.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:astrbot_compat/events.py:build_event",
+        "name": "build_event",
+        "filePath": "astrbot_compat/events.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:capability/comes/__init__.py:execute_all",
+        "name": "execute_all",
+        "filePath": "capability/comes/__init__.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:capability/hooks.py:_flow_of",
+        "name": "_flow_of",
+        "filePath": "capability/hooks.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:capability/hooks.py:_retrieve_memory",
+        "name": "_retrieve_memory",
+        "filePath": "capability/hooks.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:capability/hooks.py:_run_comes",
+        "name": "_run_comes",
+        "filePath": "capability/hooks.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:capability/hooks.py:_run_skills",
+        "name": "_run_skills",
+        "filePath": "capability/hooks.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:capability/hooks.py:build_tool_tasks",
+        "name": "build_tool_tasks",
+        "filePath": "capability/hooks.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:knowledge/retrieval.py:_connect",
+        "name": "_connect",
+        "filePath": "knowledge/retrieval.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:knowledge/retrieval.py:dedup_evidence",
+        "name": "dedup_evidence",
+        "filePath": "knowledge/retrieval.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_147_kb_retrieve",
+            "label": "Kb_retrieve → Normalize_text",
+            "processType": "cross_community",
+            "step": 4
+          }
+        ]
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/schema.py:_migrate_db",
+        "name": "_migrate_db",
+        "filePath": "memory/schema.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/social_schema.py:_backup",
+        "name": "_backup",
+        "filePath": "memory/social_schema.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/social_schema.py:_hash",
+        "name": "_hash",
+        "filePath": "memory/social_schema.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/social_schema.py:_import_expression_examples",
+        "name": "_import_expression_examples",
+        "filePath": "memory/social_schema.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 2,
+        "id": "Function:memory/social_schema.py:_import_jargon",
+        "name": "_import_jargon",
+        "filePath": "memory/social_schema.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ],
+    "3": [
+      {
+        "depth": 3,
+        "id": "File:AGENTS.md",
+        "name": "AGENTS.md",
+        "filePath": "AGENTS.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/base.py",
+        "name": "base.py",
+        "filePath": "astrbot_compat/base.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/config.py",
+        "name": "config.py",
+        "filePath": "astrbot_compat/config.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/events.py",
+        "name": "events.py",
+        "filePath": "astrbot_compat/events.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/llm/agent.py",
+        "name": "agent.py",
+        "filePath": "astrbot_compat/llm/agent.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/llm/manager.py",
+        "name": "manager.py",
+        "filePath": "astrbot_compat/llm/manager.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/llm/provider.py",
+        "name": "provider.py",
+        "filePath": "astrbot_compat/llm/provider.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/loader.py",
+        "name": "loader.py",
+        "filePath": "astrbot_compat/loader.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/persona.py",
+        "name": "persona.py",
+        "filePath": "astrbot_compat/persona.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/pipeline.py",
+        "name": "pipeline.py",
+        "filePath": "astrbot_compat/pipeline.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/render.py",
+        "name": "render.py",
+        "filePath": "astrbot_compat/render.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:astrbot_compat/shim.py",
+        "name": "shim.py",
+        "filePath": "astrbot_compat/shim.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/adapters/astrbot.py",
+        "name": "astrbot.py",
+        "filePath": "capability/adapters/astrbot.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/adapters/knowledge.py",
+        "name": "knowledge.py",
+        "filePath": "capability/adapters/knowledge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/adapters/mcp.py",
+        "name": "mcp.py",
+        "filePath": "capability/adapters/mcp.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/comes/executor.py",
+        "name": "executor.py",
+        "filePath": "capability/comes/executor.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/delegation.py",
+        "name": "delegation.py",
+        "filePath": "capability/delegation.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/hooks.py",
+        "name": "hooks.py",
+        "filePath": "capability/hooks.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/inventory.py",
+        "name": "inventory.py",
+        "filePath": "capability/inventory.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/loader.py",
+        "name": "loader.py",
+        "filePath": "capability/loader.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/providers/knowledge.py",
+        "name": "knowledge.py",
+        "filePath": "capability/providers/knowledge.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/providers/mcp/model.py",
+        "name": "model.py",
+        "filePath": "capability/providers/mcp/model.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/router/__init__.py",
+        "name": "__init__.py",
+        "filePath": "capability/router/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/router/fallback.py",
+        "name": "fallback.py",
+        "filePath": "capability/router/fallback.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:capability/router/semantic.py",
+        "name": "semantic.py",
+        "filePath": "capability/router/semantic.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:cli/src/doctor.rs",
+        "name": "doctor.rs",
+        "filePath": "cli/src/doctor.rs",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:cli/src/logs.rs",
+        "name": "logs.rs",
+        "filePath": "cli/src/logs.rs",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:cli/src/status.rs",
+        "name": "status.rs",
+        "filePath": "cli/src/status.rs",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:config/__init__.py",
+        "name": "__init__.py",
+        "filePath": "config/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:config/spaces.py",
+        "name": "spaces.py",
+        "filePath": "config/spaces.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/llm/__init__.py",
+        "name": "__init__.py",
+        "filePath": "core/llm/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/llm/usage_store.py",
+        "name": "usage_store.py",
+        "filePath": "core/llm/usage_store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/observability/turn_trace.py",
+        "name": "turn_trace.py",
+        "filePath": "core/observability/turn_trace.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/social/context_builder.py",
+        "name": "context_builder.py",
+        "filePath": "core/social/context_builder.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:core/vision.py",
+        "name": "vision.py",
+        "filePath": "core/vision.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:dashboard/src/api/cometa.ts",
+        "name": "cometa.ts",
+        "filePath": "dashboard/src/api/cometa.ts",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:dashboard/src/api/flow.ts",
+        "name": "flow.ts",
+        "filePath": "dashboard/src/api/flow.ts",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:dashboard/src/api/sse.ts",
+        "name": "sse.ts",
+        "filePath": "dashboard/src/api/sse.ts",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:dashboard/src/stores/auth.ts",
+        "name": "auth.ts",
+        "filePath": "dashboard/src/stores/auth.ts",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:dashboard/src/views/GravitasStatusPage.vue",
+        "name": "GravitasStatusPage.vue",
+        "filePath": "dashboard/src/views/GravitasStatusPage.vue",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:dashboard/src/views/extension/PluginsPage.vue",
+        "name": "PluginsPage.vue",
+        "filePath": "dashboard/src/views/extension/PluginsPage.vue",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:deploy/plugin_check.py",
+        "name": "plugin_check.py",
+        "filePath": "deploy/plugin_check.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:deploy/plugin_scaffold.py",
+        "name": "plugin_scaffold.py",
+        "filePath": "deploy/plugin_scaffold.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:deploy/probe.py",
+        "name": "probe.py",
+        "filePath": "deploy/probe.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:design_docs/AstrBot 特性吸收对比报告.md",
+        "name": "AstrBot 特性吸收对比报告.md",
+        "filePath": "design_docs/AstrBot 特性吸收对比报告.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:desktop/src-tauri/src/commands.rs",
+        "name": "commands.rs",
+        "filePath": "desktop/src-tauri/src/commands.rs",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/README.md",
+        "name": "README.md",
+        "filePath": "docs/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/agent/workflow.md",
+        "name": "workflow.md",
+        "filePath": "docs/agent/workflow.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/architecture/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/architecture/README.md",
+        "name": "README.md",
+        "filePath": "docs/architecture/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/development/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/development/README.md",
+        "name": "README.md",
+        "filePath": "docs/development/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/guides/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/guides/README.md",
+        "name": "README.md",
+        "filePath": "docs/guides/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/README.en.md",
+        "name": "README.en.md",
+        "filePath": "docs/reference/README.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/README.md",
+        "name": "README.md",
+        "filePath": "docs/reference/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/configuration.en.md",
+        "name": "configuration.en.md",
+        "filePath": "docs/reference/configuration.en.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reference/configuration.md",
+        "name": "configuration.md",
+        "filePath": "docs/reference/configuration.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reports/2026-10-10-documentation-restructure.md",
+        "name": "2026-10-10-documentation-restructure.md",
+        "filePath": "docs/reports/2026-10-10-documentation-restructure.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:docs/reports/evidence/gravitas-20261021/README.md",
+        "name": "README.md",
+        "filePath": "docs/reports/evidence/gravitas-20261021/README.md",
+        "relationType": "IMPORTS",
+        "confidence": 0.8,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:gravitas/model_calls.py",
+        "name": "model_calls.py",
+        "filePath": "gravitas/model_calls.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:knowledge/embedding.py",
+        "name": "embedding.py",
+        "filePath": "knowledge/embedding.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:knowledge/parsers.py",
+        "name": "parsers.py",
+        "filePath": "knowledge/parsers.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:knowledge/retrieval.py",
+        "name": "retrieval.py",
+        "filePath": "knowledge/retrieval.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:knowledge/store.py",
+        "name": "store.py",
+        "filePath": "knowledge/store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/addressing_intent.py",
+        "name": "addressing_intent.py",
+        "filePath": "memory/addressing_intent.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/capture_gate.py",
+        "name": "capture_gate.py",
+        "filePath": "memory/capture_gate.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/consolidator.py",
+        "name": "consolidator.py",
+        "filePath": "memory/consolidator.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/embeddings.py",
+        "name": "embeddings.py",
+        "filePath": "memory/embeddings.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/expression_learning.py",
+        "name": "expression_learning.py",
+        "filePath": "memory/expression_learning.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/expression_selector.py",
+        "name": "expression_selector.py",
+        "filePath": "memory/expression_selector.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/jargon_service.py",
+        "name": "jargon_service.py",
+        "filePath": "memory/jargon_service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/migrations.py",
+        "name": "migrations.py",
+        "filePath": "memory/migrations.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/pre_processors.py",
+        "name": "pre_processors.py",
+        "filePath": "memory/pre_processors.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/reply_effect_service.py",
+        "name": "reply_effect_service.py",
+        "filePath": "memory/reply_effect_service.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/scope_versions.py",
+        "name": "scope_versions.py",
+        "filePath": "memory/scope_versions.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/session_compact.py",
+        "name": "session_compact.py",
+        "filePath": "memory/session_compact.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/social_schema.py",
+        "name": "social_schema.py",
+        "filePath": "memory/social_schema.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:memory/social_store.py",
+        "name": "social_store.py",
+        "filePath": "memory/social_store.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:scripts/build_offline_payload.py",
+        "name": "build_offline_payload.py",
+        "filePath": "scripts/build_offline_payload.py",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:skills/catalog.py",
+        "name": "catalog.py",
+        "filePath": "skills/catalog.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:skills/runtime.py",
+        "name": "runtime.py",
+        "filePath": "skills/runtime.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:skills/sandbox.py",
+        "name": "sandbox.py",
+        "filePath": "skills/sandbox.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:skills/selector.py",
+        "name": "selector.py",
+        "filePath": "skills/selector.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:stella_project/plugins/bot_main/__init__.py",
+        "name": "__init__.py",
+        "filePath": "stella_project/plugins/bot_main/__init__.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/app.py",
+        "name": "app.py",
+        "filePath": "webui/app.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/audit.py",
+        "name": "audit.py",
+        "filePath": "webui/audit.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/auth.py",
+        "name": "auth.py",
+        "filePath": "webui/auth.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/chat_ingress.py",
+        "name": "chat_ingress.py",
+        "filePath": "webui/chat_ingress.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/mount.py",
+        "name": "mount.py",
+        "filePath": "webui/mount.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/security.py",
+        "name": "security.py",
+        "filePath": "webui/security.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/config.py",
+        "name": "config.py",
+        "filePath": "webui/services/config.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/conversations.py",
+        "name": "conversations.py",
+        "filePath": "webui/services/conversations.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/envfile.py",
+        "name": "envfile.py",
+        "filePath": "webui/services/envfile.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/flow.py",
+        "name": "flow.py",
+        "filePath": "webui/services/flow.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/groups.py",
+        "name": "groups.py",
+        "filePath": "webui/services/groups.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/logs.py",
+        "name": "logs.py",
+        "filePath": "webui/services/logs.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/platformcfg.py",
+        "name": "platformcfg.py",
+        "filePath": "webui/services/platformcfg.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      },
+      {
+        "depth": 3,
+        "id": "File:webui/services/plugins_manage.py",
+        "name": "plugins_manage.py",
+        "filePath": "webui/services/plugins_manage.py",
+        "relationType": "IMPORTS",
+        "confidence": 1,
+        "processes": []
+      }
+    ]
+  }
+}

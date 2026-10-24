@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { api, unwrap } from '@/api/http';
+import { idempotencyKey, revisionWriteOptions } from '@/api/system';
 import { toastApiError, useToast } from '@/stores/toast';
+import { useSystemStore } from '@/stores/system';
 import { nonebotAdapterPresets } from '@/data/nonebotAdapterPresets';
 import type { AdapterPresetField, AdapterPresetSection } from '@/data/nonebotAdapterPresets';
 import adapterCatalogSnapshot from '../../../webui/services/nonebot_adapter_catalog.json';
@@ -109,6 +111,9 @@ const packageStatusSupported = ref(true);
 const customModulesText = ref('');
 const driver = ref('');
 const error = ref('');
+const desiredRevision = ref('');
+const savingModules = ref(false);
+const savingOneBot = ref(false);
 const adapterLoadFailed = ref(false);
 const loadingAdapters = ref(true);
 const saving = ref(false);
@@ -148,6 +153,7 @@ const discord = reactive({
 });
 
 const toast = useToast();
+const system = useSystemStore();
 const { t } = useI18n();
 const customModules = computed(() =>
   [...new Set(customModulesText.value
@@ -568,6 +574,7 @@ async function loadAdapters(): Promise<void> {
     const result = await unwrap<{
       modules: string[];
       process_override: boolean;
+      desired_revision?: string;
       driver: string;
       driver_process_override: boolean;
       installed_packages: Record<string, string | null>;
@@ -618,6 +625,7 @@ async function loadAdapters(): Promise<void> {
     );
     customModulesText.value = modules.filter((module) => !catalogModules.has(module)).join('\n');
     processOverride.value = result.process_override;
+    desiredRevision.value = result.desired_revision ?? system.status?.desired_revision ?? '';
     driverProcessOverride.value = result.driver_process_override;
     installedPackages.value = result.installed_packages ?? {};
     adapterEnv.value = (result.adapter_env ?? []).map((entry) => ({
@@ -714,6 +722,7 @@ function currentDraftSnapshot(): string {
 }
 
 async function saveAdapters(): Promise<void> {
+  if (saving.value || system.operationPending) return;
   saving.value = true;
   const connections: Record<string, unknown> = {};
   if (selected.onebot) {
@@ -753,15 +762,32 @@ async function saveAdapters(): Promise<void> {
   }
 
   try {
-    await unwrap(api.put('/platform/adapters', {
+    await system.refreshStatus();
+    const managed = system.managed;
+    const revision = desiredRevision.value || system.status?.desired_revision || '';
+    const options = managed
+      ? revisionWriteOptions(revision, idempotencyKey('platform-adapters'))
+      : undefined;
+    const result = await unwrap<{
+      revision_id?: string;
+      desired_revision?: string;
+    }>(api.put('/platform/adapters', {
       modules: enabledModules.value,
       driver: driver.value,
       connections,
       adapter_env: adapterEnv.value
         .filter((entry) => entry.key.trim())
         .map((entry) => ({ key: entry.key, value: entry.value, module: entry.module })),
-    }));
-    toast.success(t('features.platforms.saved'));
+    }, options));
+    const nextRevision = result.desired_revision ?? result.revision_id ?? revision;
+    desiredRevision.value = nextRevision;
+    if (managed) {
+      system.noteDesiredRevision(nextRevision);
+      await system.applyRevision(nextRevision);
+      toast.success(t('features.platforms.modulesApplied'));
+    } else {
+      toast.success(t('features.platforms.saved'));
+    }
     await loadAdapters();
   } catch (err) {
     toastApiError(toast, err);
@@ -814,7 +840,7 @@ onBeforeUnmount(() => {
       </v-chip>
     </div>
     <p class="text-body-2 text-medium-emphasis mb-4">
-      {{ t('features.platforms.intro') }}
+      {{ system.managed ? t('features.platforms.introManaged') : t('features.platforms.intro') }}
     </p>
     <v-alert v-if="adapterLoadFailed" type="error" variant="tonal" class="mb-3">
       {{ t('features.platforms.loadFailed') }}
@@ -1639,7 +1665,7 @@ onBeforeUnmount(() => {
           color="primary"
           prepend-icon="mdi-content-save"
           :loading="saving"
-          :disabled="loadingAdapters || adapterLoadFailed || !saveSupported"
+          :disabled="loadingAdapters || adapterLoadFailed || !saveSupported || system.operationPending"
           @click="saveAdapters"
         >
           {{ t('features.platforms.saveAdapters') }}

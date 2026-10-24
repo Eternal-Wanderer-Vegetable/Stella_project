@@ -130,13 +130,13 @@ impl Default for ComponentStateKind {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ComponentState {
     pub state: ComponentStateKind,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<RuntimeError>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnostics: Option<std::collections::BTreeMap<String, serde_json::Value>>,
 }
 
@@ -144,7 +144,7 @@ pub struct ComponentState {
 pub struct RuntimeError {
     pub code: String,
     pub message: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<std::collections::BTreeMap<String, serde_json::Value>>,
 }
 
@@ -427,5 +427,22 @@ mod tests {
             store.read_state().unwrap().desired,
             ComponentStateKind::Stopped
         );
+    }
+
+    #[test]
+    fn corona_runtime_v1_state_round_trips_without_null_pid() {
+        let json = include_str!("../schemas/fixtures/runtime-state-corona-backoff.json");
+        let state: RuntimeState = serde_json::from_str(json).unwrap();
+        let stella = &state.components["stella"];
+        assert_eq!(state.schema_version, SCHEMA_VERSION);
+        assert_eq!(state.desired, ComponentStateKind::Running);
+        assert_eq!(stella.state, ComponentStateKind::Degraded);
+        assert_eq!(
+            stella.diagnostics.as_ref().unwrap()["core_phase"],
+            "backoff"
+        );
+        let round_trip = serde_json::to_value(&state).unwrap();
+        assert_eq!(round_trip, serde_json::from_str::<serde_json::Value>(json).unwrap());
+        assert!(round_trip["components"]["stella"].get("pid").is_none());
     }
 }

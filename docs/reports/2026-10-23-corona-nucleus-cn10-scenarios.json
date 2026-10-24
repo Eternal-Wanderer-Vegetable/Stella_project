@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-23",
+  "timezone": "Asia/Shanghai",
+  "work_package": "CN10",
+  "based_on_commit": "d010dd5",
+  "implementation_commit": "a300151",
+  "assessment": "implementation_evidence_with_acceptance_gaps",
+  "status_counts": {
+    "pass": 12,
+    "partial": 17,
+    "not_run": 5
+  },
+  "verification_commands": [
+    {
+      "command": "STELLA_HOME=$(mktemp -d /tmp/stella-cn10-focused-XXXXXX) .venv/bin/python -m pytest tests/corona tests/nucleus tests/observability/test_internal_flow_inventory.py tests/runtime/test_proactive_native.py tests/test_deploy_cli.py tests/test_install_contract.py tests/test_packages.py -q",
+      "result": "142 passed, 4 warnings, 50.79s"
+    },
+    {
+      "command": "STELLA_HOME=$(mktemp -d /tmp/stella-cn10-home-XXXXXX) .venv/bin/python -m pytest tests -q --junitxml=/tmp/stella-cn10-full-2026-10-23/python-full.xml",
+      "result": "4114 passed, 29 skipped, 1 failed, 3 warnings, 279.00s; tests/webui/test_webui_cometa.py::TestApiKeyRoute::test_empty_key_rejected got 401 instead of 400; isolated node passed separately"
+    },
+    {
+      "command": "pnpm --dir dashboard test; pnpm --dir dashboard build; pnpm --dir dashboard sync:webui",
+      "result": "9 files / 110 tests passed; typecheck and production build passed; sync passed; dist trees matched. Build emitted existing mixed-import and large-chunk warnings."
+    },
+    {
+      "command": ".venv/bin/ruff check .",
+      "result": "All checks passed"
+    },
+    {
+      "command": ".venv/bin/python scripts/generate_message_flow.py --check",
+      "result": "check ok: message-flow.bb5b912eabd5.json matches current source"
+    },
+    {
+      "command": "node .gitnexus/run.cjs detect-changes --scope all --repo Stella_project; then node .gitnexus/run.cjs detect-changes --scope compare --base-ref main --repo Stella_project",
+      "result": "Serial staged all: 18 files / 41 symbols / 0 processes / LOW. Compare main: 248 files / 1501 symbols / 150 processes / CRITICAL. No partial/truncated marker; compare symbol listing capped."
+    },
+    {
+      "command": ".venv/bin/python docs/reports/evidence/corona-nucleus-20261023/verify_plan.py",
+      "result": "Not applicable to the implementation worktree: the frozen planning verifier stopped at source drift in tests/webui/test_webui_mount.py, which CN06/CN07 implementation had already changed. The frozen inventory and verifier were left unchanged."
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "A01",
+      "scenario": "配置新增/修改",
+      "status": "pass",
+      "evidence": ["tests/corona/test_config_store.py::test_config_save_uses_cas_and_idempotency_and_redacts_secrets", "tests/corona/test_config_operations.py::test_apply_controls_real_fake_core_and_fences_target_failure"],
+      "limitation": "合同与本地 fake core 验证；没有连接真实模型或平台。"
+    },
+    {
+      "id": "A02",
+      "scenario": "配置删除/继承/空值",
+      "status": "pass",
+      "evidence": ["tests/corona/test_config_store.py::test_empty_inherited_value_deletes_and_external_edits_are_not_overwritten"],
+      "limitation": "覆盖配置存储语义，不是生产配置验收。"
+    },
+    {
+      "id": "A03",
+      "scenario": "外部覆盖与环境文件",
+      "status": "pass",
+      "evidence": ["tests/corona/test_config_source_snapshot.py::test_dotenv_changes_apply_to_fresh_processes_but_not_inherited_snapshots", "tests/corona/test_config_store.py::test_new_active_profile_overlay_is_treated_as_an_external_edit"],
+      "limitation": "在隔离子进程与临时环境文件上验证。"
+    },
+    {
+      "id": "A04",
+      "scenario": "语法/类型/跨字段错误",
+      "status": "partial",
+      "evidence": ["tests/corona/test_config_api.py::test_corona_config_api_auth_revision_redaction_and_sse", "tests/corona/test_config_operations.py::test_apply_controls_real_fake_core_and_fences_target_failure"],
+      "limitation": "本轮没有完整枚举坏语法、类型、跨字段组合及旧核心持续服务的矩阵。"
+    },
+    {
+      "id": "A05",
+      "scenario": "双浏览器并发保存",
+      "status": "pass",
+      "evidence": ["tests/corona/test_config_store.py::test_config_save_uses_cas_and_idempotency_and_redacts_secrets"],
+      "limitation": "用 revision CAS 冲突合同验证并发防丢写；没有两个真实浏览器会话。"
+    },
+    {
+      "id": "A06",
+      "scenario": "重复重启与断线重试",
+      "status": "pass",
+      "evidence": ["tests/corona/test_config_operations.py::test_apply_is_idempotent_and_has_resumable_sequenced_events", "tests/corona/test_config_operations.py::test_only_one_lifecycle_operation_can_be_active"],
+      "limitation": "受管 operation 与 fake core 验证；无外部平台副作用。"
+    },
+    {
+      "id": "A07",
+      "scenario": "保存后进程崩溃",
+      "status": "pass",
+      "evidence": ["tests/corona/test_config_store.py::test_os_process_exit_at_commit_boundary_recovers_without_replay"],
+      "limitation": "真实 OS 子进程在提交边界退出；恢复只使用临时配置和控制库。"
+    },
+    {
+      "id": "A08",
+      "scenario": "新核心导入/端口/ready失败",
+      "status": "partial",
+      "evidence": ["tests/corona/test_config_operations.py::test_failed_target_restores_one_previous_config_and_marks_rolled_back", "tests/corona/test_supervisor_processes.py::test_fake_core_failures_are_bounded_and_owned"],
+      "limitation": "覆盖 fake core 的目标失败与回滚；没有真实业务导入错误和端口冲突整套故障注入。"
+    },
+    {
+      "id": "A09",
+      "scenario": "排空超时/不合作任务",
+      "status": "partial",
+      "evidence": ["tests/nucleus/test_nucleus_lifecycle.py::test_shutdown_callbacks_share_one_remaining_budget", "tests/corona/test_supervisor_processes.py::test_process_tree_kills_descendant_after_root_exit"],
+      "limitation": "共享截止时间与后代围栏分别测试；未完成不合作业务任务的端到端超时矩阵。"
+    },
+    {
+      "id": "A10",
+      "scenario": "重启期间WebUI/登录",
+      "status": "partial",
+      "evidence": ["tests/corona/test_adapter_proxy.py::test_proxy_metrics_and_control_health_during_core_restarts", "tests/corona/test_local_control.py::test_local_control_api_remains_online_when_browser_webui_is_disabled"],
+      "limitation": "控制健康在三轮核心重启中可用；没有同一浏览器登录态和 management HTML 的重启端到端验证。"
+    },
+    {
+      "id": "A11",
+      "scenario": "WebChat在途重启/断连",
+      "status": "not_run",
+      "evidence": [],
+      "limitation": "本轮未执行 WebChat 在途模型/工具请求的真实断连或重放验证。"
+    },
+    {
+      "id": "A12",
+      "scenario": "QQ/适配器重连",
+      "status": "partial",
+      "evidence": ["tests/corona/test_adapter_proxy.py::test_onebot_http_sse_download_websocket_reconnect_and_status_peer"],
+      "limitation": "真实本地 fake child 和 OneBot HTTP/SSE/WS 路由通过；没有 QQ 账户、OneBot 服务或平台灰度。"
+    },
+    {
+      "id": "A13",
+      "scenario": "Cometa在途/未知投递",
+      "status": "not_run",
+      "evidence": [],
+      "limitation": "本轮未对新架构做 Cometa lease、attempt 和投递结果未知的进程故障验收。"
+    },
+    {
+      "id": "A14",
+      "scenario": "调度到期/重复发送",
+      "status": "not_run",
+      "evidence": [],
+      "limitation": "本轮未做新架构下的调度到期和真实发送去重验收。"
+    },
+    {
+      "id": "A15",
+      "scenario": "记忆整合/Compact中断",
+      "status": "not_run",
+      "evidence": [],
+      "limitation": "本轮没有中断真实记忆整合或 Compact 事务；未使用生产 fixture。"
+    },
+    {
+      "id": "A16",
+      "scenario": "MCP/插件/Chromium子进程",
+      "status": "partial",
+      "evidence": ["tests/corona/test_supervisor_processes.py::test_process_tree_kills_descendant_after_root_exit", "tests/corona/test_supervisor_processes.py::test_owner_loss_drains_core_and_fences_descendant_tree"],
+      "limitation": "本地 owned 子进程后代被回收；MCP、插件和 Chromium 真实集成未运行。"
+    },
+    {
+      "id": "A17",
+      "scenario": "核心SIGKILL/退出风暴",
+      "status": "partial",
+      "evidence": ["tests/corona/test_supervisor_processes.py::test_crash_after_ready_uses_bounded_restart_budget", "tests/corona/test_supervisor_processes.py::test_linux_real_core_100_cycles_do_not_leak_or_overlap"],
+      "limitation": "包含实际进程崩溃和有界恢复；没有独立 SIGKILL 退出风暴及五分钟预算长时间观测。"
+    },
+    {
+      "id": "A18",
+      "scenario": "Corona崩溃/整机重启",
+      "status": "partial",
+      "evidence": ["tests/corona/test_supervisor_processes.py::test_owner_loss_drains_core_and_fences_descendant_tree", "tests/corona/test_startup_recovery.py::test_controller_crash_during_target_start_restores_previous_once"],
+      "limitation": "验证 owner loss 和控制器恢复逻辑；没有宿主突然断电或 clean reboot 验收。"
+    },
+    {
+      "id": "A19",
+      "scenario": "PID复用/外国进程",
+      "status": "partial",
+      "evidence": ["tests/corona/test_supervisor_processes.py::test_corona_ownership_lock_is_held_by_open_handle", "tests/corona/test_nucleus_client.py::test_late_or_wrong_generation_lifecycle_ack_is_rejected"],
+      "limitation": "OS-held lock 与代际身份拒绝通过；未注入 PID reuse 或真实外国进程冲突。"
+    },
+    {
+      "id": "A20",
+      "scenario": "多实例/共享数据根",
+      "status": "partial",
+      "evidence": ["tests/nucleus/test_nucleus_lifecycle.py::test_business_root_lock_is_process_held_and_keyed_by_database", "tests/nucleus/test_managed_process.py::test_real_managed_nucleus_ready_refuses_second_writer_and_drains"],
+      "limitation": "同规范化业务数据库的第二写者被真实子进程拒绝；未覆盖多实例目录、外置 DB 路径和不同 home 的完整矩阵。"
+    },
+    {
+      "id": "A21",
+      "scenario": "伪造内部头/直连内部端口",
+      "status": "pass",
+      "evidence": ["tests/nucleus/test_internal_api.py::test_private_business_api_requires_current_capability_identity_and_actor", "tests/corona/test_nucleus_client.py::test_forward_headers_strip_browser_control_and_auth_headers"],
+      "limitation": "本地协议/鉴权攻击面测试；没有公网部署渗透验收。"
+    },
+    {
+      "id": "A22",
+      "scenario": "远端访问旧状态端点",
+      "status": "pass",
+      "evidence": ["tests/corona/test_adapter_proxy.py::test_onebot_http_sse_download_websocket_reconnect_and_status_peer"],
+      "limitation": "测试确认代理保留原始 peer 限制；没有外部网络部署验收。"
+    },
+    {
+      "id": "A23",
+      "scenario": "SSE/WS/上传/下载",
+      "status": "partial",
+      "evidence": ["tests/corona/test_adapter_proxy.py::test_proxy_metrics_and_control_health_during_core_restarts", "tests/corona/test_adapter_proxy.py::test_onebot_http_sse_download_websocket_reconnect_and_status_peer"],
+      "limitation": "真实本地 Nucleus 子进程覆盖 SSE、WebSocket、下载及 4 路并发 256 KiB 上传；未覆盖所有断连/取消和资源上限边界。"
+    },
+    {
+      "id": "A24",
+      "scenario": "HEAD/编码路径/重定向",
+      "status": "pass",
+      "evidence": ["tests/corona/test_adapter_proxy.py::test_encoded_separator_and_dot_segments_are_rejected_before_fallback", "tests/corona/test_nucleus_client.py::test_adapter_redirect_never_exposes_private_nucleus_origin"],
+      "limitation": "本地代理合同通过；没有额外真实反向代理/CDN 组合。"
+    },
+    {
+      "id": "A25",
+      "scenario": "模型离线/平台未连接",
+      "status": "partial",
+      "evidence": ["tests/corona/test_supervisor_processes.py::test_real_fake_core_reaches_ready_and_drains", "tests/nucleus/test_route_catalog.py::test_real_onebot_v11_driver_registers_exportable_public_routes"],
+      "limitation": "fake core 与 OneBot Driver 路由形状可启动；没有真实模型和未连接平台的整应用 degraded 状态验收。"
+    },
+    {
+      "id": "A26",
+      "scenario": "坏业务配置/缺失依赖",
+      "status": "partial",
+      "evidence": ["tests/corona/test_corona_app.py::test_corona_app_import_does_not_load_business_packages"],
+      "limitation": "Corona import fence 通过；坏业务配置下 UI 修复路径与真实依赖缺失没有组合验收。"
+    },
+    {
+      "id": "A27",
+      "scenario": "修改Corona端口/禁用WebUI",
+      "status": "partial",
+      "evidence": ["tests/corona/test_local_control.py::test_local_control_api_remains_online_when_browser_webui_is_disabled"],
+      "limitation": "WebUI disabled 时本机控制接口仍在；没有端口修改后的整进程重启与旧地址退出矩阵。"
+    },
+    {
+      "id": "A28",
+      "scenario": "旧启动/CLI/桌面/容器停止",
+      "status": "partial",
+      "evidence": ["tests/test_deploy_cli.py::test_cmd_status_reports_live_corona_and_nucleus", "tests/test_deploy_cli.py::test_cmd_status_reports_unreachable_owner_failure", "tests/test_install_contract.py::test_cli_bootstrap_success_maps_to_ready_exit_zero"],
+      "limitation": "CLI/安装合同有隔离测试；没有六类 final product 的真实统一 ownership/shutdown 矩阵。"
+    },
+    {
+      "id": "A29",
+      "scenario": "配置回退/数据库迁移",
+      "status": "partial",
+      "evidence": ["tests/corona/test_config_operations.py::test_failed_target_restores_one_previous_config_and_marks_rolled_back", "tests/corona/test_config_store.py::test_previous_environment_restore_is_conditional_and_journaled"],
+      "limitation": "配置事务回退与外部编辑保护通过；没有 schema-changing release rollback 或自动数据库回退。"
+    },
+    {
+      "id": "A30",
+      "scenario": "源码/发行包前端资产",
+      "status": "partial",
+      "evidence": ["pnpm --dir dashboard build", "pnpm --dir dashboard sync:webui", "diff -qr dashboard/dist webui/dist", "diff -qr dashboard/dist desktop/dashboard-dist"],
+      "limitation": "Dashboard build 和三份资产同步通过；没有验证每种产品中核心重启绝不会触发 pnpm。"
+    },
+    {
+      "id": "A31",
+      "scenario": "长时间与100次重启",
+      "status": "pass",
+      "evidence": ["tests/corona/test_supervisor_processes.py::test_linux_real_core_100_cycles_do_not_leak_or_overlap", "docs/reports/evidence/corona-nucleus-cn10/cn10-process-soak.json"],
+      "limitation": "Linux WSL2 上 100 个唯一进程均退出、独占 writer 100/100、无 orphan；按 40 次 warmup 后窗口/tolerance 比较 FD、线程与 pending tasks。此结果不代表 Windows 原生或长期运行验收。"
+    },
+    {
+      "id": "A32",
+      "scenario": "Windows/Linux/容器产品矩阵",
+      "status": "not_run",
+      "evidence": [],
+      "limitation": "当前为 Linux WSL2；Windows 原生、clean VM、Docker/container 和最终包矩阵未执行。"
+    },
+    {
+      "id": "A33",
+      "scenario": "NoneBot二次读取配置",
+      "status": "pass",
+      "evidence": ["tests/nucleus/test_snapshot_driver.py::test_locked_nonebot_driver_uses_process_snapshot_and_preserves_cwd", "tests/nucleus/test_nucleus_lifecycle.py::test_managed_framework_uses_locked_driver_and_ignores_dotenv"],
+      "limitation": "锁定 NoneBot Driver 的临时配置快照合同通过；只覆盖支持的锁定版本。"
+    },
+    {
+      "id": "A34",
+      "scenario": "混合群绑定写入",
+      "status": "pass",
+      "evidence": ["tests/corona/test_group_bindings.py::test_mixed_group_saga_commits_both_sides_before_success", "tests/corona/test_group_bindings.py::test_mixed_group_partial_compensation_blocks_future_apply"],
+      "limitation": "隔离文件/数据库上的 saga、补偿和阻塞合同通过；没有真实 WebUI 多操作者运行。"
+    }
+  ]
+}

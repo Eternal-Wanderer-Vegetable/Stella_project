@@ -301,6 +301,55 @@ RUNTIME_ENTRY_INVENTORY: tuple[RuntimeEntry, ...] = (
                      ("memory_rust/native/src/lib.rs", None),
                      ("config/settings.py", "MEMORY_BACKEND|RUST"),
                  )),
+    # Corona control-plane and cross-process boundaries (CN10): these entries
+    # intentionally have no message root; the manifest records boundaries and
+    # source/contract digests rather than flattening process calls into one graph.
+    RuntimeEntry("corona.owner.start", "lifecycle", "",
+                 ("deploy/control_client.py", "start"),
+                 "api", "CLI/start request resolves the live Corona owner before business settings",
+                 boundary="deploy control client -> authenticated local HTTP -> Corona -> CoreSupervisor -> Nucleus process tree",
+                 contract_files=(
+                     ("stella_contracts/local_control.py", None),
+                     ("corona/local_control.py", None),
+                     ("corona/supervisor.py", None),
+                 )),
+    RuntimeEntry("corona.owner.stop", "lifecycle", "",
+                 ("deploy/control_client.py", "stop"),
+                 "api", "CLI/desktop stop is routed to the same authenticated live owner",
+                 boundary="deploy control client -> authenticated local HTTP -> Corona -> owned Nucleus process tree",
+                 contract_files=(
+                     ("stella_contracts/local_control.py", None),
+                     ("corona/local_control.py", None),
+                     ("corona/supervisor.py", None),
+                 )),
+    RuntimeEntry("corona.config.apply", "lifecycle", "",
+                 ("corona/operations.py", "OperationManager.accept"),
+                 "api", "config acceptance records operation identity and desired revision before lifecycle work",
+                 boundary="WebUI/IPC request -> Corona operation journal and ConfigStore -> controller/core generation restart",
+                 contract_files=(
+                     ("corona/operations.py", None),
+                     ("corona/config_store.py", None),
+                     ("stella_contracts/config.py", None),
+                 )),
+    RuntimeEntry("corona.desktop.ipc_dispatch", "lifecycle", "",
+                 ("deploy/__main__.py", "main"),
+                 "api", "desktop invoke commands cross Rust IPC and CLI process into deploy control dispatch",
+                 boundary="Tauri command -> Python CLI subprocess -> deploy command -> Corona owner lookup",
+                 contract_files=(
+                     ("desktop/src-tauri/src/commands.rs", "start_bot|stop_bot|get_status"),
+                     ("cli/src/runner.rs", "runtime_cmd|run_output|run_passthrough"),
+                     ("deploy/control_client.py", None),
+                 )),
+    RuntimeEntry("corona.adapter_proxy.nucleus", "lifecycle", "",
+                 ("corona/adapter_proxy.py", "AdapterProxyMiddleware._http"),
+                 "api", "HTTP adapter traffic receives a minted request ID and a generation-bound actor",
+                 boundary="public Corona adapter proxy -> authenticated loopback HTTP -> separate Nucleus process; correlate request_id with instance_id/controller_boot_id/generation_id",
+                 contract_files=(
+                     ("corona/adapter_proxy.py", None),
+                     ("corona/nucleus_client.py", None),
+                     ("nucleus/api.py", None),
+                     ("stella_contracts/control.py", None),
+                 )),
 )
 
 

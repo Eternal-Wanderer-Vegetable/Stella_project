@@ -28,6 +28,16 @@ WebView2 运行时不在负载里，而是由 Tauri 的
 新增 Python 依赖 → 确认 `pip wheel` 能构建出 wheel；升级 playwright → 负载里的内核
 revision 必须与新版本一致（脚本现场安装，天然一致）。
 
+### Corona / Nucleus 发布范围（CN11）
+
+Python Standalone 与 OneClick 使用 `scripts/build_release_package.py` 的 `COMMON_DIRS` / `INSTALLER_DIRS` 明确纳入 `corona/`、`nucleus/`、`stella_bootstrap/`、`stella_contracts/`，并携带版本匹配的 `webui/dist/`。改包目录时需检查 zip 和 installer staging 两种成品；不能只以源码树或 import 测试看作已打包。
+
+排除清单是发布安全边界：`.stella/`、`.env` 与备份、控制客户端/ownership 状态、SQLite 主库及 `-wal` / `-shm` / `-journal` sidecar、日志和部署秘密不能进入归档、staging 或 Docker build context。新增用户数据文件时同步审查 `build_release_package.py` 与 `.dockerignore`，并用合成哨兵验证嵌套目录也被过滤。升级时复用原 `STELLA_HOME`，本计划没有改业务 schema。
+
+根 `pyproject.toml` 的 setuptools wheel 发现规则只包含 `stella_project*`；当前发布产品从源码树生成 Standalone/OneClick，并非根应用 wheel。若未来增加根应用 wheel，必须单独扩展包发现并验证四个新顶层包及资源，不能把现有插件 wheel 规则视为完整产品包。
+
+Docker Healthcheck 优先访问 `/_corona/v1/health`，旧 `/stella/status` 作为默认 legacy 入口的兼容回退；`core_phase` 描述 Nucleus 阶段，容器 healthy 不等价于业务 ready。Compose `stop_grace_period` 至少 65 秒。CN11 的默认入口切换仍须等待双平台干净 VM、真实 Docker、QQ/WebChat、模型、升级和回退验收；当前 `bot.py` 默认仍为 legacy。详见[实施计划](../plans/2026-10-23-corona-nucleus-engineering-plan.md)和[CN11 报告](../reports/2026-10-23-corona-nucleus-cn11.md)。
+
 ### 打 tag 前的检查清单
 
 1. `python -m pytest tests -q` 全绿

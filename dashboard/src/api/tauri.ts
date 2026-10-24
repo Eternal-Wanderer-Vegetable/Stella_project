@@ -37,4 +37,6 @@ export const tauriBridge = {
   runDoctor: () => invoke<string>("run_doctor"),
   /** 读取日志尾部。 */
   logTail: (maxBytes = 65536) => invoke<string>("read_log_tail", { maxBytes }),
+  /** 读取仅由 Corona 持有的桌面会话能力，用于本地 WebView 换取 Dashboard JWT。 */
+  desktopSessionSecret: () => invoke<string>("desktop_session_secret"),
 };

@@ -390,13 +390,14 @@ _NATIVE_BOUNDARIES = frozenset({"memory_rust"})
 class ProjectIndex:
     """repo-local Python 模块索引：包名 → 文件、每文件符号与导入。
 
-    只索引生产源码目录；tests/scripts/deploy 工具不参与闭包展开（其排除
-    规则进入 hash 语义——目录清单变化即 manifest 漂移）。
+    只索引下列生产源码目录；tests 不参与闭包展开。目录清单属于 hash
+    语义，变化即 manifest 漂移。
     """
 
     PACKAGE_DIRS = ("core", "memory", "capability", "cometa", "gravitas", "knowledge",
                     "webui", "config", "stella_project", "scripts",
-                    "astrbot_compat")
+                    "astrbot_compat", "corona", "nucleus", "deploy",
+                    "stella_bootstrap", "stella_contracts")
 
     def __init__(self, root: Path, package_dirs=None) -> None:
         self.root = root
