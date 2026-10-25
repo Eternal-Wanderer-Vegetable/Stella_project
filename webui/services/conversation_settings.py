@@ -11,11 +11,16 @@ from typing import Any
 
 from dotenv.parser import parse_stream
 
+import config.settings as settings
+from core.transport.keys import conversation_key_v2
+from core.transport.models import BotRef, SceneRef
+from memory.message_store import effective_history_filter
 from stella_bootstrap.transport_settings import (
     TransportSettingsError,
     TransportSettingsV1,
     parse_transport_settings_json,
 )
+from webui.db import connect_ro
 from webui.responses import ApiError
 from webui.services import envfile
 
@@ -46,19 +51,104 @@ def stored_json(parsed: TransportSettingsV1) -> str:
     return parsed.canonical_json.replace("${", r"\u0024{")
 
 
+def validate_memory_space_bindings(parsed: TransportSettingsV1) -> None:
+    """Validate persona targets and reject historical memory-space changes."""
+    persona_refs = {
+        binding.persona_ref for binding in parsed.bindings if binding.persona_ref is not None
+    }
+    if persona_refs:
+        from webui.services.spaces import list_spaces
+
+        known_personas = {str(item["name"]) for item in list_spaces()}
+        missing = sorted(persona_refs - known_personas)
+        if missing:
+            raise ApiError(
+                "persona_reference_not_found",
+                data={"code": "persona_reference_not_found", "missing": missing},
+            )
+    if not parsed.bindings:
+        return
+    conn = connect_ro(Path(settings.DB_PATH))
+    if conn is None:
+        return
+    try:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name IN ('conversation_registry_v2', 'group_messages')"
+            ).fetchall()
+        }
+        if "conversation_registry_v2" not in tables or "group_messages" not in tables:
+            return
+        message_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(group_messages)").fetchall()
+        }
+        required = {"connection_id", "conversation_key"}
+        if not required.issubset(message_columns):
+            return
+        connections = {item.connection_id: item for item in parsed.connections}
+        cursor = conn.cursor()
+        effective_filter = effective_history_filter(cursor)
+        for binding in parsed.bindings:
+            if binding.memory_space is None:
+                continue
+            connection = connections[binding.connection_id]
+            key = conversation_key_v2(
+                BotRef(
+                    connection.connection_id,
+                    connection.adapter,
+                    connection.platform_scope,
+                    connection.self_id,
+                ),
+                SceneRef(
+                    binding.scene_kind,
+                    binding.scene_id,
+                    binding.parent_path,
+                    binding.thread_id,
+                ),
+            )
+            registry = conn.execute(
+                "SELECT memory_space FROM conversation_registry_v2 "
+                "WHERE conversation_key = ?",
+                (key,),
+            ).fetchone()
+            if registry is None or str(registry[0]) == binding.memory_space:
+                continue
+            count = conn.execute(
+                "SELECT COUNT(*) FROM group_messages "
+                "WHERE connection_id = ? AND conversation_key = ? "
+                f"{effective_filter}",
+                (connection.connection_id, key),
+            ).fetchone()[0]
+            if count:
+                raise ApiError(
+                    "memory_space_change_requires_migration_preview",
+                    data={"code": "memory_space_change_requires_migration_preview"},
+                )
+    finally:
+        conn.close()
+
+
 def managed_response_data(
     raw: str | None,
     *,
+    applied_raw: str | None,
     desired_revision: str,
     applied_revision: str,
     source: str,
     applied_source: str,
 ) -> dict[str, Any]:
     try:
+        applied = settings_object(parse_stored_value(applied_raw))
+    except TransportSettingsError:
+        applied = None
+    try:
         parsed = parse_stored_value(raw)
     except TransportSettingsError:
         return {
             "settings": None,
+            "applied_settings": applied,
             "valid": False,
             "error_code": "transport_settings_invalid",
             "desired_revision": desired_revision,
@@ -69,6 +159,7 @@ def managed_response_data(
         }
     return {
         "settings": settings_object(parsed),
+        "applied_settings": applied,
         "valid": True,
         "desired_revision": desired_revision,
         "applied_revision": applied_revision,

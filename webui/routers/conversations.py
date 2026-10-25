@@ -10,7 +10,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query
 
 from webui.auth import require_auth
-from webui.responses import ok
+from webui.responses import ApiError, ok
 from webui.services import conversations as conv_service
 
 router = APIRouter(
@@ -41,3 +41,50 @@ async def conversation_context(group_id: str) -> Any:
             "consolidation": conv_service.consolidation_checkpoint(group_id),
         }
     )
+
+
+@router.get("/api/v1/conversations/scenes")
+async def transport_conversation_scenes(
+    adapter: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+    connection_id: Annotated[str | None, Query(min_length=1, max_length=36)] = None,
+    kind: Annotated[str | None, Query(min_length=1, max_length=32)] = None,
+) -> Any:
+    return ok(
+        {
+            "scenes": conv_service.transport_scenes(
+                adapter=adapter, connection_id=connection_id, kind=kind
+            )
+        }
+    )
+
+
+@router.get("/api/v1/conversations/messages")
+async def list_transport_messages(
+    conversation_key: Annotated[str, Query(min_length=4, max_length=8192)],
+    page_size: Annotated[int, Query(ge=1, le=200)] = 50,
+    cursor: Annotated[int | None, Query(gt=0)] = None,
+    snapshot_id: Annotated[int | None, Query(ge=0)] = None,
+) -> Any:
+    try:
+        data = conv_service.transport_messages(
+            conversation_key,
+            limit=page_size,
+            cursor=cursor,
+            snapshot_id=snapshot_id,
+        )
+    except ValueError as exc:
+        code = (
+            "conversation_key_invalid"
+            if str(exc) == "conversation_key_invalid"
+            else "history_cursor_invalid"
+        )
+        raise ApiError(
+            code, data={"code": code}
+        ) from exc
+    except LookupError as exc:
+        raise ApiError(
+            "conversation_not_registered",
+            status_code=404,
+            data={"code": "conversation_not_registered"},
+        ) from exc
+    return ok(data)

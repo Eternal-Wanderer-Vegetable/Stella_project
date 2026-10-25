@@ -468,6 +468,7 @@ async def platform_conversation_settings(
     applied, _applied_path = store.current_revision("applied")
     data = conversation_settings_service.managed_response_data(
         desired.values.get(conversation_settings_service.SETTINGS_KEY),
+        applied_raw=applied.values.get(conversation_settings_service.SETTINGS_KEY),
         desired_revision=desired.revision_id,
         applied_revision=applied.revision_id,
         source=desired.sources.get(conversation_settings_service.SETTINGS_KEY, "default"),
@@ -498,6 +499,7 @@ async def platform_conversation_settings_put(
         raise ApiError(
             str(exc), data={"code": "transport_settings_invalid"}
         ) from exc
+    conversation_settings_service.validate_memory_space_bindings(parsed)
 
     key = conversation_settings_service.SETTINGS_KEY
     result = _save(
@@ -513,6 +515,7 @@ async def platform_conversation_settings_put(
     result.update(
         conversation_settings_service.managed_response_data(
             desired.values.get(key),
+            applied_raw=applied.values.get(key),
             desired_revision=desired.revision_id,
             applied_revision=applied.revision_id,
             source=desired.sources.get(key, "default"),

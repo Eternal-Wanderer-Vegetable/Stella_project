@@ -168,6 +168,7 @@ async def platform_conversation_settings_put(
         raise ApiError(
             str(exc), data={"code": "transport_settings_invalid"}
         ) from exc
+    conversation_settings_service.validate_memory_space_bindings(parsed)
 
     data, digest = conversation_settings_service.save_legacy(
         parsed, expected_digest=expected_digest

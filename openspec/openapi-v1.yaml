@@ -331,6 +331,57 @@ paths:
         "200":
           description: OK
 
+  /api/v1/conversations/scenes:
+    get:
+      tags: [conversations]
+      summary: 已注册的跨平台会话场景（只返回规范身份与计数）
+      description: 只读已存在的 V2 注册表；不创建 schema，不把不透明 ID 转成数字。
+      x-stella-milestone: P07
+      parameters:
+        - name: adapter
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: connection_id
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 36 }
+        - name: kind
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 32 }
+      responses:
+        "200":
+          description: OK（envelope.data = {scenes[]}；每项含 connection/scene、conversation_key、memory_space、有效消息计数）
+        "401":
+          description: 未认证
+  /api/v1/conversations/messages:
+    get:
+      tags: [conversations]
+      summary: 单个已注册 V2 会话的有效消息分页
+      description: 使用完整规范 conversation_key 和 connection_id 过滤，并隐藏已被编辑替换或删除的来源行。
+      x-stella-milestone: P07
+      parameters:
+        - name: conversation_key
+          in: query
+          required: true
+          schema: { type: string, minLength: 4, maxLength: 8192 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          description: 前一页最后一条内部行 ID；必须和首次响应的 snapshot_id 一起传入。
+          schema: { type: integer, minimum: 1 }
+        - name: snapshot_id
+          in: query
+          description: 首次响应返回的高水位行 ID，后续页固定使用以避免新消息移动页边界。
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: OK（envelope.data = {conversation_key, total, items[], snapshot_id, next_cursor}）
+        "401":
+          description: 未认证
+        "404":
+          description: 会话未注册
+
   /api/v1/trace/memory:
     get:
       tags: [trace]
@@ -457,7 +508,7 @@ paths:
     get:
       tags: [config]
       summary: 读取版本化会话策略与连接设置
-      description: 返回安全 DTO、managed desired/applied 来源或 legacy effective/applied 来源及用于后续 CAS 的 ETag；不回显凭据值。
+      description: 返回安全 DTO、managed desired/applied bundle 与来源或 legacy effective/applied 来源及用于后续 CAS 的 ETag；不回显凭据值。
       x-stella-milestone: M2
       responses:
         "200":
@@ -491,7 +542,7 @@ paths:
             ETag:
               schema: { type: string }
         "400":
-          description: JSON bundle 或策略合同无效
+          description: JSON bundle/引用无效，或非空历史会话尝试更改 memory_space
         "409":
           description: If-Match 冲突或幂等键复用冲突
         "428":

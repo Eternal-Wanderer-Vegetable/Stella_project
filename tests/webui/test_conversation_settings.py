@@ -5,9 +5,14 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+
+import config.settings as settings
+from core.transport.keys import conversation_key_v2
+from core.transport.models import BotRef, SceneRef
 
 
 def _bundle() -> dict:
@@ -75,6 +80,7 @@ def test_legacy_conversation_settings_roundtrip_and_stale_write_rejected(
     assert saved.status_code == 200, saved.text
     assert saved.json()["data"]["valid"] is True
     assert saved.json()["data"]["settings"] == _bundle()
+    assert saved.json()["data"]["applied_settings"] == {"version": 1}
     assert saved.json()["data"]["source"] == "data_env"
     assert saved.json()["data"]["restart_required"] is True
     assert saved.headers["ETag"] != current.headers["ETag"]
@@ -115,6 +121,89 @@ def test_legacy_conversation_settings_put_deduplicates_existing_key(
     assert (isolated_home / ".env").read_text(encoding="utf-8").count(
         f"{SETTINGS_KEY}="
     ) == 1
+
+
+def test_legacy_conversation_settings_rejects_memory_space_change_with_history(
+    client: TestClient, isolated_home: Path, monkeypatch
+):
+    connection_id = "11111111-1111-4111-8111-111111111111"
+    key = conversation_key_v2(
+        BotRef(connection_id, "telegram", "telegram", "007:雪"),
+        SceneRef("group", "room:007"),
+    )
+    db = isolated_home / "memory" / "agent_memory.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "DB_PATH", db)
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE conversation_registry_v2 (
+            conversation_key TEXT PRIMARY KEY,
+            memory_space TEXT NOT NULL
+        );
+        CREATE TABLE group_messages (
+            id INTEGER PRIMARY KEY, timestamp TEXT, user_id TEXT, content TEXT,
+            source_kind TEXT, msg_id INTEGER, platform_message_id TEXT,
+            connection_id TEXT, conversation_key TEXT
+        );
+        """
+    )
+    conn.execute(
+        "INSERT INTO conversation_registry_v2 VALUES (?, 'space-a')", (key,)
+    )
+    conn.execute(
+        "INSERT INTO group_messages VALUES (1, '2026-10-25T00:00:00Z', 'u1', 'hello', "
+        "'PASSIVE', NULL, 'msg:1', ?, ?)",
+        (connection_id, key),
+    )
+    conn.commit()
+    conn.close()
+
+    bundle = _bundle()
+    bundle["bindings"] = [{
+        "connection_id": connection_id,
+        "scene": {"kind": "group", "scene_id": "room:007"},
+        "policy_profile_id": "default",
+        "memory_space": "space-b",
+    }]
+    headers = _auth(client)
+    current = client.get("/api/v1/platform/conversation-settings", headers=headers)
+    rejected = client.put(
+        "/api/v1/platform/conversation-settings",
+        content=json.dumps(bundle, ensure_ascii=False).encode("utf-8"),
+        headers={**headers, "If-Match": current.headers["ETag"]},
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["data"]["code"] == "memory_space_change_requires_migration_preview"
+
+    bundle["bindings"][0]["memory_space"] = "space-a"
+    accepted = client.put(
+        "/api/v1/platform/conversation-settings",
+        content=json.dumps(bundle, ensure_ascii=False).encode("utf-8"),
+        headers={**headers, "If-Match": current.headers["ETag"]},
+    )
+    assert accepted.status_code == 200, accepted.text
+
+
+def test_legacy_conversation_settings_requires_an_existing_persona(
+    client: TestClient,
+):
+    headers = _auth(client)
+    current = client.get("/api/v1/platform/conversation-settings", headers=headers)
+    bundle = _bundle()
+    bundle["bindings"] = [{
+        "connection_id": "11111111-1111-4111-8111-111111111111",
+        "scene": {"kind": "group", "scene_id": "opaque:007"},
+        "policy_profile_id": "default",
+        "persona_ref": "missing-persona",
+    }]
+    rejected = client.put(
+        "/api/v1/platform/conversation-settings",
+        content=json.dumps(bundle, ensure_ascii=False).encode("utf-8"),
+        headers={**headers, "If-Match": current.headers["ETag"]},
+    )
+    assert rejected.status_code == 400
+    assert rejected.json()["data"]["code"] == "persona_reference_not_found"
 
 
 def test_legacy_conversation_settings_exposes_profile_and_external_overrides(

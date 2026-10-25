@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 
 import { api, unwrap } from '@/api/http';
+import ConversationPolicyEditor from '@/components/ConversationPolicyEditor.vue';
 import { toastApiError, useToast } from '@/stores/toast';
 import { useSystemStore } from '@/stores/system';
 
@@ -321,6 +322,7 @@ onMounted(loadPage);
       群组与空间列表可能来自旧核心缓存。核心恢复后可重新载入。
       <v-btn size="small" variant="text" @click="loadPage">重新载入</v-btn>
     </v-alert>
+    <ConversationPolicyEditor :space-names="spaces.map((space) => space.name)" />
 
     <v-card class="mb-6">
       <v-card-title class="d-flex align-center ga-2">

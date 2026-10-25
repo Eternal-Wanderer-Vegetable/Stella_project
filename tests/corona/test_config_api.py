@@ -405,6 +405,7 @@ def test_corona_conversation_settings_cas_idempotency_apply_and_core_down_save(
         current = client.get(route, headers=headers)
         assert current.status_code == 200
         assert current.json()["data"]["settings"] == {"version": 1}
+        assert current.json()["data"]["applied_settings"] == {"version": 1}
         assert current.headers["ETag"] == f'"{initial_revision}"'
 
         body = json.dumps(_transport_bundle(), ensure_ascii=False).encode("utf-8")
@@ -453,6 +454,7 @@ def test_corona_conversation_settings_cas_idempotency_apply_and_core_down_save(
         assert saved.status_code == 200, saved.text
         saved_data = saved.json()["data"]
         assert saved_data["valid"] is True
+        assert saved_data["applied_settings"] == {"version": 1}
         assert saved_data["settings"] == _transport_bundle()
         assert saved_data["source"] == "data_env"
         assert saved_data["applied_revision"] == initial_revision
