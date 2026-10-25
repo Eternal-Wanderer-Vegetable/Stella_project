@@ -1,12 +1,13 @@
 ## Current P07 Handoff — policy UI and cross-platform message history
 
-- Status: P07 implementation and focused verification are complete on branch `codex/multiplatform-policy-message-pipeline`; independent package commit is pending. Base is P06-Q `f427ae093bb9bf30dcb65cf7e4292e4dad8cdaf4`. `XPLAT-PIPELINE-IMPLEMENTATION` remains in progress; `CORONA-IMPL` stays blocked/untouched.
+- Status: P07 implementation and focused verification are complete and committed as `f231abe33c09d0549b8b0ce32ac8923b3c01e9e8` on branch `codex/multiplatform-policy-message-pipeline`. Base is P06-Q `f427ae093bb9bf30dcb65cf7e4292e4dad8cdaf4`. `XPLAT-PIPELINE-IMPLEMENTATION` remains in progress; `CORONA-IMPL` stays blocked/untouched.
 - Delivered: authenticated V2 scene listing and exact history APIs with effective edit/delete filtering and stable high-water cursor paging; Persona/Platforms policy editing with managed CAS/idempotency/system-store apply, applied/source revision display, profile/persona/memory space selection and fixture/live capability evidence; separate cross-platform history page while retaining QQ legacy history. Server-side persona-reference and historical memory-space safeguards, active-binding space-delete refusal, OpenAPI and route ownership were added.
 - GitNexus pre-edit/source audit: conversations service LOW (13 impacted/4 direct); messages LOW (one direct/process); managed response LOW (two callers); legacy config settings PUT UNKNOWN and source-audited; space list LOW/two callers; space delete LOW/one route caller. Dashboard view impacts were UNKNOWN/0; their route mounts were checked. V2 registry listing was UNKNOWN; source audit found the existing helper can cause DDL, so the new query uses a read-only existing-registry path. No high/critical impact was changed.
 - Verification: isolated Python suite **47 passed**, 2 existing FastAPI duplicate operation-ID warnings; Dashboard **110 tests passed** (9 files), Vite build and `sync:webui` succeeded. Ruff, py_compile, docs (121 files/1322 links/577 anchors/0 errors), and diff check passed. Build has existing mixed-import/chunk-size warnings. Full Python/live/model/platform/native/VM gates were not run.
 - Data boundary: verification used `STELLA_HOME=/tmp/stella-p07-check-20261025`; no production database, credentials, service, Bot or platform was accessed. Matrix remains 0/32 certified; P04 native wheel/API parity and restore drill remain open; overall plan NOT READY.
 - GitNexus pre-commit: `detect-changes --scope all --limit 2000` exited 0 with 21 files / 47 symbols / 17 processes / CRITICAL; `--scope compare --base-ref main --limit 2000` exited 0 with 73 files / 719 symbols / 75 processes / CRITICAL. The compare is cumulative; preserve CRITICAL and the known extraction/attribution limits. Repeated calls, including after evidence edits, returned the same counts; no partial/truncated marker was emitted.
-- Next: finish state/plan evidence, rerun GitNexus all and compare-main, commit P07 separately, then begin P08 with fresh upstream impacts.
+- Package commit: `f231abe33c09d0549b8b0ce32ac8923b3c01e9e8` (`feat(policy): add scene policy and cross-platform history`).
+- Next: begin P08 with fresh upstream impacts.
 
 ## Completed P06-Q Handoff — official QQ adapter fixtures
 
@@ -20,7 +21,7 @@
 
 ## Current Objective — XPLAT pipeline implementation (2026-10-25)
 
-- Status: `XPLAT-PIPELINE-IMPLEMENTATION` is the sole active and in-progress feature. G0, P00–P06-Q are committed; P07 implementation/verification is complete and its independent package commit is pending. P04 `4de5a06d` remains open for native acceptance; P05 is `f44cee13`. `CORONA-IMPL` remains blocked and untouched.
+- Status: `XPLAT-PIPELINE-IMPLEMENTATION` is the sole active and in-progress feature. G0, P00–P07 are committed; P07 package commit is `f231abe33c09d0549b8b0ce32ac8923b3c01e9e8`. P04 `4de5a06d` remains open for native acceptance; P05 is `f44cee13`. `CORONA-IMPL` remains blocked and untouched.
 - Branch/base: `codex/multiplatform-policy-message-pipeline`; P06-Q base `f427ae093bb9bf30dcb65cf7e4292e4dad8cdaf4`; P04 native acceptance remains open.
 - Plan: [2026-10-25 GitNexus plan](docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md). Work through G0/P00–P10 in order, one package per reviewable commit; never enable a platform by default or claim live certification from fixtures.
 - G0 evidence: GitNexus 1.6.12 index-only PDG build succeeded; status is up-to-date at the source HEAD with no incomplete reasons. Five primary impacts and local PDG slices were queried. Admission and recorder are CRITICAL, outbound is HIGH, registry MEDIUM, group-binding execute is LOW lower-bound; unresolved receiver-typed call sites and process-extraction truncation are recorded in progress.md and the plan.
