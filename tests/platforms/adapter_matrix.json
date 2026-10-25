@@ -338,24 +338,35 @@
       "package_name": "nonebot-adapter-telegram",
       "priority": "P1",
       "package_observation": {
-        "status": "not_installed",
-        "version": null,
-        "requires_python": null,
-        "source": "isolated execution environment importlib.metadata"
+        "status": "observed_installed",
+        "version": "0.1.0b20",
+        "requires_python": ">=3.9,<4.0",
+        "source": "temporary /tmp target install of the requirements-platform.lock wheel; repository .venv remains unmodified"
       },
       "driver_requirements": {
-        "status": "not_assessed",
-        "observed": null,
-        "evidence": []
+        "status": "partial",
+        "observed": "Locked adapter source selects polling with get_updates or webhook via the configured NoneBot driver HTTP server; no runtime driver lifecycle or live connection was exercised.",
+        "evidence": [
+          "tests/platforms/test_telegram_adapter.py"
+        ]
       },
-      "normalizer": null,
-      "exporter": null,
-      "target_codec": null,
-      "capability_provider": null,
+      "normalizer": "core.transport.adapters.telegram.TelegramNormalizer",
+      "exporter": "core.transport.adapters.telegram.TelegramExporter",
+      "target_codec": "core.transport.adapters.telegram.TelegramTargetCodec",
+      "capability_provider": "core.transport.adapters.telegram.TELEGRAM_CAPABILITIES via StaticCapabilityProvider",
       "scenarios": {
-        "status": "not_assessed",
-        "covered": [],
-        "evidence": []
+        "status": "partial",
+        "covered": [
+          "PrivateMessageEvent with opaque Telegram user/chat/message identities",
+          "GroupMessageEvent and ForumTopicMessageEvent preserving chat and message_thread_id",
+          "reply relation scoped to the same configured connection and canonical conversation",
+          "image metadata placeholder without persisting Telegram file_id",
+          "enabled telegram settings connection routed through TransportIngress",
+          "fake send_to preserving exact Bot/chat/topic and opaque API receipt ID"
+        ],
+        "evidence": [
+          "tests/platforms/test_telegram_adapter.py"
+        ]
       },
       "permissions": {
         "status": "not_assessed",
@@ -377,48 +388,61 @@
       },
       "levels": {
         "L0": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_telegram_adapter.py"
+          ],
+          "reason": "The exact lock-pinned wheel imports in an isolated temporary target and fixture codecs run; runtime driver startup and live account setup remain untested."
         },
         "L1": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_telegram_adapter.py"
+          ],
+          "reason": "Private, group, and forum-topic event models normalize to the configured connection and fake target; no live Telegram exchange occurred."
         },
         "L2": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_telegram_adapter.py"
+          ],
+          "reason": "Reply identity and safe image metadata pass fixture checks; persisted relationship/media retrieval and live media exchange are not certified."
         },
         "L3": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_telegram_adapter.py"
+          ],
+          "reason": "Fake send_to covers text/reply route and receipt; endpoint acceptance, permissions, media send, send windows, rate limits, and direct-messages topics remain unverified."
         }
       },
       "final_status": "not_certified",
       "status_evidence": [
         {
           "kind": "execution_scope",
-          "result": "No live platform endpoint or account was used in this isolated local work package."
+          "result": "No live Telegram account, endpoint, credential, model, or production data was used."
         },
         {
           "kind": "package_probe",
-          "result": "Package observation status: not_installed."
+          "result": "Exact locked wheel nonebot-adapter-telegram==0.1.0b20 was installed under /tmp only for fixtures; .venv remains unchanged."
+        },
+        {
+          "kind": "local_fixture_scope",
+          "result": "L0 local/fixture passed; L1 private/group/forum-topic fixtures passed; L2 and L3 are partial fixture evidence; all live levels remain not_run."
         }
       ],
       "blockers": [
-        "L0-L3 platform-specific certification is incomplete.",
-        "No live exchange, account recovery, or clean-VM installation was executed."
+        "Direct-messages topics use a separate direct_messages_topic_id field that the locked adapter does not expose.",
+        "No live account exchange, permission validation, or runtime driver lifecycle was executed.",
+        "Reply persistence/retrieval, media upload/download, send windows, rate limits, and clean-VM installation remain unverified."
       ]
     },
     {

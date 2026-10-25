@@ -3,11 +3,11 @@
 > Task: 按 G0/P00–P10 逐包实施多平台发言策略、可信会话、统一消息存储与精确回投；本文件同时保留原研究基线与每包执行证据。
 > Evidence verified at commit `17e631028344332fcab5dc0f7dbb1ff0cdd0c64b`（main，与本轮 fetch 后 origin/main 一致）。AstrBot `f61a7f42696da6df25dc7a249ec9b8d54ed9da18`（4.29.3）。日期：2026-10-25，Asia/Shanghai。
 > Depth: deep · form: full · freshness: strict requested · impact_depth: 3。GitNexus 1.6.12 runner 身份已核验 current；唯一一次 `analyze --index-only --pdg --workers 1` 退出 1，日志无明确错误原因，索引仍为旧 `3825f99` 并标记 `incremental-in-progress`。**当前图不承担实施放行依据；本计划为 source-weighted，执行必须先完成 G0 图恢复门禁。**
-> Provenance: schema 2; global dirty digest `24bc5151382734102edf6be35171f876c91e3b1ca1bf3b4af5856d022cf82f61`; 103 sorted cited-path entries; exact generated plan path excluded.
+> Provenance: schema 2; global dirty digest f22012d994d420b0437cb54ab7b45ec323ad03e9a443cc676ecfa05af6318791; 105 sorted cited-path entries; exact generated plan path excluded.
 
 G0 implementation re-anchor (2026-10-25): the verified GitNexus 1.6.12 runner rebuilt an index with PDG successfully at source HEAD 17e631028344332fcab5dc0f7dbb1ff0cdd0c64b. status --json is up-to-date with no incomplete reasons; current upstream impacts and local PDG slices are recorded in sections 4, 5 and 9. Flow extraction still drops candidate entry points, callees and traces; source reference checks remain required where impact is lower-bound.
 
-`[verified]` 表示在上述提交/当前工作树读取确认（外部资料另给固定提交）；`[graph]` 表示本轮工具输出但未被源码确认；`[inferred]` 表示设计决策或推导；`[assumed]` 必须在 §12 验证。新文件/新符号均明确标为“拟新增”，不声称已经实现。
+`[verified]` 表示在对应提交/工作树读取确认（外部资料另给固定提交）；`[graph]` 表示工具输出但未被源码确认；`[inferred]` 表示设计决策或推导。§1–§10保留研究基线与候选设计，已实施内容及当前包状态见§7和§11；不再把已落地的P00–P06-T笼统称为拟新增。
 
 ## 1. Objective
 
@@ -86,6 +86,13 @@ flowchart LR
 | GroupBindingsCoordinator.execute | LOW / lower-bound；1 个 d=1 production handler；15 个通用 execute call sites 未解析 | 源码确认 install_group_bindings.groups_bindings 经 coordinator.execute 进入 saga，corona/app.py 负责装配；低图 risk 不覆盖未解析调用 |
 
 G0 的 d=1 与§4.2 source-derived 生产消费者已调和，没有发现需要新增的生产消费者类别。impact 结果中的 lower-bound 与分析器截断继续保留为约束，不升格为完整调用全集。
+
+### 4.1.2 P06-T Telegram fixture closeout (2026-10-25)
+
+- Base: P05 commit `f44cee13633760b8be248f774f80316c2f965809`; `EventNormalizer` upstream impact LOW/exact (4 direct, 14 total), `NormalizedEvent` CRITICAL/exact (4 direct, 191 total / 182 reported processes; unchanged), and `TransportIngress` UNKNOWN/0. Source audit found ingress construction only in the pipeline fixture and no production call site. New Telegram symbols are UNKNOWN/0; source audit found fixture references only and no production registration path.
+- The locked `nonebot-adapter-telegram==0.1.0b20` wheel source was inspected and installed only under `/tmp`; repository `.venv` was not modified. `message_thread_id` is present for forum topics and `Bot.send_to` accepts chat/thread routing. The current official Bot API has separate `direct_messages_topic_id`, absent from this pinned adapter; direct-message topic support remains unsupported. Ephemeral message ID `0` is rejected for durable relations.
+- Focused isolated tests passed 72 with two existing warnings; Ruff, py_compile, import boundary and docs passed. Flow check exits 1 because 21 body anchors changed with no topology change; final immutable refresh belongs to P10. No live account or production data was used. Telegram remains not_certified; matrix remains 0/32.
+- Repeated identical staged GitNexus structured calls had no error/partial/truncated: `scope=all` 9 files / 26–35 symbols / 784–791 affected processes / CRITICAL; `scope=compare base_ref=main` 56 files / 144–155 symbols / 791–792 processes / CRITICAL. Last repeated result: all 26 symbols / 791 processes; compare 144 symbols / 791 processes. Code symbols are additive Telegram classes/constants and fixture names; generic Get_config/Cometa/skill/main process attribution does not identify a Telegram route, so retain CRITICAL and do not waive it. Index limits remain: 39 large files skipped; 3,262/3,462 candidate entries unranked; 925 callees skipped; 46 walks cut; 23 traces capped. Counts varied across identical runs on the same staged tree; all runs remained CRITICAL and complete.
 
 ### 4.2 五个主符号及直接消费者核算（source-derived）
 
@@ -262,7 +269,7 @@ Native 前置：安装仓库支持的 Rust toolchain/maturin（在隔离build环
 
 ## 9. Risk and Impact Analysis
 
-G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITICAL（lower-bound）、OutboundService.send=HIGH（lower-bound）、register_conversation_v2=MEDIUM、GroupBindingsCoordinator.execute=LOW（lower-bound）；d=1 与未解析边界见§4.1.1。整体不按 LOW 放行。下列 **[inferred] 工程风险等级** 与 graph risk 分开：
+G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITICAL（lower-bound）、OutboundService.send=HIGH（lower-bound）、register_conversation_v2=MEDIUM、GroupBindingsCoordinator.execute=LOW（lower-bound）；d=1 与未解析边界见§4.1.1。整体不按 LOW 放行。下列 **[inferred] 工程风险等级** 与 graph risk 分开。P06-T 新增符号为UNKNOWN/0且来源审计没有生产注册路径；staged all/compare 聚合仍为CRITICAL，generic-property扇出不构成风险豁免。
 
 - **CRITICAL：来源/身份/记忆隔离。** 涉及 record_message四消费者、registry接线、owner scope、native schema。channel/thread不能沿用None退回宽松旧路径；不得按昵称、数字正负、共享人格推授权。
 - **HIGH：发送与后台恢复。** send五类网关用途及后台sender、Cometa桥；每段receipt保留，429与UNKNOWN分清，generation/目标期限和账号精确性重验。
@@ -270,12 +277,13 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 - **HIGH：采集事务与压力。** duplicate事件检查、压力计数与正文/组件写入保持短锁；不得将附件下载或模型调用放入事务。commit失败修正capture结果后，所有四消费者须有失败分支。
 - **HIGH：能力速率与格式。** 独立bucket交集，长度单位/markup留给平台；限流队列有界、deadline包含等待。临时URL、Bot repr、配置bundle正文不进审计日志。
 - **MEDIUM：管理页读写与兼容。** Persona目前两个PUT有部分成功提示；不能包装成原子保存。历史API保留旧字段，新增平台用string IDs，分页稳定游标且过滤受鉴权控制。
+- **HIGH：Telegram 适配器边界。** Fixture-only 适配器有显式启用门、精确 Bot/chat/topic target 与无 UNKNOWN 重试；locked SDK 缺 `direct_messages_topic_id`，live driver、权限、媒体/关系、发送窗口/限额仍未验证。范围扩展须先补齐源码合同与真实 fixture/live 证据，不能从通用流程摘要推断认证。
 
 可观测性字段：connection_id、规范会话摘要/受控key、adapter、scene kind、revision/generation、policy decision/reason、capture result、queue wait、delivery status/part count、media availability、schema。禁止凭据/聊天全文混入公开证据。对全部§4 source-derived直接消费者逐项勾回归；G0发现的额外d=1同样必须加入。
 
 ## 10. Files Expected to Change
 
-以下是实施候选清单，不代表本轮改动；新文件名为明确拟议。每包落地前先核对G0后的引用和最新目录。
+以下是原始实施候选清单；P00–P06-T的实际新增/修改文件及状态以§7/§11证据为准。后续包仍须逐包核对当前目录与GitNexus引用。
 
 | 文件/组 | 已核验符号或拟新增责任 | 包 |
 | --- | --- | --- |
@@ -302,7 +310,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ```json
 {
   "implementation_context": {
-    "task_summary": "G0 and P00–P05 source packages are implemented and separately committed or staged for their package commit. P04 Rust/native wheel/API-schema parity and restore drill remain open. P05 is verified; P06-T Telegram fixtures are next. Adapter matrix is 0/32 certified; no live platform/model/clean-VM acceptance.",
+    "task_summary": "G0 and P00–P05 are separately committed; P04 Rust/native wheel/API-schema parity and restore drill remain open. P05 commit is f44cee13633760b8be248f774f80316c2f965809. P06-T Telegram fixture implementation is complete and being closed as a separate package; live Telegram certification is unavailable, the 32-adapter matrix remains 0 certified, and the overall plan is NOT READY.",
     "acceptance_criteria": [
       "Current graph/PDG and every d=1 reconciled before code edits",
       "Managed/legacy settings preserve revision/CAS/idempotency/apply recovery",
@@ -314,12 +322,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
     ],
     "evidence_provenance": {
       "schema_version": 2,
-      "head_commit": "4de5a06d9d8be6ad3e83ea92d14322a6f269a49d",
+      "head_commit": "f44cee13633760b8be248f774f80316c2f965809",
       "generated_plan_path": "docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md",
       "global_dirty_digest": {
         "algorithm": "sha256",
         "canonicalization": "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records",
-        "value": "24bc5151382734102edf6be35171f876c91e3b1ca1bf3b4af5856d022cf82f61"
+        "value": "f22012d994d420b0437cb54ab7b45ec323ad03e9a443cc676ecfa05af6318791"
       },
       "cited_path_manifest": [
         {
@@ -518,16 +526,16 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "path": "core/transport/adapters/telegram.py",
           "object_kind": {
             "head": "absent",
-            "index": "absent",
-            "worktree": "absent",
+            "index": "regular",
+            "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "absent",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "absent",
-          "index_digest": "absent",
-          "worktree_digest": "absent",
+          "index_digest": "sha256:120bed8eb9d27233a8e89b5046d5882a7f9b4d4bab5016101bcafa55694fa02e",
+          "worktree_digest": "sha256:120bed8eb9d27233a8e89b5046d5882a7f9b4d4bab5016101bcafa55694fa02e",
           "untracked_digest": "absent"
         },
         {
@@ -538,10 +546,10 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:59785306b512cbe20e23122efc5409d1f48f59baa68b80695838f63428b9847a",
+          "head_digest": "sha256:31183882924210a32a42162774e46663b4c39546d0f278141796343e11a25652",
           "index_digest": "sha256:31183882924210a32a42162774e46663b4c39546d0f278141796343e11a25652",
           "worktree_digest": "sha256:31183882924210a32a42162774e46663b4c39546d0f278141796343e11a25652",
           "untracked_digest": "absent"
@@ -634,10 +642,10 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:99ba02522a1b766b16495376aab842ab84bd493ac6f46cf47f570364c959543f",
+          "head_digest": "sha256:ef634217b9adca396845f18bb71c2f220ba8edfb373b988d69af4c81c74c00dc",
           "index_digest": "sha256:ef634217b9adca396845f18bb71c2f220ba8edfb373b988d69af4c81c74c00dc",
           "worktree_digest": "sha256:ef634217b9adca396845f18bb71c2f220ba8edfb373b988d69af4c81c74c00dc",
           "untracked_digest": "absent"
@@ -661,15 +669,15 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
         {
           "path": "core/transport/scheduler.py",
           "object_kind": {
-            "head": "absent",
+            "head": "regular",
             "index": "regular",
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "absent",
+          "head_digest": "sha256:aaa35bc80786b69b487c21c80045749f646b7bad0290d0d68b27f29340c9cffb",
           "index_digest": "sha256:aaa35bc80786b69b487c21c80045749f646b7bad0290d0d68b27f29340c9cffb",
           "worktree_digest": "sha256:aaa35bc80786b69b487c21c80045749f646b7bad0290d0d68b27f29340c9cffb",
           "untracked_digest": "absent"
@@ -963,6 +971,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "docs/development/contracts.en.md",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "staged",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:e6bc7fc7593ea9f5ee3c9211aa1351fa81e8e702b707f7f8b1e1bf990d7ba5d2",
+          "index_digest": "sha256:d5a1eed761fc2b3c30cb8a58e7369dae213a721bd9c58e9f88ee2cb72a22b45c",
+          "worktree_digest": "sha256:d5a1eed761fc2b3c30cb8a58e7369dae213a721bd9c58e9f88ee2cb72a22b45c",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "docs/development/contracts.md",
           "object_kind": {
             "head": "regular",
@@ -973,9 +997,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:22f54e8e94359e97d8bc516be276e302d58b03100c78b30b68319952dbfa1e61",
-          "index_digest": "sha256:e0c5bb88896b1fbd5f04512e31c34c8853abcbf3e6f0b1e1a426b18832b9067c",
-          "worktree_digest": "sha256:e0c5bb88896b1fbd5f04512e31c34c8853abcbf3e6f0b1e1a426b18832b9067c",
+          "head_digest": "sha256:e0c5bb88896b1fbd5f04512e31c34c8853abcbf3e6f0b1e1a426b18832b9067c",
+          "index_digest": "sha256:270b3d0c3eef84ac5d0004d996ef5e4a7fdecc9eadb5e0f2f6e8156cb06bccb9",
+          "worktree_digest": "sha256:270b3d0c3eef84ac5d0004d996ef5e4a7fdecc9eadb5e0f2f6e8156cb06bccb9",
           "untracked_digest": "absent"
         },
         {
@@ -1069,9 +1093,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:28ee350a61a348af90622cf7a9c53b54448648da5b2607983870ddeba9018c38",
-          "index_digest": "sha256:08bc06d39a86f51a51d8de1abbe4e33723af70eb3dcfad49adb8210e0e1bf13b",
-          "worktree_digest": "sha256:08bc06d39a86f51a51d8de1abbe4e33723af70eb3dcfad49adb8210e0e1bf13b",
+          "head_digest": "sha256:08bc06d39a86f51a51d8de1abbe4e33723af70eb3dcfad49adb8210e0e1bf13b",
+          "index_digest": "sha256:c776093fe8d3672d4be997bcb80703187c1c9a3e9eb45a30bcc083323e62d762",
+          "worktree_digest": "sha256:c776093fe8d3672d4be997bcb80703187c1c9a3e9eb45a30bcc083323e62d762",
           "untracked_digest": "absent"
         },
         {
@@ -1277,9 +1301,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:e9c21e0aaeab52c20fcddff898e1b086d44244adfa439ec7d955444a4ab8b787",
-          "index_digest": "sha256:f1fd89e324f2003ac0430882c59341e75cbd9c86adebc9fb8a315e4109886adc",
-          "worktree_digest": "sha256:f1fd89e324f2003ac0430882c59341e75cbd9c86adebc9fb8a315e4109886adc",
+          "head_digest": "sha256:f1fd89e324f2003ac0430882c59341e75cbd9c86adebc9fb8a315e4109886adc",
+          "index_digest": "sha256:c0dc562bca841266e8893eeeb5e08652a924d04f96daad7985fae900c0455bcf",
+          "worktree_digest": "sha256:c0dc562bca841266e8893eeeb5e08652a924d04f96daad7985fae900c0455bcf",
           "untracked_digest": "absent"
         },
         {
@@ -1293,9 +1317,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:7dfa85582bd6540bd09d875434dbd6a3781a955cbffa103287b1f9c4cb46d0cb",
-          "index_digest": "sha256:78212e228b19b22f8bebf1e0be4bf5db24b49ae9662c3945205c4efcb07dc65a",
-          "worktree_digest": "sha256:78212e228b19b22f8bebf1e0be4bf5db24b49ae9662c3945205c4efcb07dc65a",
+          "head_digest": "sha256:78212e228b19b22f8bebf1e0be4bf5db24b49ae9662c3945205c4efcb07dc65a",
+          "index_digest": "sha256:da57954ed0cd727d0d96f07bd0040a7903601acfe27e71cc89d1398d2eb1d331",
+          "worktree_digest": "sha256:da57954ed0cd727d0d96f07bd0040a7903601acfe27e71cc89d1398d2eb1d331",
           "untracked_digest": "absent"
         },
         {
@@ -1546,12 +1570,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:1964b095b8f789cbceb86e99a6eec952e00c4932a8d7b526afa781f16529b1ef",
-          "index_digest": "sha256:1964b095b8f789cbceb86e99a6eec952e00c4932a8d7b526afa781f16529b1ef",
-          "worktree_digest": "sha256:1964b095b8f789cbceb86e99a6eec952e00c4932a8d7b526afa781f16529b1ef",
+          "index_digest": "sha256:34448ae5df918ef81b2528c7425c327927b28dd08d4c1af7e2f860a8363e0a43",
+          "worktree_digest": "sha256:34448ae5df918ef81b2528c7425c327927b28dd08d4c1af7e2f860a8363e0a43",
           "untracked_digest": "absent"
         },
         {
@@ -1568,6 +1592,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:2af8654c73fec7ae6be02a243af5e8f758bbb703e98569a7e4ac5b266f360739",
           "index_digest": "sha256:2af8654c73fec7ae6be02a243af5e8f758bbb703e98569a7e4ac5b266f360739",
           "worktree_digest": "sha256:2af8654c73fec7ae6be02a243af5e8f758bbb703e98569a7e4ac5b266f360739",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/platforms/test_telegram_adapter.py",
+          "object_kind": {
+            "head": "absent",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "staged",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "absent",
+          "index_digest": "sha256:8e3764af4ccefd50f7ec9b21085069c0057bc30176c391d1dddd149d92cbf233",
+          "worktree_digest": "sha256:8e3764af4ccefd50f7ec9b21085069c0057bc30176c391d1dddd149d92cbf233",
           "untracked_digest": "absent"
         },
         {
@@ -1701,15 +1741,15 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
         {
           "path": "tests/test_outbound_scheduler.py",
           "object_kind": {
-            "head": "absent",
+            "head": "regular",
             "index": "regular",
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "absent",
+          "head_digest": "sha256:7eaff45ae5236af4c603f039456c53b444a82dcdaec601358c0e0ff97b3cd9d7",
           "index_digest": "sha256:7eaff45ae5236af4c603f039456c53b444a82dcdaec601358c0e0ff97b3cd9d7",
           "worktree_digest": "sha256:7eaff45ae5236af4c603f039456c53b444a82dcdaec601358c0e0ff97b3cd9d7",
           "untracked_digest": "absent"
@@ -1802,10 +1842,10 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:032fd5e31a0976b1214aed979831ee4ac75942fd253491e8e768161476c6201a",
+          "head_digest": "sha256:3655d299c67025a26fc7f000f7e2f6f68bec43dd79a2621332c4dc739543bd6a",
           "index_digest": "sha256:3655d299c67025a26fc7f000f7e2f6f68bec43dd79a2621332c4dc739543bd6a",
           "worktree_digest": "sha256:3655d299c67025a26fc7f000f7e2f6f68bec43dd79a2621332c4dc739543bd6a",
           "untracked_digest": "absent"
@@ -2783,7 +2823,16 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "P05"
         ],
         "objective": "Telegram fixture then per-capability live",
-        "status": "planned"
+        "status": "done",
+        "evidence": {
+          "source_head": "f44cee13633760b8be248f774f80316c2f965809",
+          "scope": "Telegram fixture implementation; live capability certification remains open.",
+          "upstream_impact": "Before edit EventNormalizer LOW/exact (4 direct, 14 total); NormalizedEvent CRITICAL/exact (4 direct, 191 total / 182 processes), unchanged; TransportIngress UNKNOWN/0, source audit found only test construction and no production call site. New TelegramNormalizer/TelegramExporter/TelegramTargetCodec are UNKNOWN/0; source audit found fixture references only and no production registration path.",
+          "implementation": "SDK-lazy Telegram normalizer/exporter/target codec and static capabilities behind explicit configured connection plus injected ingress mapping. Private/group/supergroup/forum message_thread_id identity, exact canonical chat/topic routing, safe media hints, unresolved same-conversation reply relation, exact Bot send_to receipt, FAILED vs UNKNOWN and no replay. Locked adapter 0.1.0b20 lacks current Bot API direct_messages_topic_id, so those topics stay unsupported. No default matcher/startup registration.",
+          "verification": "Exact locked wheel installed only in /tmp; repo .venv unchanged. Isolated focused suite: 72 passed, 2 existing warnings. Ruff, py_compile, import boundary and docs passed (121 files / 1322 links / 577 anchors / 0 errors). generate_message_flow.py --check exits 1 with same topology and 21 body anchors changed; immutable flow refresh deferred to P10.",
+          "live_gap": "No live account/credentials/driver lifecycle/permissions, persistent relation/media exchange, send windows/rate limits or clean VM. Telegram remains not_certified; matrix remains 0/32 certified and overall plan NOT READY.",
+          "gitnexus_closeout": "Repeated identical staged structured detect_changes calls returned no error/partial/truncated: scope all = 9 files, 26–35 symbols, 784–791 affected processes, CRITICAL; compare base_ref=main = 56 files, 144–155 symbols, 791–792 affected processes, CRITICAL. Last repeated result: all 26 symbols / 791 processes; compare 144 symbols / 791 processes. Generic common-property attribution includes unrelated Get_config/Cometa/skill/main flows; preserve CRITICAL without waiver. Index limits: 39 large files skipped; 3262/3462 candidate entries unranked; 925 callees skipped; 46 walks cut; 23 traces capped."
+        }
       },
       {
         "id": "P06-D",
@@ -2883,25 +2932,24 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 
 ### 未解决门禁与明确延期
 
-1. 图刷新失败原因未知，当前完整d=1与PDG未得到；G0必须先解决。不能把空图说成没有影响，不在本规划会话改分析器或再跑刷新。
-2. 本轮未运行业务测试、live、模型、浏览器、native build或VM，全部运行支持保持NOT READY。cargo/maturin不就绪，不声称命令已通过。
-3. 真实平台凭据、目标账号、live测试窗口及QQ灰度需要实施时由用户提供/指定；本规划不读取已有生产配置来补齐。
+1. G0图恢复和d=1/PDG已在实施入口完成；每个新源包仍须重跑upstream impact。索引有39个大文件跳过及入口/边/路径预算上限；UNKNOWN和聚合CRITICAL保持未解决证据状态，不视为LOW。
+2. P06-T隔离 fixture、Ruff、py_compile、导入边界与文档门禁已运行；消息flow `--check` 因同拓扑正文锚点漂移退出1，按计划延期至P10。全量Python、Dashboard、本地native wheel/API-schema parity和恢复演练、live/model/VM验收仍未完成，整体NOT READY。cargo/maturin不在当前环境可用。
+3. 本环境没有Telegram/Discord/QQ live凭据与测试窗口；不能读生产配置补齐。各平台live、权限和发送时窗仍须另行验收，无live就不认证。
 4. 延期：跨平台账号绑定/转发、群成员独立模型分支、所有AstrBot插件仿真、原件媒体归档、全库历史回填与自动重写长期记忆、其余适配器的一次性认证、Corona默认模式切换。它们不是P00–P10隐含工作。
 5. 上一轮dirty研究/state已定向stash并在外部备份；两份旧研究原字节恢复，状态按最新远端合并，stash留作恢复点。G0前不删除其他stash或无关分支。
 
 ## 13. Definition of Done
 
-### 本轮规划交付
+### 实施状态快照（2026-10-25）
 
-- [x] 最新本地main固定17e6310；保留旧研究，状态与远端新记录不互相覆盖。
-- [x] 13节工程计划、五主符号、直接消费者、明确PDG限制、逐文件工作包、迁移/回滚/验收及§11完整包齐备。
-- [x] 原版helper schema2 snapshot与safe write回执成功；发布后重新snapshot与包内完全一致，read-plan回读同一字节，计划没有通过直接写目标路径生成。
-- [x] 维护文档/JSON/diff门禁通过；日期计划另做本地链接、引用路径/行号与context字段完整性验证。
-- [x] all与compare/main图检查执行并完整披露stale/partial；不能把0当clean。本轮不提交、不推送、不宣称业务修复。
+- [x] G0与P00–P05已按独立包提交；P04源实现已提交但native wheel/API-schema parity和恢复演练未验收。
+- [x] P06-T Telegram fixture 实现与定向验证完成，matrix保持`not_certified`；本包all/compare CRITICAL与图提取限制详见§4.1.2。
+- [ ] P06-T独立提交收尾后继续P06-D、P06-Q、P07–P10；不把fixture完成宣称为平台认证。
+- [x] 生成计划仍由原版helper snapshot与safe write维护，禁止直接写目标计划路径。
 
-### 实施产品验收（本轮均未完成）
+### 整体实施产品验收（尚未全部完成）
 
-- [ ] G0完成，所有代码编辑有当前upstream影响证据；UNKNOWN补证，HIGH/CRITICAL编辑前提示。
+- [x] G0完成；已执行代码编辑均有upstream影响记录，UNKNOWN/零调用者均做源码补证，高/严重聚合风险未豁免；后续每包继续执行。
 - [ ] 策略保存/回读/Apply/回滚与managed/legacy一致，五准入/四记录消费者和全部send用途回归，旧QQ/WebChat无双执行。
 - [ ] 字符ID/双Bot/群私聊/线程/权限负例通过；正文、组件、关系原子提交；无scope不得PERSON；引用与有效历史不串线。
 - [ ] schema迁移/失败回滚/重跑/native parity和wheel合同确认，升级后增量保留及恢复演练有证据。
