@@ -352,7 +352,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ```json
 {
   "implementation_context": {
-    "task_summary": "G0 and P00–P10 local implementation packages are committed. P10 commits: 30cdf87, cefec48, and 47548f0. Python 3.12.14 full suite, Ruff, Dashboard tests/build/sync, docs and dual-interpreter flow checks passed. Python 3.10.21/3.11.16 full suites were attempted repeatedly with CI dependencies/scheduling but remain not green because changing WebUI/CAS/auth/trace/subprocess failures did not reproduce in isolated reruns; root cause unresolved. P10 remains blocked pending stable Python matrix, Rust/native API/schema parity and restore drill, live adapter/model acceptance, and clean Windows VM/release evidence. Matrix 0/32 certified; overall NOT READY.",
+    "task_summary": "P00–P10 package work is recorded on codex/multiplatform-policy-message-pipeline. Python 3.12.14 full suite, Dashboard, docs, local Rust/native abi3 wheel/API4/schema23 parity, restore drill, and four-version message-flow checks have local evidence. P04 native acceptance was closed with follow-up commit d03d9b5; final flow refresh is message-flow.7c3a08d0677e.json (commit bc2f396). Python 3.10.21/3.11.16 latest sequential full suites remain unstable (3.10: 4243 passed/34 skipped/2 failed; 3.11: 4244/34/1); observed failures pass isolated reruns, so the matrix remains NOT GREEN. Real platform/model verification is deferred until this branch is merged to main per user instruction. Clean Windows VM/release acceptance remains open; overall plan NOT READY. Final docs check passed 121 files / 1,327 local links / 577 anchors / 0 errors.",
     "acceptance_criteria": [
       "Current graph/PDG and every d=1 reconciled before code edits",
       "Managed/legacy settings preserve revision/CAS/idempotency/apply recovery",
@@ -365,12 +365,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
     ],
     "evidence_provenance": {
       "schema_version": 2,
-      "head_commit": "a4b26168d37b44d0385c7db1f2e70a250d1516d9",
+      "head_commit": "bc2f396dda85bc879a4910b3e8253ef1c164e5c1",
       "generated_plan_path": "docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md",
       "global_dirty_digest": {
         "algorithm": "sha256",
         "canonicalization": "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records",
-        "value": "d4a4c8b94da3b5ba5ff23cfa9e087f218069be8912b1187ff32bcdb0e3d770b3"
+        "value": "6fc56fc6bb722f6f690bdf1de1898acead9874c4fa56f03ad360dbddd62a7893"
       },
       "cited_path_manifest": [
         {
@@ -483,6 +483,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:1c6f5599dbb8d43967248b4e78d0df0a700de0d0afbc5af2ebf83c32053579a0",
           "index_digest": "sha256:1c6f5599dbb8d43967248b4e78d0df0a700de0d0afbc5af2ebf83c32053579a0",
           "worktree_digest": "sha256:1c6f5599dbb8d43967248b4e78d0df0a700de0d0afbc5af2ebf83c32053579a0",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "core/observability/flows/message-flow.7c3a08d0677e.json",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:dabeec0ecb2bd1bbb8dae5e55cbbc6abf1f4661c618c5dbf458fd5a012783bad",
+          "index_digest": "sha256:dabeec0ecb2bd1bbb8dae5e55cbbc6abf1f4661c618c5dbf458fd5a012783bad",
+          "worktree_digest": "sha256:dabeec0ecb2bd1bbb8dae5e55cbbc6abf1f4661c618c5dbf458fd5a012783bad",
           "untracked_digest": "absent"
         },
         {
@@ -1117,12 +1133,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:b5d43174c0c1262f8d0a40ecc4bd9fdda50b6684f968af1ca56f6c94f38a2fde",
-          "index_digest": "sha256:b5d43174c0c1262f8d0a40ecc4bd9fdda50b6684f968af1ca56f6c94f38a2fde",
-          "worktree_digest": "sha256:b5d43174c0c1262f8d0a40ecc4bd9fdda50b6684f968af1ca56f6c94f38a2fde",
+          "index_digest": "sha256:7118651c438bf639aa7f872363d899c262982e393e96ada737462cfb849bb1e4",
+          "worktree_digest": "sha256:7118651c438bf639aa7f872363d899c262982e393e96ada737462cfb849bb1e4",
           "untracked_digest": "absent"
         },
         {
@@ -1133,12 +1149,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:68486a9f6000f56365670310067b9f005bc9629e837d09eef0349043fbdce180",
-          "index_digest": "sha256:68486a9f6000f56365670310067b9f005bc9629e837d09eef0349043fbdce180",
-          "worktree_digest": "sha256:68486a9f6000f56365670310067b9f005bc9629e837d09eef0349043fbdce180",
+          "index_digest": "sha256:cdc473d28c143225a5405389b045b4f3a5daf9a43da60a89ab88040de39ae185",
+          "worktree_digest": "sha256:cdc473d28c143225a5405389b045b4f3a5daf9a43da60a89ab88040de39ae185",
           "untracked_digest": "absent"
         },
         {
@@ -1280,9 +1296,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:334243290c18dcd2b37143142d2a8f335c695f0992ff7338530b092929b18f24",
-          "index_digest": "sha256:97a4c707074035507fa2e67b5916353aa56922fc359260d9c177013ca6871547",
-          "worktree_digest": "sha256:97a4c707074035507fa2e67b5916353aa56922fc359260d9c177013ca6871547",
+          "head_digest": "sha256:97a4c707074035507fa2e67b5916353aa56922fc359260d9c177013ca6871547",
+          "index_digest": "sha256:212c12f2512a223b269c59b858f0b4d809cde7be5624fcb57888347c596a30a7",
+          "worktree_digest": "sha256:212c12f2512a223b269c59b858f0b4d809cde7be5624fcb57888347c596a30a7",
           "untracked_digest": "absent"
         },
         {
@@ -1296,9 +1312,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:fb8598a0c39fb0fe82aa84c5ff78951948357238a04e8635e635065859d69ec8",
-          "index_digest": "sha256:ad3cef845d4f18d8607f316322e9d6af4bedf74e5e287c5dd86e6b9ca8466443",
-          "worktree_digest": "sha256:ad3cef845d4f18d8607f316322e9d6af4bedf74e5e287c5dd86e6b9ca8466443",
+          "head_digest": "sha256:ad3cef845d4f18d8607f316322e9d6af4bedf74e5e287c5dd86e6b9ca8466443",
+          "index_digest": "sha256:5885f5b60dcead78930830cacb2532a20a0af9a23e2b27f6609357283c85f4ce",
+          "worktree_digest": "sha256:5885f5b60dcead78930830cacb2532a20a0af9a23e2b27f6609357283c85f4ce",
           "untracked_digest": "absent"
         },
         {
@@ -1446,6 +1462,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "memory_rust/native/src/promotion.rs",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:fb92289b2c1d8e020aa943fe29288ddb02ce67fc78a15e43066d998274878236",
+          "index_digest": "sha256:fb92289b2c1d8e020aa943fe29288ddb02ce67fc78a15e43066d998274878236",
+          "worktree_digest": "sha256:fb92289b2c1d8e020aa943fe29288ddb02ce67fc78a15e43066d998274878236",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "memory_rust/native/src/schema.rs",
           "object_kind": {
             "head": "regular",
@@ -1520,9 +1552,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:a0710bd6205feac1842d89e6b84ea42970520da323a2823bddbbc537a0a56f45",
-          "index_digest": "sha256:aaa10fce21c3703c2bd635e716f39f973a2b1c7f787bbbddcbdd6d3e020a34b6",
-          "worktree_digest": "sha256:aaa10fce21c3703c2bd635e716f39f973a2b1c7f787bbbddcbdd6d3e020a34b6",
+          "head_digest": "sha256:aaa10fce21c3703c2bd635e716f39f973a2b1c7f787bbbddcbdd6d3e020a34b6",
+          "index_digest": "sha256:0efdb3b0ee9eedc62e84c6e2cf052e60aba64647551eb0a04c95c869749b2c47",
+          "worktree_digest": "sha256:0efdb3b0ee9eedc62e84c6e2cf052e60aba64647551eb0a04c95c869749b2c47",
           "untracked_digest": "absent"
         },
         {
@@ -1574,6 +1606,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "scripts/validate_rust_fullchain.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:bc6ace807c2f4a53212425ada0b1e60aebc48c54fbd5072867a47224726b5f65",
+          "index_digest": "sha256:bc6ace807c2f4a53212425ada0b1e60aebc48c54fbd5072867a47224726b5f65",
+          "worktree_digest": "sha256:bc6ace807c2f4a53212425ada0b1e60aebc48c54fbd5072867a47224726b5f65",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "session-handoff.md",
           "object_kind": {
             "head": "regular",
@@ -1584,9 +1632,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:29efe123304d9e69fcefe7f902acfc598f96cf9c67c02c6e159f2bf476dcdf2e",
-          "index_digest": "sha256:8c225b0e6100ccb5dcef099eb00b7820f65552ea0f791c0b3cc47f337cd2fe63",
-          "worktree_digest": "sha256:8c225b0e6100ccb5dcef099eb00b7820f65552ea0f791c0b3cc47f337cd2fe63",
+          "head_digest": "sha256:8c225b0e6100ccb5dcef099eb00b7820f65552ea0f791c0b3cc47f337cd2fe63",
+          "index_digest": "sha256:2e456d59ad79fb30c398aaeedcc3f33b54a6b8f141476014dc113c56dbd6f52a",
+          "worktree_digest": "sha256:2e456d59ad79fb30c398aaeedcc3f33b54a6b8f141476014dc113c56dbd6f52a",
           "untracked_digest": "absent"
         },
         {
@@ -3515,7 +3563,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
     "verification_prerequisites": [
       "use §8 shell setup for isolated STELLA_HOME; no production data",
       "locked Python3.10/3.11/3.12 dependency environments per CI",
-      "cargo and maturin absent/not ready locally; prepare isolated native build environment",
+      "Isolated Rust/cargo 1.99.1, Python 3.12.10 and maturin 1.15.0 were provisioned under /tmp; abi3 wheel/API4/schema23 parity and restore drill passed locally. Windows release/clean-VM checks remain separate.",
       "final flow artifacts generated once at P10; intermediate stages do not claim flow gate passed",
       "P06-Q local fixtures used exact official 1.7.3 wheel source extracted under /tmp; repo .venv remains without the distribution. Project manifests are pinned for clean CI/install environments."
     ],
@@ -3646,17 +3694,20 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "P03"
         ],
         "objective": "atomic message extension, opaque relations, candidate schema23/native parity",
-        "status": "in_progress",
+        "status": "done",
         "evidence": {
           "source_head": "3f2316b",
           "scope": "Add atomic transport event/parts/relations persistence with effective edit/delete projection and opaque reply lookup; move capture success after commit; migrate schema 22→23 and align Python/Rust native schema guards while retaining API 4.",
           "upstream_impact": "GitNexus 1.6.12: record_message CRITICAL (18 affected, 4 direct, lower-bound with 3 receiver-typing omissions); resolve_reply_target HIGH (3 direct); memory.schema._migrate_db HIGH (40 affected, 2 direct); _fetch_recent_tail LOW (1 direct). migrate_v22, SCHEMA_VERSION and Python/Rust MEMORY_SCHEMA_VERSION were UNKNOWN/zero graph edges.",
           "source_audit": "MIGRATIONS.get(version) dynamically dispatches versioned migrations; _migrate_db reads/writes SCHEMA_VERSION. memory_rust.selector validates Python and exported native version constants; Rust ensure_supported strictly compares schema_meta.version. record_message has QQ and WebChat production paths plus three unresolved receiver-typed callers.",
-          "verification": "Baseline at P03 commit: 214 passed, 1 existing NoneBot warning. Final isolated command STELLA_HOME=/tmp/stella-xplat-p04-final-20261025-2 .venv/bin/python -m pytest tests/test_message_store.py tests/test_message_relations.py tests/test_migrations.py tests/test_retrieval_v2_and_schema.py tests/test_retriever.py tests/test_context_tail.py tests/test_context_projection_identity.py tests/test_memory_rust_selector.py tests/test_transport_identity.py tests/platforms/test_transport_pipeline.py tests/test_capture_ingress_gating.py tests/test_session_context_cache.py -q: 167 passed, 1 existing NoneBot warning. Changed-file Ruff passed; scripts/check_docs.py: 121 files / 1322 links / 577 anchors / 0 errors; git diff --check passed.",
-          "implementation": "Added append-only transport_message_events/parts/relations. Event and body snapshot commit atomically; create replay and trusted revisions dedupe; unversioned edits keep local identities. Latest local append order drives effective edit/delete history and tail filtering. Opaque reply lookup is exact by connection+conversation+message ID; integer fallback requires explicit legacy_qq. Delete marks source evidence unavailable and transactionally bumps owner scope versions. Schema 22→23; Python/Rust source schema 23; API 4 unchanged.",
-          "native_gap": "cargo, rustc, maturin and installed memory_rust._native are unavailable. cargo fmt/tests, built wheel API/schema constants, native parity/old-schema rejection and rollback/restore drill remain NOT RUN. This remains a P04 acceptance blocker; overall plan is NOT READY.",
+          "verification": "Baseline at P03 commit: 214 passed, 1 existing NoneBot warning. Final isolated command STELLA_HOME=/tmp/stella-xplat-p04-final-20261025-2 .venv/bin/python -m pytest tests/test_message_store.py tests/test_message_relations.py tests/test_migrations.py tests/test_retrieval_v2_and_schema.py tests/test_retriever.py tests/test_context_tail.py tests/test_context_projection_identity.py tests/test_memory_rust_selector.py tests/test_transport_identity.py tests/platforms/test_transport_pipeline.py tests/test_capture_ingress_gating.py tests/test_session_context_cache.py -q: 167 passed, 1 existing NoneBot warning. Changed-file Ruff passed; scripts/check_docs.py: 121 files / 1322 links / 577 anchors / 0 errors; git diff --check passed. Follow-up: cargo fmt --check and Clippy -D warnings passed; cargo tests 26 passed; isolated wheel fullchain PASS; focused Python P04 regressions 26 passed; temporary DB restore drill passed 3 integrity checks and preserved legacy rows.",
+          "implementation": "Added append-only transport_message_events/parts/relations. Event and body snapshot commit atomically; create replay and trusted revisions dedupe; unversioned edits keep local identities. Latest local append order drives effective edit/delete history and tail filtering. Opaque reply lookup is exact by connection+conversation+message ID; integer fallback requires explicit legacy_qq. Delete marks source evidence unavailable and transactionally bumps owner scope versions. Schema 22→23; Python/Rust source schema 23; API 4 unchanged. Native promotion verifier now accepts historical 2026-10-08.1 and current 2026-10-21.1 evidence assessment versions; current namespaced snapshots bind evidence to opaque subject_key and connection_id, while legacy QQ keeps its qq:{user_id} path. Fullchain helper seeds proper BotRef/UserRef/conversation identity and current evidence.",
+          "native_gap": "Local P04 native acceptance complete using isolated /tmp toolchains: built/installed Linux abi3 wheel, exported API 4/schema 23 matched Python source, installed-wheel fullchain passed, and schema22→23 restore/re-migration drill passed. This does not certify Windows release assets or a clean VM.",
           "gitnexus_closeout": "Analyze --index-only --pdg --workers 1 with GITNEXUS_LBUG_MAX_DB_SIZE=68719476736 exited 0; status up-to-date at 3f2316b02edf9dd4c792097bd1fb5f0046b5965f, incompleteReasons empty; 116529 nodes / 293728 edges / 1198 clusters / 792 flows. Limits: 39 large files skipped; 3243/3443 candidates unranked; 928 callees skipped; 46 walks cut; 23 depth-capped traces. Repeated staged detect results varied: all 20–22 files / 43–62 symbols / 588–597 processes; compare main 46–48 / 234–266 / 603; every run CRITICAL. Latest limit=2000 run: all 22 / 62 / 597, compare 48 / 251 / 603. Generic capture/settings attribution fans into unrelated Get_config/Cometa-auth flows; retain CRITICAL, no waiver. CLI flow listing is sampled; graph extraction remains incomplete.",
-          "package_commit": "4de5a06d9d8be6ad3e83ea92d14322a6f269a49d"
+          "package_commit": "4de5a06d9d8be6ad3e83ea92d14322a6f269a49d",
+          "followup_commits": [
+            "d03d9b5 fix(memory): align native promotion evidence contract"
+          ]
         }
       },
       {
@@ -3814,12 +3865,14 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
         "package_commits": [
           "30cdf87 fix(transport): close final validation boundary gaps",
           "cefec48 fix(observability): stabilize flow closure across Python versions",
-          "47548f0 chore(observability): publish stable P10 message flow"
+          "47548f0 chore(observability): publish stable P10 message flow",
+          "d03d9b5 fix(memory): align native promotion evidence contract",
+          "bc2f396 chore(observability): refresh P10 flow after native follow-up"
         ],
         "report": "docs/reports/2026-10-26-xplat-p10-validation.md",
-        "verification": "Locked Python 3.12.14 full suite 4245 passed / 34 skipped / 3 existing warnings; Ruff passed; Dashboard 9 files/110 tests, typecheck/build and sync:webui passed; observability 139 passed/one existing fixture deprecation. Python 3.12.3 and 3.12.14 both pass the final flow check with matching full-content hash. Python 3.10.21: sequential 4243/34/2 failed; CI-style 2-worker xdist attempts 4242/34/3 failed and 4243/34/2 failed. Python 3.11.16: two CI-style xdist attempts each 4244/34/1 failed. Failure tests varied across WebUI/auth/CAS/trace/subprocess and each observed failure passed isolated rerun; full-suite isolation/order root cause remains unresolved. Docs 121 files / 1325 links / 577 anchors / 0 errors; git diff --check passed.",
-        "gitnexus_closeout": "Pre-edit create_corona_app MEDIUM (18 impacted/9 direct/1 main process); record_message UNKNOWN/0 plus three omitted receiver-typed calls, supplemented with source audit (only test assertion edited); platform_conversation_settings_put UNKNOWN/0 but source-confirmed FastAPI route and untouched; generator file LOW (4 direct imports/3 modules). Source batches after edits: Corona/G05 HIGH (3 files/4 symbols/6 processes); generator CRITICAL (2 files/1 symbol/753 processes, broad generic counts attribution, retained without waiver); final large flow artifact changed one file with no indexed symbol overlap, so its graph coverage is unresolved. Cumulative compare-main remains CRITICAL. Current index extraction omits 40 large files, leaves 3324/3524 candidates unranked, drops 931 callees, cuts 46 walks, depth-caps 23 traces and leaves 364 cross-language property sites unresolved. Final staged state-file checks: scope all 5 files/14 symbols/0 processes/LOW; repeated compare main 90 files/314–444 symbols/777–797 processes/CRITICAL cumulative, no partial/truncated marker. Compare display is capped (variable capped symbol listing and latest display omitted 787 flows) and generic user_id attribution remains noisy; retain CRITICAL without waiver.",
-        "limitations": "Python 3.10/3.11 full matrix is not green due to non-reproducible full-suite WebUI/CAS/auth/trace/subprocess failures; do not claim matrix completion. cargo/rustc/rustup/maturin unavailable; P04 native wheel/API/schema parity and restore drill not run; no live model/platform credentials/test window or clean Windows VM/release runner. Adapter matrix 0/32 certified and overall NOT READY. Tests used isolated temporary STELLA_HOME; CI coverage observed temporary selftest plugin source paths under repo data after fixture cleanup, with no such directories remaining and no tracked test residue. No production config/database/service was accessed."
+        "verification": "Locked Python 3.12.14 full suite 4245 passed / 34 skipped / 3 existing warnings; Ruff, Dashboard 110 tests/build/typecheck/sync, observability 139 tests passed. P04 isolated Linux abi3 wheel exports API4/schema23 and fullchain PASS; Rust 26 tests; restore drill 3 integrity checks PASS. Final message-flow 7c3a08d0677e checks under Python 3.10.21/3.11.16/3.12.10/3.12.14. Latest sequential Python 3.10 full suite 4243/34/2 failed (stale revision 401 vs 200; participation stream had no data), each isolated rerun passed. Latest Python 3.11 full suite 4244/34/1 failed (empty objective 401 vs 422), isolated rerun passed. Docs: 121 files/1327 local links/577 migration anchors/0 errors.",
+        "gitnexus_closeout": "Pre-edit create_corona_app MEDIUM (18 impacted/9 direct/1 main process); record_message UNKNOWN/0 plus three omitted receiver-typed calls, supplemented with source audit (only test assertion edited); platform_conversation_settings_put UNKNOWN/0 but source-confirmed FastAPI route and untouched; generator file LOW (4 direct imports/3 modules). Source batches after edits: Corona/G05 HIGH (3 files/4 symbols/6 processes); generator CRITICAL (2 files/1 symbol/753 processes, broad generic counts attribution, retained without waiver); final large flow artifact changed one file with no indexed symbol overlap, so its graph coverage is unresolved. Cumulative compare-main remains CRITICAL. Current index extraction omits 40 large files, leaves 3324/3524 candidates unranked, drops 931 callees, cuts 46 walks, depth-caps 23 traces and leaves 364 cross-language property sites unresolved. Final staged state-file checks: scope all 5 files/14 symbols/0 processes/LOW; repeated compare main 90 files/314–444 symbols/777–797 processes/CRITICAL cumulative, no partial/truncated marker. Compare display is capped (variable capped symbol listing and latest display omitted 787 flows) and generic user_id attribution remains noisy; retain CRITICAL without waiver. Native follow-up pre-edit `verify_candidate_evidence` upstream impact CRITICAL (11 nodes, about 183 process attributions / 20 modules), retained without waiver; production process_new_candidates path was not edited. Native source precommit detect all 4 files/12 symbols/770 process attributions/CRITICAL; compare main 91/319/789/CRITICAL. Flow refresh precommit detect all 7 files/8 symbols/0 processes/LOW; compare main 92/324/797/CRITICAL. Outputs had no partial/truncated markers; flow listing was capped and broad db_path/user_id attribution remains.",
+        "limitations": "Python 3.10/3.11 full matrix remains not green due to non-reproducible full-suite WebUI/auth/trace failures; isolated passes do not close it. Local native wheel/API/schema parity and restore drill are complete on Linux temporary data, but Windows packaging/clean VM remain unverified. Real platform/model checks are deferred until this branch is merged to main. Adapter matrix remains 0/32 certified; overall NOT READY. No production config/database/service was accessed."
       }
     ],
     "index_refresh": [
@@ -3883,8 +3936,8 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ### 未解决门禁与明确延期
 
 1. G0图恢复和d=1/PDG已在实施入口完成；每个新源包仍须重跑upstream impact。索引有39个大文件跳过及入口/边/路径预算上限；UNKNOWN和聚合CRITICAL保持未解决证据状态，不视为LOW。
-2. P06-T/P06-D/P06-Q隔离 fixtures、Ruff、py_compile、导入边界与文档门禁已运行；消息flow `--check` 因同拓扑正文锚点漂移退出1，按计划延期至P10。全量Python、Dashboard、本地native wheel/API-schema parity和恢复演练、live/model/VM验收仍未完成，整体NOT READY。cargo/maturin不在当前环境可用。
-3. 本环境没有Telegram/Discord/QQ live凭据与测试窗口；不能读生产配置补齐。各平台live、权限和发送时窗仍须另行验收，无live就不认证。
+2. P06-T/P06-D/P06-Q 隔离 fixtures、Ruff、py_compile、导入边界与文档门禁已运行；P10 重新生成的 immutable flow 已通过 Python 3.10.21、3.11.16、3.12.10 和 3.12.14 校验。Python 3.12、Dashboard、文档、本地 native wheel/API-schema parity 与 schema22→23 恢复演练有本地证据；Python 3.10/3.11 全量矩阵仍未通过，clean Windows VM/release 验收未完成。真实平台/模型验证按用户要求留待本分支合并至 main 后执行；整体仍 NOT READY。
+3. 真实 Telegram/Discord/QQ/WebChat 与模型验收按用户要求待本分支合并至 main 后执行；不读取生产配置补齐。各平台 live、权限和发送时窗仍须另行验收，无 live 就不认证。
 4. 延期：跨平台账号绑定/转发、群成员独立模型分支、所有AstrBot插件仿真、原件媒体归档、全库历史回填与自动重写长期记忆、其余适配器的一次性认证、Corona默认模式切换。它们不是P00–P10隐含工作。
 5. 上一轮dirty研究/state已定向stash并在外部备份；两份旧研究原字节恢复，状态按最新远端合并，stash留作恢复点。G0前不删除其他stash或无关分支。
 
@@ -3892,12 +3945,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 
 ### 实施状态快照（2026-10-26）
 
-- [x] G0与P00–P05已按独立包提交；P04源实现已提交但native wheel/API-schema parity和恢复演练未验收。
+- [x] G0与P00–P05已按独立包提交；P04本地 native wheel/API-schema parity 和恢复演练已完成（后续提交 `d03d9b5`）。
 - [x] P06-T Telegram、P06-D Discord fixture 与 P06-Q QQ官方 fixture 已分别提交。三平台均保持`not_certified`，不把fixture宣称为平台认证。
 - [x] P07 scene/policy/history APIs 与 Dashboard revisions 已独立提交；定向检查通过。
 - [x] P08 legacy QQ/WebChat shared ingress 独立提交，focused checks 完成。
 - [x] P09 后台投递路由、quiet hours 与策略配额已独立提交 `f8bdc71`；fixture 与定向检查完成。
-- [ ] P10 Python 3.12、Dashboard、文档与最终单次 immutable flow 通过；Python 3.10/3.11 全量矩阵多次出现未稳定复现的 WebUI/CAS/auth/trace/subprocess失败（单项复跑通过，根因未解）。详见[验证报告](../reports/2026-10-26-xplat-p10-validation.md)；P04 native wheel/API parity与恢复演练、live/模型/VM及发布门禁仍未完成，P10保持blocked。
+- [ ] P10 Python 3.12、Dashboard、文档与最终 immutable flow 已通过；Python 3.10/3.11 最新顺序全量仍分别有 2 项和 1 项 WebUI/auth/trace 失败，单项复跑通过但根因未解。P04 本地 native wheel/API parity 与恢复演练已完成；真实平台/模型验收待合并至 main 后执行，clean Windows VM 与发布门禁仍未完成。详见[验证报告](../reports/2026-10-26-xplat-p10-validation.md)，P10保持blocked。
 - [x] 生成计划仍由原版helper snapshot与safe write维护，禁止直接写目标计划路径。
 
 ### 整体实施产品验收（尚未全部完成）
@@ -3905,7 +3958,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 - [x] G0完成；已执行代码编辑均有upstream影响记录，UNKNOWN/零调用者均做源码补证，高/严重聚合风险未豁免；后续每包继续执行。
 - [ ] 策略保存/回读/Apply/回滚与managed/legacy一致，五准入/四记录消费者和全部send用途回归，旧QQ/WebChat无双执行。
 - [ ] 字符ID/双Bot/群私聊/线程/权限负例通过；正文、组件、关系原子提交；无scope不得PERSON；引用与有效历史不串线。
-- [ ] schema迁移/失败回滚/重跑/native parity和wheel合同确认，升级后增量保留及恢复演练有证据。
+- [x] schema迁移/失败回滚/重跑/native parity和wheel合同确认，升级后增量保留及恢复演练有证据（隔离 Linux abi3 wheel/API4/schema23 与临时 schema22→23 恢复演练，见验证报告）。
 - [ ] 账号/目标限流、deadline、窗口、UNKNOWN/PARTIAL、后台重启/断连无错投；新增平台主动默认关闭。
 - [ ] Python矩阵、Dashboard测试/构建/资源同步、Rust/native、文档/flow/图门禁通过；平台fixture/live/L0–L3分别记证，无live不认证。
 - [ ] 模型、真实QQ/WebChat、各平台live及发布/VM验收分别明确；缺必要验收继续NOT READY，不通过文档done关闭运行门禁。
