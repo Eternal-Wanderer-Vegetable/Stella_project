@@ -3,7 +3,7 @@
 > Task: 按 G0/P00–P10 逐包实施多平台发言策略、可信会话、统一消息存储与精确回投；本文件同时保留原研究基线与每包执行证据。
 > Evidence verified at commit `17e631028344332fcab5dc0f7dbb1ff0cdd0c64b`（main，与本轮 fetch 后 origin/main 一致）。AstrBot `f61a7f42696da6df25dc7a249ec9b8d54ed9da18`（4.29.3）。日期：2026-10-25，Asia/Shanghai。
 > Depth: deep · form: full · freshness: strict requested · impact_depth: 3。GitNexus 1.6.12 runner 身份已核验 current；唯一一次 `analyze --index-only --pdg --workers 1` 退出 1，日志无明确错误原因，索引仍为旧 `3825f99` 并标记 `incremental-in-progress`。**当前图不承担实施放行依据；本计划为 source-weighted，执行必须先完成 G0 图恢复门禁。**
-> Provenance: schema 2; global dirty digest 229a843a71801fb6132cd87c35d8d7d4d0d5ce596f62ce1a8b1794cf139bfa16; 116 sorted cited-path entries; exact generated plan path excluded.
+> Provenance: schema 2; global dirty digest b2ea0447b09cc79a38c952b99b3a38bbc7ebdd1b4816aa7b9c2f3afd263d7582; 131 sorted cited-path entries; exact generated plan path excluded.
 
 G0 implementation re-anchor (2026-10-25): the verified GitNexus 1.6.12 runner rebuilt an index with PDG successfully at source HEAD 17e631028344332fcab5dc0f7dbb1ff0cdd0c64b. status --json is up-to-date with no incomplete reasons; current upstream impacts and local PDG slices are recorded in sections 4, 5 and 9. Flow extraction still drops candidate entry points, callees and traces; source reference checks remain required where impact is lower-bound.
 
@@ -126,6 +126,15 @@ G0 的 d=1 与§4.2 source-derived 生产消费者已调和，没有发现需要
 - Validation: isolated `STELLA_HOME=/tmp/stella-p07-check-20261025`; focused Python command across V2 history, conversation settings, WebUI config/history, Corona config and route ownership passed **47 tests**, with two existing duplicate-operation-ID warnings. Dashboard Vitest passed **110 tests in 9 files**; Vite build and `pnpm --dir dashboard run sync:webui` succeeded. Changed-file Ruff, py_compile, `scripts/check_docs.py` (121 files / 1322 links / 577 migration anchors / 0 errors), and `git diff --check` passed. System npm is unavailable; bundled pnpm was used. Build reported existing mixed static/dynamic import and large-chunk warnings.
 - Boundaries: no production `STELLA_HOME`, DB, credentials, service, Bot, live model or platform was used. Full Python, browser visual review, native wheel/API parity, restore drill, live adapter/model and clean-VM checks were not run in P07. Platform matrix remains 0/32 certified; P04 and overall readiness remain open.
 - Pre-commit GitNexus 1.6.12 detect-changes exited 0 without partial/truncated marker: scope=all 21 files / 47 symbols / 17 processes / CRITICAL; compare main 73 files / 719 symbols / 75 processes / CRITICAL (cumulative branch). Repeated calls after state/plan evidence updates returned the same counts. Preserve CRITICAL and known graph attribution/extraction limits; no risk is waived.
+
+### 4.1.6 P08 legacy QQ/WebChat shared ingress (2026-10-25; committed)
+
+- Package commit: `32845a7` (`feat(transport): bridge legacy ingress boundaries`).
+- Base and pre-edit graph: P07 implementation commit `f231abe33c09d0549b8b0ce32ac8923b3c01e9e8`; state closeout base `ddbddf2`. `AdmissionPolicy.decide` exact impact CRITICAL (79 direct, 19 processes, 17 modules with generic/unrelated attribution), unchanged. `TransportIngress` file impact UNKNOWN/0; source audit found test-only construction/use. Legacy QQ/WebChat entrypoint function names were UNKNOWN/not found and were source-audited against matcher declarations and callsites. File impacts: `ai_gateway.py` LOW (4 direct / 7 processes), `webui/chat_ingress.py` LOW (2 direct). `OutboundService.send` was not edited.
+- Implementation: added `core/transport/legacy_ingress.py` and `LegacyIngressBridge` to delegate policy decisions, capture snapshots, message writes and RuntimeFacade turn submission. QQ and WebChat call shared helpers behind `STELLA_SHARED_INGRESS_ENABLED` (default true); false uses the handlers' existing direct callbacks/facade paths. Platform parsing, matcher registration, command/plugin precedence, exact Bot/scene output, and platform-specific post-processing stay with their respective handlers. No duplicate write/turn path is enabled.
+- Validation: isolated `STELLA_HOME=/tmp/stella-p08-check-20261025`. Focused legacy ingress/capture/WebUI/outbound/pipeline/deterministic reply and delivery regressions: **119 passed**, with one existing NoneBot “No adapters found” warning. Compatibility/capability/normalizer suite: **99 passed**. Changed-file Ruff, py_compile, `scripts/check_docs.py` (121 files / 1322 links / 577 migration anchors / 0 errors), and `git diff --check` passed. `generate_message_flow.py --check` still exits 1 for the known same-topology body-anchor drift; no nodes or edges were added/removed, and final immutable refresh remains in P10.
+- GitNexus pre-commit: all 9 files / 5 symbols / 756 affected processes / CRITICAL; compare main 80 files / 424 symbols / 786 processes / CRITICAL cumulative. Preserve CRITICAL and graph attribution/extraction limits; no risk is waived. Index refresh exited 0 and status is current at `32845a7`, covering 2,045 files; 39 large files skipped, 3,318/3,518 candidate entries unranked, 931 callees skipped, 46 walks cut, and 23 traces capped.
+- Boundaries: no production `STELLA_HOME`, credentials, database, service, Bot, model, live platform or VM used. Fixtures do not certify QQ/WebChat/model behavior. Matrix remains 0/32 certified; P04 native wheel/API parity and restore drill remain open; overall NOT READY.
 
 ### 4.2 五个主符号及直接消费者核算（source-derived）
 
@@ -343,7 +352,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ```json
 {
   "implementation_context": {
-    "task_summary": "G0 and P00–P07 are separately committed; P04 native wheel/API-schema parity and restore drill remain open. P05 commit is f44cee13633760b8be248f774f80316c2f965809. P06-T Telegram is committed as ef06712ca322a970d528fc9a9c8a2f878c133193, P06-D Discord as b26d4d8, P06-Q official QQ fixtures as f427ae093bb9bf30dcb65cf7e4292e4dad8cdaf4, and P07 policy/history UI as f231abe33c09d0549b8b0ce32ac8923b3c01e9e8. P08 is next. The 32-adapter matrix remains 0 certified, live platform/model/native/VM gates are open, and overall status is NOT READY.",
+    "task_summary": "G0 and P00–P08 are separately committed; P04 native wheel/API-schema parity and restore drill remain open. P05 commit is f44cee13633760b8be248f774f80316c2f965809. P06-T Telegram is committed as ef06712ca322a970d528fc9a9c8a2f878c133193, P06-D Discord as b26d4d8, P06-Q official QQ fixtures as f427ae093bb9bf30dcb65cf7e4292e4dad8cdaf4, P07 policy/history UI as f231abe33c09d0549b8b0ce32ac8923b3c01e9e8, and P08 legacy QQ/WebChat shared ingress as 32845a7. P09 is next. The 32-adapter matrix remains 0 certified, live platform/model/native/VM gates are open, and overall status is NOT READY.",
     "acceptance_criteria": [
       "Current graph/PDG and every d=1 reconciled before code edits",
       "Managed/legacy settings preserve revision/CAS/idempotency/apply recovery",
@@ -356,12 +365,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
     ],
     "evidence_provenance": {
       "schema_version": 2,
-      "head_commit": "f231abe33c09d0549b8b0ce32ac8923b3c01e9e8",
+      "head_commit": "32845a73fac69ec7d981a58b11d704c096c2b038",
       "generated_plan_path": "docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md",
       "global_dirty_digest": {
         "algorithm": "sha256",
         "canonicalization": "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records",
-        "value": "229a843a71801fb6132cd87c35d8d7d4d0d5ce596f62ce1a8b1794cf139bfa16"
+        "value": "b2ea0447b09cc79a38c952b99b3a38bbc7ebdd1b4816aa7b9c2f3afd263d7582"
       },
       "cited_path_manifest": [
         {
@@ -375,9 +384,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:f639bc43867c37daa3597b337279824d059c3cfd3e4a085881bf238cb0526b65",
-          "index_digest": "sha256:f639bc43867c37daa3597b337279824d059c3cfd3e4a085881bf238cb0526b65",
-          "worktree_digest": "sha256:f639bc43867c37daa3597b337279824d059c3cfd3e4a085881bf238cb0526b65",
+          "head_digest": "sha256:d918f35279d5dd6372a588aa182953bd4274ef19cf538e4fa7da8c4893ea01cf",
+          "index_digest": "sha256:d918f35279d5dd6372a588aa182953bd4274ef19cf538e4fa7da8c4893ea01cf",
+          "worktree_digest": "sha256:d918f35279d5dd6372a588aa182953bd4274ef19cf538e4fa7da8c4893ea01cf",
           "untracked_digest": "absent"
         },
         {
@@ -423,9 +432,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:98e19e3031a77439a2d98441f0d069f2ea42d9b7f00428b4ab41d1cf21a367e6",
-          "index_digest": "sha256:98e19e3031a77439a2d98441f0d069f2ea42d9b7f00428b4ab41d1cf21a367e6",
-          "worktree_digest": "sha256:98e19e3031a77439a2d98441f0d069f2ea42d9b7f00428b4ab41d1cf21a367e6",
+          "head_digest": "sha256:264cbb4fc181fdea35ad77985bd8b0d23d00a56cae267aa98c08cdbb9b125fb3",
+          "index_digest": "sha256:264cbb4fc181fdea35ad77985bd8b0d23d00a56cae267aa98c08cdbb9b125fb3",
+          "worktree_digest": "sha256:264cbb4fc181fdea35ad77985bd8b0d23d00a56cae267aa98c08cdbb9b125fb3",
           "untracked_digest": "absent"
         },
         {
@@ -634,6 +643,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:a1569bd127ff801dbedce21cde312b437e71c7218e2f18952e6740cca4e71aa8",
           "index_digest": "sha256:a1569bd127ff801dbedce21cde312b437e71c7218e2f18952e6740cca4e71aa8",
           "worktree_digest": "sha256:a1569bd127ff801dbedce21cde312b437e71c7218e2f18952e6740cca4e71aa8",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "core/transport/legacy_ingress.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:1a8478727f8a0049261c196f5a4c1ad0b094e8f5999eb1fb342a295304caa0d8",
+          "index_digest": "sha256:1a8478727f8a0049261c196f5a4c1ad0b094e8f5999eb1fb342a295304caa0d8",
+          "worktree_digest": "sha256:1a8478727f8a0049261c196f5a4c1ad0b094e8f5999eb1fb342a295304caa0d8",
           "untracked_digest": "absent"
         },
         {
@@ -1101,6 +1126,38 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "docs/development/deployment.md",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:2fd8b497bdb1b16537500b7138f5f540ee6056df0ac4137a0f80c04b97f7b407",
+          "index_digest": "sha256:2fd8b497bdb1b16537500b7138f5f540ee6056df0ac4137a0f80c04b97f7b407",
+          "worktree_digest": "sha256:2fd8b497bdb1b16537500b7138f5f540ee6056df0ac4137a0f80c04b97f7b407",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "docs/development/release.md",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:39c3c7f86567240b19c6f12a590dd4fa5e0b82a49ea96a128036d45f20baa7a2",
+          "index_digest": "sha256:39c3c7f86567240b19c6f12a590dd4fa5e0b82a49ea96a128036d45f20baa7a2",
+          "worktree_digest": "sha256:39c3c7f86567240b19c6f12a590dd4fa5e0b82a49ea96a128036d45f20baa7a2",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "docs/plans/2026-10-24-astrbot-multiplatform-adaptation.en.md",
           "object_kind": {
             "head": "regular",
@@ -1143,9 +1200,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:cd21026ffd8b41cd91aeeb632ee5e0f3ff225173b51d01b185871f88d581e45d",
-          "index_digest": "sha256:cd21026ffd8b41cd91aeeb632ee5e0f3ff225173b51d01b185871f88d581e45d",
-          "worktree_digest": "sha256:cd21026ffd8b41cd91aeeb632ee5e0f3ff225173b51d01b185871f88d581e45d",
+          "head_digest": "sha256:d7966f1589f0eaf29621d3ead41ff3e727aeab4484c33041269c03dfadfe4211",
+          "index_digest": "sha256:d7966f1589f0eaf29621d3ead41ff3e727aeab4484c33041269c03dfadfe4211",
+          "worktree_digest": "sha256:d7966f1589f0eaf29621d3ead41ff3e727aeab4484c33041269c03dfadfe4211",
           "untracked_digest": "absent"
         },
         {
@@ -1159,9 +1216,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:a48f2953fdf6f7788d3b07aea653f3ff2ebc87e9333aafc4a20d5249b1d7e2c2",
-          "index_digest": "sha256:a48f2953fdf6f7788d3b07aea653f3ff2ebc87e9333aafc4a20d5249b1d7e2c2",
-          "worktree_digest": "sha256:a48f2953fdf6f7788d3b07aea653f3ff2ebc87e9333aafc4a20d5249b1d7e2c2",
+          "head_digest": "sha256:e3d547a4b0d083ea0658c311ea4618ac9f7d346a494d519cf5025bf67d2a209c",
+          "index_digest": "sha256:e3d547a4b0d083ea0658c311ea4618ac9f7d346a494d519cf5025bf67d2a209c",
+          "worktree_digest": "sha256:e3d547a4b0d083ea0658c311ea4618ac9f7d346a494d519cf5025bf67d2a209c",
           "untracked_digest": "absent"
         },
         {
@@ -1172,12 +1229,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "unstaged",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:afa9d8349f5d5a12dad21bf934c94227b4d847673f3c765f91bf699ff2268566",
-          "index_digest": "sha256:afa9d8349f5d5a12dad21bf934c94227b4d847673f3c765f91bf699ff2268566",
-          "worktree_digest": "sha256:670a0f9a30f563aa4c5e42e014e66abc15b659276367a36406f84c04988ce9e2",
+          "head_digest": "sha256:670a0f9a30f563aa4c5e42e014e66abc15b659276367a36406f84c04988ce9e2",
+          "index_digest": "sha256:59b0d6e6f3fe11998ae72d03bc5456abd26bfedc4e3e74e0ea3651ac79eab4ab",
+          "worktree_digest": "sha256:59b0d6e6f3fe11998ae72d03bc5456abd26bfedc4e3e74e0ea3651ac79eab4ab",
           "untracked_digest": "absent"
         },
         {
@@ -1380,12 +1437,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "unstaged",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:b88ffb5588c5b1cb750538ed691fc9714965a85c6d460ff2dbb9b08c831bcf91",
-          "index_digest": "sha256:b88ffb5588c5b1cb750538ed691fc9714965a85c6d460ff2dbb9b08c831bcf91",
-          "worktree_digest": "sha256:37c585b79ad988ef1c33c20ce0af5c455e114dd8b7d64d0f829970560241f5db",
+          "head_digest": "sha256:37c585b79ad988ef1c33c20ce0af5c455e114dd8b7d64d0f829970560241f5db",
+          "index_digest": "sha256:9fe218560a6ceb4e16e98916ccf2872055825aac1db37676489bead995636cb6",
+          "worktree_digest": "sha256:9fe218560a6ceb4e16e98916ccf2872055825aac1db37676489bead995636cb6",
           "untracked_digest": "absent"
         },
         {
@@ -1428,12 +1485,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "unstaged",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:656dfbe8a87bf0302d959cf6934d2f270d7ccf327aca45947cad89ea24459f2a",
-          "index_digest": "sha256:656dfbe8a87bf0302d959cf6934d2f270d7ccf327aca45947cad89ea24459f2a",
-          "worktree_digest": "sha256:24daaa1798de73ed252c45739bf67504f36d571dca94630963ee473a28e56080",
+          "head_digest": "sha256:24daaa1798de73ed252c45739bf67504f36d571dca94630963ee473a28e56080",
+          "index_digest": "sha256:50ec9e88937a4c6b7e0c7899a8a9f3bb8850eeebc7aa55a378642a086c677a9a",
+          "worktree_digest": "sha256:50ec9e88937a4c6b7e0c7899a8a9f3bb8850eeebc7aa55a378642a086c677a9a",
           "untracked_digest": "absent"
         },
         {
@@ -1543,9 +1600,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:631fd59e200701ef49a5e1bb321ea408bb361f01102dbee7a9a6cec9ba6835a2",
-          "index_digest": "sha256:631fd59e200701ef49a5e1bb321ea408bb361f01102dbee7a9a6cec9ba6835a2",
-          "worktree_digest": "sha256:631fd59e200701ef49a5e1bb321ea408bb361f01102dbee7a9a6cec9ba6835a2",
+          "head_digest": "sha256:fb0bf8b93367b0cffd787a39fa7c0f224d2fb5de06f80a36fa09d463ecd0a3ec",
+          "index_digest": "sha256:fb0bf8b93367b0cffd787a39fa7c0f224d2fb5de06f80a36fa09d463ecd0a3ec",
+          "worktree_digest": "sha256:fb0bf8b93367b0cffd787a39fa7c0f224d2fb5de06f80a36fa09d463ecd0a3ec",
           "untracked_digest": "absent"
         },
         {
@@ -1594,6 +1651,70 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:0b177e350239957960e6f34454ce03524dba66567069d62f10d147d89ea52cb7",
           "index_digest": "sha256:0b177e350239957960e6f34454ce03524dba66567069d62f10d147d89ea52cb7",
           "worktree_digest": "sha256:0b177e350239957960e6f34454ce03524dba66567069d62f10d147d89ea52cb7",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/astrbot_compat/test_dispatch.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:477b503981d73f3c2664a74228e73c51c4219bcae137c8dab103553511dd7e47",
+          "index_digest": "sha256:477b503981d73f3c2664a74228e73c51c4219bcae137c8dab103553511dd7e47",
+          "worktree_digest": "sha256:477b503981d73f3c2664a74228e73c51c4219bcae137c8dab103553511dd7e47",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/astrbot_compat/test_filters.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:a52c3ca953e9184eb4dc4ea6ed161bcd797faa67b4cc852235478d1e6062d174",
+          "index_digest": "sha256:a52c3ca953e9184eb4dc4ea6ed161bcd797faa67b4cc852235478d1e6062d174",
+          "worktree_digest": "sha256:a52c3ca953e9184eb4dc4ea6ed161bcd797faa67b4cc852235478d1e6062d174",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/cometa/test_bridge.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:fbf57968a3b24592c07a72bb9763fa1a51ccd597f8ce9b89f17d93a8b51a5ebf",
+          "index_digest": "sha256:fbf57968a3b24592c07a72bb9763fa1a51ccd597f8ce9b89f17d93a8b51a5ebf",
+          "worktree_digest": "sha256:fbf57968a3b24592c07a72bb9763fa1a51ccd597f8ce9b89f17d93a8b51a5ebf",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/cometa/test_qq_delivery.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:0c56c4cbe1c84ec3d6cd82604579fcf9a1a7f8806a614e49733d5d87e9d94da2",
+          "index_digest": "sha256:0c56c4cbe1c84ec3d6cd82604579fcf9a1a7f8806a614e49733d5d87e9d94da2",
+          "worktree_digest": "sha256:0c56c4cbe1c84ec3d6cd82604579fcf9a1a7f8806a614e49733d5d87e9d94da2",
           "untracked_digest": "absent"
         },
         {
@@ -1805,6 +1926,54 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "tests/test_ai_gateway_deterministic_reply.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:7d7f358794a392900b7b0634572b1f39c277f7b3335eb511e84349ceb36cafa8",
+          "index_digest": "sha256:7d7f358794a392900b7b0634572b1f39c277f7b3335eb511e84349ceb36cafa8",
+          "worktree_digest": "sha256:7d7f358794a392900b7b0634572b1f39c277f7b3335eb511e84349ceb36cafa8",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/test_capability_query.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:9f4f17c2f2267bcad623bad6fec87df64d510dc587b2430c9f4ba62eb788e3a8",
+          "index_digest": "sha256:9f4f17c2f2267bcad623bad6fec87df64d510dc587b2430c9f4ba62eb788e3a8",
+          "worktree_digest": "sha256:9f4f17c2f2267bcad623bad6fec87df64d510dc587b2430c9f4ba62eb788e3a8",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/test_capture_ingress_gating.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:5fbf4a1ed21d6d8512dd4a5c699764e1e0cb22717efd7dcc72ae8424279b4284",
+          "index_digest": "sha256:5fbf4a1ed21d6d8512dd4a5c699764e1e0cb22717efd7dcc72ae8424279b4284",
+          "worktree_digest": "sha256:5fbf4a1ed21d6d8512dd4a5c699764e1e0cb22717efd7dcc72ae8424279b4284",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "tests/test_context_projection_identity.py",
           "object_kind": {
             "head": "regular",
@@ -1834,6 +2003,38 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:b5c5e01520797eaa57bbaaccff73472e567c10603ac983a31652ff0d2c491071",
           "index_digest": "sha256:b5c5e01520797eaa57bbaaccff73472e567c10603ac983a31652ff0d2c491071",
           "worktree_digest": "sha256:b5c5e01520797eaa57bbaaccff73472e567c10603ac983a31652ff0d2c491071",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/test_env_schema.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:d671145626d6acfe46359e140089601ee5d5eae19907daa7fc7937f6a4ecab7c",
+          "index_digest": "sha256:d671145626d6acfe46359e140089601ee5d5eae19907daa7fc7937f6a4ecab7c",
+          "worktree_digest": "sha256:d671145626d6acfe46359e140089601ee5d5eae19907daa7fc7937f6a4ecab7c",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/test_legacy_ingress_bridge.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:5ff8f9c9c87bd0612bb96401f3b24f3e3071f194a79b584fb774650c68f35f44",
+          "index_digest": "sha256:5ff8f9c9c87bd0612bb96401f3b24f3e3071f194a79b584fb774650c68f35f44",
+          "worktree_digest": "sha256:5ff8f9c9c87bd0612bb96401f3b24f3e3071f194a79b584fb774650c68f35f44",
           "untracked_digest": "absent"
         },
         {
@@ -1930,6 +2131,38 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:90270b1408238344b6910cd8ee69677f632e9f42506d0db7147a231f086b7c42",
           "index_digest": "sha256:90270b1408238344b6910cd8ee69677f632e9f42506d0db7147a231f086b7c42",
           "worktree_digest": "sha256:90270b1408238344b6910cd8ee69677f632e9f42506d0db7147a231f086b7c42",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/test_private_chat_ingress.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:7a97fccbc807e818a3a4c6f2f1e3a574213ded3ef8ea1aca11f41d214257c359",
+          "index_digest": "sha256:7a97fccbc807e818a3a4c6f2f1e3a574213ded3ef8ea1aca11f41d214257c359",
+          "worktree_digest": "sha256:7a97fccbc807e818a3a4c6f2f1e3a574213ded3ef8ea1aca11f41d214257c359",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/test_proactive_at_flow.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:30ed8117501caeff1a525e746ef2d011c45be078c8651ae835b13d2f65883817",
+          "index_digest": "sha256:30ed8117501caeff1a525e746ef2d011c45be078c8651ae835b13d2f65883817",
+          "worktree_digest": "sha256:30ed8117501caeff1a525e746ef2d011c45be078c8651ae835b13d2f65883817",
           "untracked_digest": "absent"
         },
         {
@@ -2077,6 +2310,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "tests/webui/test_webui_chat.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:0bfd30c624feb7d9e7b20d0de2778285c24b5177d6bdd56c07473e4647da2689",
+          "index_digest": "sha256:0bfd30c624feb7d9e7b20d0de2778285c24b5177d6bdd56c07473e4647da2689",
+          "worktree_digest": "sha256:0bfd30c624feb7d9e7b20d0de2778285c24b5177d6bdd56c07473e4647da2689",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "tests/webui/test_webui_config.py",
           "object_kind": {
             "head": "regular",
@@ -2103,9 +2352,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:8b9731d5ead5af57ffd2541c456b220a152b08bf92a37bba71c5ca1876e4b897",
-          "index_digest": "sha256:8b9731d5ead5af57ffd2541c456b220a152b08bf92a37bba71c5ca1876e4b897",
-          "worktree_digest": "sha256:8b9731d5ead5af57ffd2541c456b220a152b08bf92a37bba71c5ca1876e4b897",
+          "head_digest": "sha256:43df7bb75b7aafb0c73450b5ba9b8d76ca75b469325b536a49461addf488fba5",
+          "index_digest": "sha256:43df7bb75b7aafb0c73450b5ba9b8d76ca75b469325b536a49461addf488fba5",
+          "worktree_digest": "sha256:43df7bb75b7aafb0c73450b5ba9b8d76ca75b469325b536a49461addf488fba5",
           "untracked_digest": "absent"
         },
         {
@@ -3198,7 +3447,18 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "P07"
         ],
         "objective": "delegate QQ/WebChat without duplicate execution",
-        "status": "planned"
+        "status": "done",
+        "evidence": {
+          "source_head": "f231abe33c09d0549b8b0ce32ac8923b3c01e9e8 (P07 implementation); state closeout base ddbddf2",
+          "scope": "Delegate legacy QQ and WebChat admission, capture, message recording and turn submission to shared transport helpers while preserving the platform handlers and providing a restart-required opt-out fallback.",
+          "upstream_impact": "AdmissionPolicy.decide exact method impact CRITICAL (79 direct, 19 processes, 17 modules; generic/unrelated attribution), unchanged. TransportIngress file impact UNKNOWN/0, source audit found test-only use. Dynamic legacy QQ/WebChat entrypoint names UNKNOWN/not found and source-audited against handler declarations/callsites. ai_gateway.py LOW (4 direct/7 processes); webui/chat_ingress.py LOW (2 direct). OutboundService.send unchanged.",
+          "source_audit": "QQ groups retain passive listener, runtime/capability, plugin, then chat priorities; plugin marker short-circuits chat. Capture still happens before subsequent matcher delivery. Private QQ retains its independent trigger and identity/target/send path. WebChat retains trusted per-request identity/context and SSE result. All legacy record_message production paths were mapped through group/private handlers, successful QQ output recording, and WebChat incoming/BOT_SELF recording. Old Bot/scene identities and platform post-processing remain at the handler boundary.",
+          "implementation": "Added core/transport/legacy_ingress.py with LegacyIngressBridge and shared_legacy_ingress for common policy, capture snapshot, message recording and RuntimeFacade submission. Routed QQ ai_gateway.py and WebChat chat_ingress.py through the shared bridge behind STELLA_SHARED_INGRESS_ENABLED (default true); false selects their existing direct callback/facade fallback after restart. Added settings/schema/env example/documentation and regression coverage. No matcher registration, duplicate writer, duplicate turn or OutboundService change.",
+          "verification": "Isolated STELLA_HOME=/tmp/stella-p08-check-20261025. Focused command tests/test_legacy_ingress_bridge.py tests/test_env_schema.py tests/test_capture_ingress_gating.py tests/test_private_chat_ingress.py tests/webui/test_webui_chat.py tests/platforms/test_transport_pipeline.py tests/test_ai_gateway_deterministic_reply.py tests/test_transport_outbound.py tests/test_proactive_at_flow.py tests/cometa/test_qq_delivery.py tests/cometa/test_bridge.py -q: 119 passed, 1 existing NoneBot no-adapters warning. Secondary command tests/astrbot_compat/test_dispatch.py tests/astrbot_compat/test_filters.py tests/test_capability_query.py tests/test_transport_normalizers.py -q: 99 passed. Changed-file Ruff and py_compile passed; docs 121 files/1322 local links/577 migration anchors/0 errors; diff check passed. Message-flow --check exits 1 on existing same-topology body-anchor drift (no topology change), final immutable refresh deferred to P10.",
+          "gitnexus_closeout": "Pre-commit 1.6.12 detect-changes all exited 0: 9 files / 5 symbols / 756 affected processes / CRITICAL; compare main exited 0: 80 files / 424 symbols / 786 processes / CRITICAL cumulative. Preserve CRITICAL; generic attribution and extraction limits remain unresolved. PDG index refresh exited 0 and status is current at commit 32845a7, covering 2,045 files; extraction omitted 39 large files, 3,318/3,518 candidate entries, 931 callees, cut 46 walks, and capped 23 traces. State closeout detection: scope=all 4 files / 10 Markdown section symbols / 0 processes / LOW; compare main 80 files / 911 symbols / 90 processes / CRITICAL cumulative. Source audit confirms only plan/status Markdown and feature JSON changed. Preserve cumulative CRITICAL. CLI detail is capped (896 additional symbols beyond the short display), aggregate counts complete, no partial/truncated marker emitted.",
+          "limitations": "No production STELLA_HOME, credentials, database, service, Bot, live model, platform, or VM used; tests prove fixture route semantics, not live QQ/WebChat/model or replay delivery. Matrix remains 0/32 certified. P04 native wheel/API parity and restore drill remain open; overall plan NOT READY.",
+          "package_commit": "32845a7 feat(transport): bridge legacy ingress boundaries"
+        }
       },
       {
         "id": "P09",
@@ -3291,7 +3551,8 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 - [x] G0与P00–P05已按独立包提交；P04源实现已提交但native wheel/API-schema parity和恢复演练未验收。
 - [x] P06-T Telegram、P06-D Discord fixture 与 P06-Q QQ官方 fixture 已分别提交。三平台均保持`not_certified`，不把fixture宣称为平台认证。
 - [x] P07 scene/policy/history APIs 与 Dashboard revisions 已独立提交；定向检查通过。
-- [ ] P08–P10；P04 native wheel/API parity与恢复演练、全部live/模型/VM门禁仍未完成。
+- [x] P08 legacy QQ/WebChat shared ingress 独立提交，focused checks 完成。
+- [ ] P09–P10；P04 native wheel/API parity与恢复演练、全部live/模型/VM门禁仍未完成。
 - [x] 生成计划仍由原版helper snapshot与safe write维护，禁止直接写目标计划路径。
 
 ### 整体实施产品验收（尚未全部完成）
