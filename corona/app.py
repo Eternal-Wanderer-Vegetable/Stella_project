@@ -8,23 +8,16 @@ import asyncio
 import ipaddress
 import logging
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from corona.adapter_proxy import AdapterProxyMiddleware
-from corona.auth import router as auth_router
-from corona.bootstrap import CoronaBootstrap
-from corona.config_api import router as config_api_router
-from corona.config_store import ConfigStore
-from corona.group_bindings import GroupBindingsCoordinator, install_group_bindings
-from corona.local_control import create_local_control_app, create_local_control_record
-from corona.operations import OperationManager
-from corona.routes import install_business_proxy
-from corona.supervisor import CoreSupervisor
-from stella_contracts.control import CONTROL_PROTOCOL_VERSION
-from webui.responses import ApiError, error, ok
-from webui.security import configure_auth_runtime, reset_auth_runtime
+if TYPE_CHECKING:
+    from corona.bootstrap import CoronaBootstrap
+    from corona.config_store import ConfigStore
+    from corona.operations import OperationManager
+    from corona.supervisor import CoreSupervisor
 
 logger = logging.getLogger("corona")
 
@@ -37,6 +30,23 @@ def create_corona_app(
     operation_manager: OperationManager | None = None,
     startup_decision=None,
 ) -> FastAPI:
+    # Keep importing the controller entrypoint cheap: the launcher and
+    # packaging probes can inspect ``corona.app`` without loading Nucleus or
+    # business packages. Constructing the app is the point where those routes
+    # and their implementation dependencies are needed.
+    from corona.adapter_proxy import AdapterProxyMiddleware
+    from corona.auth import router as auth_router
+    from corona.config_api import router as config_api_router
+    from corona.group_bindings import GroupBindingsCoordinator, install_group_bindings
+    from corona.local_control import (
+        create_local_control_app,
+        create_local_control_record,
+    )
+    from corona.routes import install_business_proxy
+    from stella_contracts.control import CONTROL_PROTOCOL_VERSION
+    from webui.responses import ApiError, error, ok
+    from webui.security import configure_auth_runtime, reset_auth_runtime
+
     local_control_record = create_local_control_record(bootstrap)
     configure_auth_runtime(
         stella_home=bootstrap.stella_home,
@@ -187,6 +197,8 @@ def _require_loopback(request: Request) -> None:
             return
     except ValueError:
         pass
+    from webui.responses import ApiError
+
     raise ApiError("仅允许本机访问", status_code=403)
 
 

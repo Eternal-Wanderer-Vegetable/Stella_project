@@ -191,9 +191,16 @@ def test_pressure_capture_denial_is_explicit_and_writes_no_message(
     assert ctx.recorded_row_id == 0
     assert ctx.capture_result == "not_captured_pressure"
     with sqlite3.connect(db) as conn:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM group_messages WHERE content = ?",
-            ("synthetic body must not be stored",),
-        ).fetchone()[0]
+        group_messages_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'group_messages'"
+        ).fetchone()
+        count = (
+            conn.execute(
+                "SELECT COUNT(*) FROM group_messages WHERE content = ?",
+                ("synthetic body must not be stored",),
+            ).fetchone()[0]
+            if group_messages_exists
+            else 0
+        )
     assert count == 0
 
