@@ -457,35 +457,52 @@
         "source": "isolated execution environment importlib.metadata"
       },
       "driver_requirements": {
-        "status": "not_assessed",
-        "observed": null,
-        "evidence": []
+        "status": "partial",
+        "observed": "The 1.7.3 adapter requires an HTTP client; WebSocket client for websocket bots and ASGI server for webhook bots. No QQ driver lifecycle was run.",
+        "evidence": [
+          "https://github.com/nonebot/adapter-qq/blob/v1.7.3/nonebot/adapters/qq/adapter.py"
+        ]
       },
-      "normalizer": null,
-      "exporter": null,
-      "target_codec": null,
-      "capability_provider": null,
+      "normalizer": "core.transport.adapters.qq.QQNormalizer",
+      "exporter": "core.transport.adapters.qq.QQExporter",
+      "target_codec": "core.transport.adapters.qq.QQTargetCodec",
+      "capability_provider": "core.transport.adapters.qq.QQ_CAPABILITIES via StaticCapabilityProvider",
       "scenarios": {
-        "status": "not_assessed",
-        "covered": [],
-        "evidence": []
+        "status": "partial",
+        "covered": [
+          "C2C private, GROUP_AT_MESSAGE_CREATE, AT_MESSAGE_CREATE, and DIRECT_MESSAGE_CREATE source fixtures",
+          "opaque message IDs, intent requirements, exact event-bound target, and expiration windows",
+          "plain-text send method/recipient/msg_id mapping through a fake SDK Bot"
+        ],
+        "evidence": [
+          "tests/platforms/test_qq_adapter.py::test_qq_official_events_normalize_opaque_identities_and_reply_windows",
+          "tests/platforms/test_qq_adapter.py::test_qq_exporter_uses_exact_bot_route_and_original_msg_id"
+        ]
       },
       "permissions": {
         "status": "not_assessed",
-        "evidence": []
+        "evidence": [
+          "tests/platforms/test_qq_adapter.py::test_qq_normalizer_requires_the_specific_configured_intent"
+        ]
       },
       "send_windows": {
-        "status": "not_assessed",
-        "evidence": []
+        "status": "partial",
+        "evidence": [
+          "tests/platforms/test_qq_adapter.py::test_qq_official_events_normalize_opaque_identities_and_reply_windows",
+          "https://github.com/tencent-connect/bot-docs/blob/main/docs/develop/api-v2/server-inter/message/send-receive/send.md"
+        ]
       },
       "rate_limits": {
         "status": "not_assessed",
-        "evidence": []
+        "evidence": [
+          "Official docs note text-channel rate guidance; runtime quota enforcement is deferred to P09."
+        ]
       },
       "maintenance": {
-        "status": "official_snapshot_only",
+        "status": "pinned_official_release",
         "evidence": [
-          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+          "https://github.com/nonebot/adapter-qq/releases/tag/v1.7.3",
+          "https://github.com/nonebot/adapter-qq/tree/v1.7.3"
         ]
       },
       "levels": {
@@ -494,45 +511,65 @@
           "fixture": "not_run",
           "live": "not_run",
           "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "reason": "No SDK distribution is installed in the current .venv and no QQ driver was started; explicit registry registration alone is not a driver acceptance."
         },
         "L1": {
           "local": "not_run",
-          "fixture": "not_run",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_qq_adapter.py::test_qq_official_events_normalize_opaque_identities_and_reply_windows"
+          ],
+          "reason": "Fixtures use real event models from the exact 1.7.3 wheel source; no QQ endpoint or real account was used."
         },
         "L2": {
           "local": "not_run",
-          "fixture": "not_run",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_qq_adapter.py::test_qq_normalizer_rejects_unmentioned_group_and_guild_events",
+            "tests/platforms/test_qq_adapter.py::test_qq_target_codec_rejects_retargeting_expiry_extension_and_serialized_targets"
+          ],
+          "reason": "Intent, exact scene, source message, and expiry boundaries are fixture-checked; live permissions and platform account state are unverified."
         },
         "L3": {
           "local": "not_run",
-          "fixture": "not_run",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_qq_adapter.py::test_qq_exporter_uses_exact_bot_route_and_original_msg_id"
+          ],
+          "reason": "Fake Bot verifies SDK method, exact recipient, original msg_id, and returned ID handling; endpoint acceptance, rate limits, and driver lifecycle remain untested."
         }
       },
       "final_status": "not_certified",
       "status_evidence": [
         {
           "kind": "execution_scope",
-          "result": "No live platform endpoint or account was used in this isolated local work package."
+          "result": "No QQ live endpoint, account, production data, or driver was used."
         },
         {
-          "kind": "package_probe",
-          "result": "Package observation status: not_installed."
+          "kind": "package_contract",
+          "result": "nonebot-adapter-qq==1.7.3 is pinned in project manifests; the distribution is not installed in the current .venv."
+        },
+        {
+          "kind": "fixture_scope",
+          "result": "L1 and L2 fixture checks passed; L3 send mapping is partial; L0 and all live levels were not_run."
         }
       ],
       "blockers": [
-        "L0-L3 platform-specific certification is incomplete.",
-        "No live exchange, account recovery, or clean-VM installation was executed."
-      ]
+        "No QQ SDK distribution or driver lifecycle was exercised in the current .venv.",
+        "Live QQ account, gateway, send permissions, and channel WebSocket acceptance are not available.",
+        "Runtime rate-limit enforcement and real API receipt behavior remain unverified."
+      ],
+      "contract_pin": {
+        "version": "1.7.3",
+        "manifest_sources": [
+          "pyproject.toml",
+          "requirements.txt"
+        ],
+        "fixture_source": "official nonebot-adapter-qq 1.7.3 wheel extracted under /tmp; repository .venv unchanged"
+      }
     },
     {
       "platform": "开黑啦",
