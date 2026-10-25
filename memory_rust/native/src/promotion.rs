@@ -10,6 +10,9 @@ use uuid::Uuid;
 use crate::schema::ensure_supported;
 use crate::similarity::{is_similar, merge_content, normalize_text};
 
+const LEGACY_EVIDENCE_ASSESSMENT_VERSION: &str = "2026-10-08.1";
+const EVIDENCE_ASSESSMENT_VERSION: &str = "2026-10-21.1";
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct PromotionRequest {
     pub db_path: String,
@@ -534,6 +537,19 @@ struct EvidenceDigestRow {
     provenance_json: String,
 }
 
+type RawEvidenceRow = (
+    String,
+    i64,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+);
+
 fn evidence_set_digest(rows: &[EvidenceDigestRow]) -> Result<String, String> {
     let mut ordered: Vec<&EvidenceDigestRow> = rows.iter().collect();
     ordered.sort_by(|left, right| left.id.as_bytes().cmp(right.id.as_bytes()));
@@ -676,6 +692,8 @@ fn source_snapshot_is_current(
         "part_index",
         "origin_msg_id",
         "reply_recipient_user_id",
+        "subject_key",
+        "connection_id",
     ];
     let Some(object) = snapshot.as_object() else {
         return Ok(false);
@@ -770,18 +788,7 @@ fn verify_candidate_evidence(
         }
     }
 
-    let raw_rows: Vec<(
-        String,
-        i64,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-        String,
-    )> = {
+    let raw_rows: Vec<RawEvidenceRow> = {
         let mut statement = tx
             .prepare(concat!(
                 "SELECT e.id, e.source_row_id, e.source_conversation_key, e.source_digest, ",
@@ -861,7 +868,6 @@ fn verify_candidate_evidence(
         return Ok("evidence_set_changed");
     }
 
-    let expected_subject = format!("qq:{}", candidate.user_id);
     for row in &rows {
         let provenance: JsonValue = match serde_json::from_str(&row.provenance_json) {
             Ok(value) => value,
@@ -869,6 +875,24 @@ fn verify_candidate_evidence(
         };
         let Some(snapshot) = provenance.get("source_snapshot") else {
             return Ok("source_snapshot_missing");
+        };
+        let assessment_version = provenance
+            .get("assessment_version")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default();
+        let snapshot_subject = snapshot
+            .get("subject_key")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default();
+        let snapshot_connection = snapshot
+            .get("connection_id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default();
+        let legacy_subject = format!("qq:{}", candidate.user_id);
+        let expected_subject = if snapshot_subject.is_empty() {
+            legacy_subject.as_str()
+        } else {
+            snapshot_subject
         };
         let source_kind = snapshot
             .get("source_kind")
@@ -880,10 +904,12 @@ fn verify_candidate_evidence(
             .and_then(JsonValue::as_str)
             .unwrap_or_default();
         let source_id = snapshot.get("id").and_then(JsonValue::as_i64);
-        if provenance
-            .get("assessment_version")
-            .and_then(JsonValue::as_str)
-            != Some("2026-10-08.1")
+        if !matches!(
+            assessment_version,
+            LEGACY_EVIDENCE_ASSESSMENT_VERSION | EVIDENCE_ASSESSMENT_VERSION
+        ) || (!snapshot_subject.is_empty()
+            && (assessment_version != EVIDENCE_ASSESSMENT_VERSION
+                || snapshot_connection.is_empty()))
             || provenance
                 .get("verification_status")
                 .and_then(JsonValue::as_str)
@@ -893,11 +919,11 @@ fn verify_candidate_evidence(
             || provenance
                 .get("recording_author_key")
                 .and_then(JsonValue::as_str)
-                != Some(expected_subject.as_str())
+                != Some(expected_subject)
             || provenance
                 .get("fact_object_key")
                 .and_then(JsonValue::as_str)
-                != Some(expected_subject.as_str())
+                != Some(expected_subject)
             || provenance
                 .get("exact_support_span")
                 .and_then(JsonValue::as_str)
@@ -1354,12 +1380,20 @@ mod tests {
     use super::{
         candidate_cas_digest, digest_cas_object, effective_owner, evidence_set_digest,
         load_candidate, promote, snapshot_digest, CasValue, EffectiveOwner, EvidenceDigestRow,
-        PromotionRequest,
+        PromotionRequest, EVIDENCE_ASSESSMENT_VERSION, LEGACY_EVIDENCE_ASSESSMENT_VERSION,
     };
     use rusqlite::Connection;
     use serde_json::{json, Value as JsonValue};
     use std::collections::BTreeMap;
     use tempfile::NamedTempFile;
+
+    struct EvidenceContractFixture<'a> {
+        assessment_version: &'a str,
+        fact_subject_key: &'a str,
+        source_subject_key: Option<&'a str>,
+        connection_id: Option<&'a str>,
+        candidate_subject_key: &'a str,
+    }
 
     #[test]
     fn typed_cas_scalar_golden_vector_matches_python() {
@@ -1557,9 +1591,38 @@ mod tests {
     }
 
     fn add_evidence(conn: &Connection, candidate_id: &str, row_id: i64, content: &str) {
+        add_evidence_with_contract(
+            conn,
+            candidate_id,
+            row_id,
+            content,
+            EvidenceContractFixture {
+                assessment_version: LEGACY_EVIDENCE_ASSESSMENT_VERSION,
+                fact_subject_key: "qq:1",
+                source_subject_key: None,
+                connection_id: None,
+                candidate_subject_key: "qq:1",
+            },
+        );
+    }
+
+    fn add_evidence_with_contract(
+        conn: &Connection,
+        candidate_id: &str,
+        row_id: i64,
+        content: &str,
+        contract: EvidenceContractFixture<'_>,
+    ) {
+        let EvidenceContractFixture {
+            assessment_version,
+            fact_subject_key,
+            source_subject_key,
+            connection_id,
+            candidate_subject_key,
+        } = contract;
         let fact_key = format!("preference.general:{row_id}");
         let conversation_key = format!("conversation-{row_id}");
-        let snapshot = json!({
+        let mut snapshot = json!({
             "id": row_id,
             "group_id": "qq-group-1",
             "user_id": "1",
@@ -1568,13 +1631,19 @@ mod tests {
             "conversation_key": conversation_key,
             "bot_id": "bot-1"
         });
+        if let Some(subject_key) = source_subject_key {
+            snapshot["subject_key"] = json!(subject_key);
+        }
+        if let Some(connection_id) = connection_id {
+            snapshot["connection_id"] = json!(connection_id);
+        }
         let source_digest = snapshot_digest(&snapshot).expect("source digest");
         let provenance = json!({
-            "assessment_version": "2026-10-08.1",
+            "assessment_version": assessment_version,
             "verification_status": "accepted",
             "claim_key": fact_key,
-            "recording_author_key": "qq:1",
-            "fact_object_key": "qq:1",
+            "recording_author_key": fact_subject_key,
+            "fact_object_key": fact_subject_key,
             "exact_support_span": content,
             "conversation_key": conversation_key,
             "source_id": row_id,
@@ -1583,18 +1652,26 @@ mod tests {
         let evidence_id = format!("evidence-{row_id}");
         conn.execute(
             "INSERT INTO group_messages
-             (id, group_id, user_id, content, source_kind, conversation_key, bot_id)
-             VALUES (?, 'qq-group-1', '1', ?, 'AT_MENTION', ?, 'bot-1')",
-            (row_id, content, &conversation_key),
+             (id, group_id, user_id, content, source_kind, conversation_key, bot_id,
+              subject_key, connection_id)
+             VALUES (?, 'qq-group-1', '1', ?, 'AT_MENTION', ?, 'bot-1', ?, ?)",
+            (
+                row_id,
+                content,
+                &conversation_key,
+                source_subject_key.unwrap_or_default(),
+                connection_id.unwrap_or_default(),
+            ),
         )
         .expect("source message");
         conn.execute(
             "UPDATE memory_candidates
-             SET owner_type = 'SPACE', owner_key = 'space:space', subject_key = 'qq:1',
+             SET owner_type = 'SPACE', owner_key = 'space:space', subject_key = ?,
                  audience = 'CURRENT_SPACE', source_conversation_key = ?, fact_key = ?,
                  source_message_ids = ?
              WHERE id = ?",
             (
+                candidate_subject_key,
                 &conversation_key,
                 &fact_key,
                 serde_json::to_string(&vec![row_id]).expect("source message ids"),
@@ -1607,14 +1684,16 @@ mod tests {
                 id, owner_type, owner_key, subject_key, audience, fact_key,
                 source_conversation_key, source_row_id, candidate_id, fact_subject_key,
                 source_digest, verification_status, provenance_json
-             ) VALUES (?, 'SPACE', 'space:space', 'qq:1', 'CURRENT_SPACE', ?, ?, ?, ?,
-                       'qq:1', ?, 'accepted', ?)",
+             ) VALUES (?, 'SPACE', 'space:space', ?, 'CURRENT_SPACE', ?, ?, ?, ?,
+                       ?, ?, 'accepted', ?)",
             (
                 &evidence_id,
+                candidate_subject_key,
                 &fact_key,
                 &conversation_key,
                 row_id,
                 candidate_id,
+                fact_subject_key,
                 &source_digest,
                 provenance.to_string(),
             ),
@@ -1683,7 +1762,8 @@ mod tests {
              );
              CREATE TABLE group_messages (
                id INTEGER PRIMARY KEY, group_id TEXT, user_id TEXT, content TEXT,
-               source_kind TEXT, conversation_key TEXT, bot_id TEXT
+               source_kind TEXT, conversation_key TEXT, bot_id TEXT,
+               subject_key TEXT DEFAULT '', connection_id TEXT DEFAULT ''
              );
              CREATE TABLE memory_evidence (
                id TEXT PRIMARY KEY, owner_type TEXT, owner_key TEXT, subject_key TEXT,
@@ -1710,6 +1790,45 @@ mod tests {
         .expect("schema");
         add_evidence(&conn, "c1", 1, "我喜欢羽毛球");
         file
+    }
+
+    #[test]
+    fn current_assessment_accepts_namespaced_source_subject() {
+        let file = setup();
+        let conn = Connection::open(file.path()).expect("open db");
+        conn.execute("DELETE FROM memory_claim_links", [])
+            .expect("clear legacy links");
+        conn.execute("DELETE FROM memory_evidence", [])
+            .expect("clear legacy evidence");
+        conn.execute("DELETE FROM group_messages", [])
+            .expect("clear legacy source");
+        let subject_key = "u2.WzIsInNlcnZpY2U6dGVzdCIsIjEiXQ";
+        add_evidence_with_contract(
+            &conn,
+            "c1",
+            1,
+            "我喜欢羽毛球",
+            EvidenceContractFixture {
+                assessment_version: EVIDENCE_ASSESSMENT_VERSION,
+                fact_subject_key: subject_key,
+                source_subject_key: Some(subject_key),
+                connection_id: Some("connection-service-test"),
+                candidate_subject_key: "",
+            },
+        );
+        drop(conn);
+
+        let output = promote(request(file.path(), "c1")).expect("promote current evidence");
+        assert!(output.promoted, "{}", output.action);
+        let conn = Connection::open(file.path()).expect("open db");
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM memory_candidates WHERE id = 'c1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("candidate status");
+        assert_eq!(status, "CONFIRMED");
     }
 
     #[test]
