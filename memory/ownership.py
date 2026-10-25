@@ -161,11 +161,12 @@ def scope_for_chat_context(ctx: Any, *, memory_space: str) -> "MemoryAccessScope
     权威链：当前发言者只由平台事件确定（``ctx.user_id``）；``peer_id`` 在群聊
     里是**会话地址（群号）不是人**，绝不参与 PERSON 构造。各路径：
 
-    - 普通群聊 / 私聊 / WebChat：主体 = ``ctx.user_id``（平台 sender；主动 @
+    - 普通群聊 / 频道 / 线程 / 私聊 / WebChat：主体 = ``ctx.user_id``（平台 sender；主动 @
       路径上它是经过 pick_target 触发链验证的目标 uid）；
     - 群级主动发言（``trigger == "proactive"``）：无当前个人主体 → ``None``
       （调用方保持 SPACE-only / 旧 user_id 过滤，不会用群号或 0 构造 PERSON）；
-    - 旧入口（``conversation_kind`` 为空）：``None``，与升级前行为逐字一致。
+    - 旧入口（``conversation_kind`` 为空）：``None``，与升级前行为逐字一致；
+    - channel/thread 必须带匹配的可信 BotRef/SceneRef/connection/thread，不满足时为 ``None``。
 
     返回 ``None`` 表示「本轮不应用 owner scope」——不是授权放行：检索侧对
     ``None`` 的处理是旧有行为（SPACE / user_id 过滤），永远不会扩大可见范围。
@@ -173,14 +174,40 @@ def scope_for_chat_context(ctx: Any, *, memory_space: str) -> "MemoryAccessScope
     if getattr(ctx, "trigger", "") == "proactive":
         return None
     kind = str(getattr(ctx, "conversation_kind", "") or "")
-    if kind not in ("group", "private", "webchat"):
+    if kind not in ("group", "private", "webchat", "channel", "thread"):
         return None
-    from core.transport.models import UserRef
+    from core.transport.models import BotRef, SceneRef, UserRef
 
     user_ref = getattr(ctx, "user_ref", None)
     if not isinstance(user_ref, UserRef):
         return None
     bot_ref = getattr(ctx, "bot_ref", None)
+    if kind in {"channel", "thread"}:
+        scene_ref = getattr(ctx, "scene_ref", None)
+        scene_parent_path = getattr(ctx, "scene_parent_path", ())
+        if not isinstance(scene_parent_path, (tuple, list)):
+            return None
+        if (
+            not isinstance(bot_ref, BotRef)
+            or not isinstance(scene_ref, SceneRef)
+            or scene_ref.kind != kind
+            or getattr(ctx, "connection_id", "") != bot_ref.connection_id
+            or getattr(ctx, "bot_id", "") != bot_ref.self_id
+            or str(getattr(ctx, "user_id", "")) != user_ref.raw_user_id
+            or getattr(ctx, "scene_kind", "") != kind
+            or getattr(ctx, "scene_id", "") != scene_ref.scene_id
+            or tuple(scene_parent_path) != scene_ref.parent_path
+        ):
+            return None
+        from core.transport.keys import conversation_key_v2
+
+        if getattr(ctx, "conversation_key", "") != conversation_key_v2(bot_ref, scene_ref):
+            return None
+        if kind == "thread" and (
+            not scene_ref.thread_id
+            or getattr(ctx, "thread_id", "") != scene_ref.thread_id
+        ):
+            return None
     bot_id = str(
         getattr(bot_ref, "self_id", "") or getattr(ctx, "bot_id", "") or ""
     )
@@ -195,6 +222,8 @@ def scope_for_chat_context(ctx: Any, *, memory_space: str) -> "MemoryAccessScope
         connection_id = f"legacy-qq:{bot_id}"
     if not connection_id:
         return None
+    # channel/thread 使用与 group 相同的 USER_SHARED audience；thread 的
+    # connection、parent path 与 thread ID 已进入 canonical conversation key。
     private_kind = "private" if kind in {"private", "webchat"} else kind
     aliases = _legacy_subject_aliases(
         identity_domain=user_ref.identity_domain,

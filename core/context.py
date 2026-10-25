@@ -134,7 +134,7 @@ class ChatContext:
     """一次聊天处理会话的完整状态。
 
     属性分组：
-    输入标识（user_id/group_id/msg_id/message/source_kind）来自 OneBot 事件；
+    输入标识（user_id/group_id/msg_id/message/source_kind）来自可信入口；
     处理产物（raw_output/thought/action/reply/lines）由 pipeline 与解析钩子写入；
     诊断信息（trigger/intent/llm_* 系列）用于 thought 日志记录调试；
     结构化上下文（short_term/user_profile/memories_for_prompt）供 prompt 构建使用；
@@ -142,7 +142,9 @@ class ChatContext:
     """
 
     # ---- 输入标识 ----
-    user_id: int
+    # Transport entry points keep the platform ID opaque; legacy OneBot paths
+    # continue to provide integers until a downstream API explicitly needs it.
+    user_id: int | str
     group_id: int
     msg_id: int
     message: str
@@ -160,10 +162,10 @@ class ChatContext:
     # 在下面四个字段里。storage_session_id 是注册表分配的存储键：群=正整数
     # 群号、WebChat=-1、私聊=负整数；存储/摘要/checkpoint 一律用它
     # （storage_key()），绝不能用负号反推种类。
-    conversation_kind: str = ""  # group / private / webchat；空 = 旧入口未升级
+    conversation_kind: str = ""  # group / private / webchat / channel / thread；空 = 旧入口未升级
     conversation_key: str = ""  # 规范键 qq:<bot>:group:<gid> 等；空 = 旧入口
     bot_id: str = ""  # 接入 Bot 的 self_id（个人 owner 键 person:qq:<bot>:<uid> 用）
-    peer_id: str = ""  # 群=群号；私聊=sender QQ 号；WebChat=主体
+    peer_id: str = ""  # 群/频道/线程=平台场景 ID；私聊/WebChat=场景主体
     storage_session_id: int = 0  # 0 = 未升级入口，按 group_id 兼容
     # Transport DTO 仅携带可信身份字段；旧扁平字段继续服务现有消费者。
     # WebChat 的合成 user_id 不自动成为账户主体，接入层需显式提供 UserRef。

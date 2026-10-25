@@ -13,12 +13,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
+from core.transport.message_event import MessageEventV1
 from core.transport.models import BotRef, SceneRef, UserRef
 
 
 @dataclass(frozen=True, slots=True)
 class NormalizedEvent:
-    """A message event with Stella's stable identity and routing facts."""
+    """A message event with Stella's stable identity and routing facts.
+
+    ``message_event`` is the SDK-free, versioned event contract used by the new
+    opt-in ingress. It remains separate from legacy OneBot/WebChat payload fields.
+    """
 
     bot_ref: BotRef
     user_ref: UserRef
@@ -32,6 +37,8 @@ class NormalizedEvent:
     has_segments: bool = False
     raw_event: Any = field(default=None, repr=False, compare=False)
     bot_handle: Any = field(default=None, repr=False, compare=False)
+    # Appended to preserve the positional constructor contract of legacy callers.
+    message_event: MessageEventV1 | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.bot_ref, BotRef):
@@ -40,6 +47,18 @@ class NormalizedEvent:
             raise ValueError("user_ref must be a UserRef")
         if not isinstance(self.scene_ref, SceneRef):
             raise ValueError("scene_ref must be a SceneRef")
+        if self.message_event is not None:
+            if not isinstance(self.message_event, MessageEventV1):
+                raise ValueError("message_event must be a MessageEventV1 or None")
+            if (
+                self.platform_message_id
+                and self.platform_message_id != self.message_event.platform_message_id
+            ):
+                raise ValueError("normalized and message-event IDs must match")
+            if not self.platform_message_id:
+                object.__setattr__(
+                    self, "platform_message_id", self.message_event.platform_message_id
+                )
         for name in ("text", "platform_message_id", "sender_display_name"):
             if not isinstance(getattr(self, name), str):
                 raise ValueError(f"{name} must be a string")
