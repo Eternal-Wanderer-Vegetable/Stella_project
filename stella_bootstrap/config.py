@@ -23,6 +23,7 @@ from stella_contracts.config import ConfigRevision, ConfigRevisionError
 from .env import capture_external_environment, parse_dotenv
 from .env_schema import build_schema
 from .identity import INSTANCE_ID_PATTERN, runtime_dir
+from .transport_settings import TransportSettingsError, parse_transport_settings_json
 
 CONFIG_REVISION_FILE_ENV = "STELLA_CONFIG_REVISION_FILE"
 RESERVED_ENV_KEYS = frozenset(
@@ -205,6 +206,15 @@ def _read_source(
 
 
 def _validate_known_values(values: Mapping[str, str], schema: dict) -> None:
+    transport_settings = values.get("STELLA_TRANSPORT_SETTINGS_JSON", "")
+    if transport_settings.strip():
+        try:
+            parse_transport_settings_json(transport_settings)
+        except TransportSettingsError as exc:
+            raise ConfigBuildError(
+                "invalid value for configuration key STELLA_TRANSPORT_SETTINGS_JSON"
+            ) from exc
+
     for field in schema.get("fields", ()):
         key = field["key"]
         if key not in values:

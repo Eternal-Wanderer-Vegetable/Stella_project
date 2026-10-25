@@ -4,20 +4,41 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from corona.app import create_corona_app
 from corona.bootstrap import prepare_corona_bootstrap
-from corona.config_store import ConfigStore
+from corona.config_store import ConfigStore, ConfigStoreError
 from corona.operations import OperationManager
 from stella_bootstrap.config import build_config_revision, write_revision
 
 ROOT = Path(__file__).resolve().parents[2]
 INSTANCE = "cn05-api-test"
+TRANSPORT_SETTINGS_KEY = "STELLA_TRANSPORT_SETTINGS_JSON"
+
+
+def _transport_bundle() -> dict:
+    return {
+        "version": 1,
+        "connections": [
+            {
+                "connection_id": "11111111-1111-4111-8111-111111111111",
+                "adapter": "telegram",
+                "platform_scope": "telegram",
+                "self_id": "007:雪",
+                "credential_ref": "env:TELEGRAM_BOT_TOKEN",
+                "display_name": 'ops "blue" # ${HOME}',
+            }
+        ],
+        "profiles": [{"policy_profile_id": "default", "policy": {}}],
+        "bindings": [],
+    }
 
 
 def _snapshot(phase: str, revision_id: str, generation_id: str, pid: int | None = 4200):
@@ -78,7 +99,12 @@ class _Supervisor:
         self.snapshot = _snapshot("stopped", self.selected.revision_id, "stopped", None)
 
 
-def _app(tmp_path: Path, *, extra_env: str = ""):
+def _app(
+    tmp_path: Path,
+    *,
+    extra_env: str = "",
+    external_environment: dict[str, str] | None = None,
+):
     home = tmp_path / "home"
     home.mkdir()
     (home / ".env").write_text(
@@ -87,6 +113,7 @@ def _app(tmp_path: Path, *, extra_env: str = ""):
         encoding="utf-8",
     )
     external = {"DB_PATH": str(tmp_path / "isolated.db")}
+    external.update(external_environment or {})
     initial = build_config_revision(
         project_root=ROOT,
         stella_home=home,
@@ -343,3 +370,242 @@ def test_corona_platform_adapters_catalog_save_and_secret_redaction(
         assert blocked.status_code == 400
         assert blocked.json()["data"]["code"] == "adapter_modules_unavailable"
         assert store.state().desired_revision == updated["desired_revision"]
+
+
+def test_corona_conversation_settings_cas_idempotency_apply_and_core_down_save(
+    tmp_path: Path,
+) -> None:
+    app, store, supervisor = _app(tmp_path)
+    initial_revision = store.state().desired_revision
+    with TestClient(app) as client:
+        setup = client.post(
+            "/api/v1/auth/setup",
+            json={"username": "admin", "password": "cn05-api-test-password"},
+        )
+        assert setup.status_code == 200
+        headers = {"Authorization": f"Bearer {setup.json()['data']['token']}"}
+        route = "/api/v1/platform/conversation-settings"
+
+        generic_config = client.get("/api/v1/config", headers=headers).json()["data"]
+        assert TRANSPORT_SETTINGS_KEY not in {
+            field["key"] for field in generic_config["fields"]
+        }
+        generic_update = client.put(
+            "/api/v1/config",
+            headers={
+                **headers,
+                "If-Match": f'"{initial_revision}"',
+                "Idempotency-Key": "generic-transport-settings-rejected",
+            },
+            json={TRANSPORT_SETTINGS_KEY: json.dumps(_transport_bundle())},
+        )
+        assert generic_update.status_code == 400
+        assert generic_update.json()["data"]["code"] == "dedicated_settings_route_required"
+
+        current = client.get(route, headers=headers)
+        assert current.status_code == 200
+        assert current.json()["data"]["settings"] == {"version": 1}
+        assert current.headers["ETag"] == f'"{initial_revision}"'
+
+        body = json.dumps(_transport_bundle(), ensure_ascii=False).encode("utf-8")
+        missing = client.put(route, content=body, headers=headers)
+        assert missing.status_code == 428
+        assert missing.json()["data"]["code"] == "if_match_required"
+
+        malformed = client.put(
+            route,
+            content=b'{"version":1,"version":1}',
+            headers={**headers, "If-Match": current.headers["ETag"]},
+        )
+        assert malformed.status_code == 400
+        assert malformed.json()["data"]["code"] == "transport_settings_invalid"
+
+        invalid = client.put(
+            route,
+            content=b'{"version":1,"bindings":[{"connection_id":"11111111-1111-4111-8111-111111111111","scene":{"kind":"group","scene_id":"g"},"policy_profile_id":"missing"}]}',
+            headers={**headers, "If-Match": current.headers["ETag"]},
+        )
+        assert invalid.status_code == 400
+        assert store.state().desired_revision == initial_revision
+        assert supervisor.started == []
+
+        wrong_revision = client.put(
+            route,
+            content=body,
+            headers={**headers, "If-Match": '"stale-revision"'},
+        )
+        assert wrong_revision.status_code == 409
+        assert wrong_revision.json()["data"]["code"] == "revision_conflict"
+
+        supervisor.snapshot = _snapshot("stopped", initial_revision, "core-down", None)
+        manager = app.state.operation_manager
+        app.state.operation_manager = None
+        saved = client.put(
+            route,
+            content=body,
+            headers={
+                **headers,
+                "If-Match": current.headers["ETag"],
+                "Idempotency-Key": "conversation-settings-1",
+            },
+        )
+        app.state.operation_manager = manager
+        assert saved.status_code == 200, saved.text
+        saved_data = saved.json()["data"]
+        assert saved_data["valid"] is True
+        assert saved_data["settings"] == _transport_bundle()
+        assert saved_data["source"] == "data_env"
+        assert saved_data["applied_revision"] == initial_revision
+        assert saved_data["desired_revision"] != initial_revision
+        assert supervisor.started == []
+        managed_env = store.env_path.read_text(encoding="utf-8")
+        assert r"\\u0024{HOME}" in managed_env
+        assert "${HOME}" not in managed_env
+
+        retry = client.put(
+            route,
+            content=body,
+            headers={
+                **headers,
+                "If-Match": current.headers["ETag"],
+                "Idempotency-Key": "conversation-settings-1",
+            },
+        )
+        assert retry.status_code == 200
+        assert retry.json()["data"]["desired_revision"] == saved_data["desired_revision"]
+
+        conflicting_retry = client.put(
+            route,
+            content=json.dumps(
+                {**_transport_bundle(), "defaults": {"capture_enabled": False}},
+                ensure_ascii=False,
+            ).encode("utf-8"),
+            headers={
+                **headers,
+                "If-Match": current.headers["ETag"],
+                "Idempotency-Key": "conversation-settings-1",
+            },
+        )
+        assert conflicting_retry.status_code == 409
+        assert conflicting_retry.json()["data"]["code"] == "idempotency_conflict"
+
+        applied = client.post(
+            "/api/v1/system/apply",
+            headers={**headers, "Idempotency-Key": "conversation-settings-apply-1"},
+            json={"revision_id": saved_data["desired_revision"]},
+        )
+        assert applied.status_code == 202
+        repeated_apply = client.post(
+            "/api/v1/system/apply",
+            headers={**headers, "Idempotency-Key": "conversation-settings-apply-1"},
+            json={"revision_id": saved_data["desired_revision"]},
+        )
+        assert repeated_apply.status_code == 202
+        operation_id = applied.json()["data"]["operation_id"]
+        assert repeated_apply.json()["data"]["operation_id"] == operation_id
+        operation = client.get(
+            f"/api/v1/system/operations/{operation_id}", headers=headers
+        )
+        assert operation.status_code == 200
+        assert operation.json()["data"]["phase"] == "succeeded"
+        assert supervisor.started == [saved_data["desired_revision"]]
+
+
+def test_config_store_candidate_revision_rejects_invalid_transport_bundle(
+    tmp_path: Path,
+) -> None:
+    _app_instance, store, _supervisor = _app(tmp_path)
+    initial = store.state()
+    env_before = store.env_path.read_bytes()
+    with pytest.raises(ConfigStoreError, match="config_validation_failed"):
+        store.save(
+            {TRANSPORT_SETTINGS_KEY: '{"version":2}'},
+            expected_revision=initial.desired_revision,
+            idempotency_key="invalid-transport-settings",
+        )
+    assert store.state().desired_revision == initial.desired_revision
+    assert store.env_path.read_bytes() == env_before
+
+
+def test_corona_conversation_settings_reports_external_override_source(
+    tmp_path: Path,
+) -> None:
+    external_settings = json.dumps(
+        {"version": 1, "defaults": {"capture_enabled": False}},
+        separators=(",", ":"),
+    )
+    app, _store, _supervisor = _app(
+        tmp_path,
+        external_environment={TRANSPORT_SETTINGS_KEY: external_settings},
+    )
+    with TestClient(app) as client:
+        setup = client.post(
+            "/api/v1/auth/setup",
+            json={"username": "admin", "password": "cn05-api-test-password"},
+        )
+        headers = {"Authorization": f"Bearer {setup.json()['data']['token']}"}
+        current = client.get(
+            "/api/v1/platform/conversation-settings", headers=headers
+        )
+    assert current.status_code == 200
+    data = current.json()["data"]
+    assert data["settings"] == {
+        "version": 1,
+        "defaults": {"capture_enabled": False},
+    }
+    assert data["source"] == "external_environment"
+    assert data["applied_source"] == "external_environment"
+
+
+def test_transport_settings_profile_and_external_sources_roundtrip_large_json(
+    tmp_path: Path,
+) -> None:
+    from stella_bootstrap.transport_settings import (
+        MAX_TRANSPORT_SETTINGS_BYTES,
+        parse_transport_settings_json,
+    )
+    from webui.services.conversation_settings import stored_json
+
+    bundle = _transport_bundle()
+    bundle["bindings"] = [
+        {
+            "connection_id": "11111111-1111-4111-8111-111111111111",
+            "scene": {"kind": "group", "scene_id": f"{index}-" + "x" * 490},
+            "policy_profile_id": "default",
+        }
+        for index in range(256)
+    ]
+    raw = json.dumps(bundle, ensure_ascii=False, separators=(",", ":"))
+    parsed = parse_transport_settings_json(raw)
+    assert 100_000 < len(parsed.canonical_json.encode("utf-8")) < MAX_TRANSPORT_SETTINGS_BYTES
+    stored = stored_json(parsed)
+
+    profile_home = tmp_path / "profile"
+    profile_home.mkdir()
+    (profile_home / ".env").write_text("ENVIRONMENT=dev\n", encoding="utf-8")
+    (profile_home / ".env.dev").write_text(
+        f"{TRANSPORT_SETTINGS_KEY}={json.dumps(stored, ensure_ascii=False)}\n",
+        encoding="utf-8",
+    )
+    profile_revision = build_config_revision(
+        project_root=ROOT,
+        stella_home=profile_home,
+        external_environment={},
+    )
+    assert profile_revision.sources[TRANSPORT_SETTINGS_KEY] == "dev_overlay"
+    assert parse_transport_settings_json(
+        profile_revision.values[TRANSPORT_SETTINGS_KEY]
+    ).canonical_json == parsed.canonical_json
+
+    external_home = tmp_path / "external"
+    external_home.mkdir()
+    (external_home / ".env").write_text("", encoding="utf-8")
+    external_revision = build_config_revision(
+        project_root=ROOT,
+        stella_home=external_home,
+        external_environment={TRANSPORT_SETTINGS_KEY: stored},
+    )
+    assert external_revision.sources[TRANSPORT_SETTINGS_KEY] == "external_environment"
+    assert parse_transport_settings_json(
+        external_revision.values[TRANSPORT_SETTINGS_KEY]
+    ).canonical_json == parsed.canonical_json

@@ -11,12 +11,14 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
+from stella_bootstrap.transport_settings import TransportSettingsError
 from webui import audit
 from webui.auth import AuthContext, require_auth
-from webui.responses import ok
+from webui.responses import ApiError, ok
 from webui.services import config as config_service
+from webui.services import conversation_settings as conversation_settings_service
 from webui.services import groups as groups_service
 from webui.services import platformcfg as platformcfg_service
 from webui.services import providers as providers_service
@@ -142,6 +144,42 @@ async def platform_adapters_put(
         configured_connections=sorted((payload.get("connections") or {}).keys()),
     )
     return ok(result)
+
+
+@router.get("/api/v1/platform/conversation-settings")
+async def platform_conversation_settings(response: Response) -> Any:
+    data, digest, _duplicate = conversation_settings_service.legacy_snapshot()
+    response.headers["ETag"] = f'"{digest}"'
+    return ok(data)
+
+
+@router.put("/api/v1/platform/conversation-settings")
+async def platform_conversation_settings_put(
+    request: Request,
+    response: Response,
+    auth: Annotated[AuthContext, Depends(require_auth)],
+) -> Any:
+    expected_digest = conversation_settings_service.parse_legacy_if_match(
+        request.headers.get("if-match")
+    )
+    try:
+        parsed = conversation_settings_service.parse_request_body(await request.body())
+    except TransportSettingsError as exc:
+        raise ApiError(
+            str(exc), data={"code": "transport_settings_invalid"}
+        ) from exc
+
+    data, digest = conversation_settings_service.save_legacy(
+        parsed, expected_digest=expected_digest
+    )
+    response.headers["ETag"] = f'"{digest}"'
+    _audited(
+        request,
+        auth,
+        "platform.conversation_settings",
+        desired_revision=digest,
+    )
+    return ok(data)
 
 
 # ---------- 空间（人格） ----------
