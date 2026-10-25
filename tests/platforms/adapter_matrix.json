@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "assessment_date": "2026-10-21",
+  "assessment_date": "2026-10-25",
   "environment": {
     "venv": ".venv",
     "python_version": "3.12.14",
@@ -1519,28 +1519,41 @@
       "package_name": "nonebot-adapter-discord",
       "priority": "P1",
       "package_observation": {
-        "status": "not_installed",
-        "version": null,
-        "requires_python": null,
-        "source": "isolated execution environment importlib.metadata"
+        "status": "observed_installed",
+        "version": "1.1.10",
+        "requires_python": ">=3.10,<4.0",
+        "source": "Exact requirements-platform.lock wheel installed under /tmp only for fixtures; repository .venv remains unchanged."
       },
       "driver_requirements": {
-        "status": "not_assessed",
-        "observed": null,
-        "evidence": []
+        "status": "partial",
+        "observed": "Locked wheel documentation describes ForwardDriver with httpx and websockets; no runtime driver lifecycle or live connection was exercised.",
+        "evidence": [
+          "tests/platforms/test_discord_adapter.py"
+        ]
       },
-      "normalizer": null,
-      "exporter": null,
-      "target_codec": null,
-      "capability_provider": null,
+      "normalizer": "core.transport.adapters.discord.DiscordNormalizer",
+      "exporter": "core.transport.adapters.discord.DiscordExporter",
+      "target_codec": "core.transport.adapters.discord.DiscordTargetCodec",
+      "capability_provider": "core.transport.adapters.discord.DISCORD_CAPABILITIES via StaticCapabilityProvider",
       "scenarios": {
-        "status": "not_assessed",
-        "covered": [],
-        "evidence": []
+        "status": "partial",
+        "covered": [
+          "Guild text channel, one-to-one DM, and announcement/public/private thread event identities using locked adapter models plus an injected channel resolver",
+          "Different threads under one parent remain distinct and outbound targets preserve each exact thread channel ID",
+          "Missing guild/DM/message-content intents and missing channel metadata are rejected; group DMs remain unsupported",
+          "Unresolved same-channel reply relation, safe attachment type/MIME/size hints, and platform edit revision IDs",
+          "Exact send_to channel, literal markdown, empty allowed_mentions, fail-if-missing reply reference, and opaque response message ID",
+          "Permission rejection is FAILED with one attempt and no parent-channel fallback; long text is split at 1900 characters"
+        ],
+        "evidence": [
+          "tests/platforms/test_discord_adapter.py"
+        ]
       },
       "permissions": {
-        "status": "not_assessed",
-        "evidence": []
+        "status": "partial",
+        "evidence": [
+          "tests/platforms/test_discord_adapter.py::test_discord_exporter_permission_failure_is_definite_and_long_text_is_split"
+        ]
       },
       "send_windows": {
         "status": "not_assessed",
@@ -1558,48 +1571,61 @@
       },
       "levels": {
         "L0": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_discord_adapter.py"
+          ],
+          "reason": "The exact locked wheel imports from an isolated temporary target and its actual models pass fixtures; no driver startup was performed."
         },
         "L1": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_discord_adapter.py"
+          ],
+          "reason": "DM, guild channel, and distinct thread IDs normalize through trusted metadata, and text/reply target fixtures preserve the exact channel; no live Discord exchange occurred."
         },
         "L2": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_discord_adapter.py"
+          ],
+          "reason": "Same-channel unresolved reply identity and safe attachment hints pass; message persistence, local relation resolution, and media retrieval are not exercised."
         },
         "L3": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_discord_adapter.py"
+          ],
+          "reason": "Fake send_to covers exact text/reply target, mention suppression, message IDs, permission failure, and text splitting; live permissions, SEND_MESSAGES_IN_THREADS, send windows, and rate limits remain unverified."
         }
       },
       "final_status": "not_certified",
       "status_evidence": [
         {
           "kind": "execution_scope",
-          "result": "No live platform endpoint or account was used in this isolated local work package."
+          "result": "No live Discord account, credential, endpoint, production data, or runtime driver was used."
         },
         {
           "kind": "package_probe",
-          "result": "Package observation status: not_installed."
+          "result": "Exact locked wheel nonebot-adapter-discord==1.1.10 was installed under /tmp for fixtures only; repository .venv was not modified."
+        },
+        {
+          "kind": "local_fixture_scope",
+          "result": "L0 and L1 local/fixture pass; L2 and L3 fixture evidence is partial; all live levels remain not_run."
         }
       ],
       "blockers": [
-        "L0-L3 platform-specific certification is incomplete.",
-        "No live exchange, account recovery, or clean-VM installation was executed."
+        "The connection owner must provide a trusted channel resolver; production adapter/event wiring is not installed by this package.",
+        "No live exchange or runtime driver lifecycle was executed.",
+        "Actual bot permissions, private-thread visibility, SEND_MESSAGES_IN_THREADS, send windows, rate limits, and clean-VM installation remain unverified."
       ]
     },
     {

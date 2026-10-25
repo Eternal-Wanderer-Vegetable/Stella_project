@@ -94,6 +94,16 @@ G0 的 d=1 与§4.2 source-derived 生产消费者已调和，没有发现需要
 - Focused isolated tests passed 72 with two existing warnings; Ruff, py_compile, import boundary and docs passed. Flow check exits 1 because 21 body anchors changed with no topology change; final immutable refresh belongs to P10. No live account or production data was used. Telegram remains not_certified; matrix remains 0/32.
 - Repeated identical staged GitNexus structured calls had no error/partial/truncated: `scope=all` 9 files / 26–35 symbols / 784–791 affected processes / CRITICAL; `scope=compare base_ref=main` 56 files / 144–155 symbols / 791–792 processes / CRITICAL. Last repeated result: all 26 symbols / 791 processes; compare 144 symbols / 791 processes. Code symbols are additive Telegram classes/constants and fixture names; generic Get_config/Cometa/skill/main process attribution does not identify a Telegram route, so retain CRITICAL and do not waive it. Index limits remain: 39 large files skipped; 3,262/3,462 candidate entries unranked; 925 callees skipped; 46 walks cut; 23 traces capped. Counts varied across identical runs on the same staged tree; all runs remained CRITICAL and complete.
 
+### 4.1.3 P06-D Discord fixture closeout (2026-10-25)
+
+- Base: P06-T commit `ef06712ca322a970d528fc9a9c8a2f878c133193`. Before edits, `EventNormalizer` was CRITICAL/exact (5 direct; 193 total / 182 reported processes / 20 modules), `NormalizedEvent` CRITICAL/exact (5 direct; 9 total / 7 processes / 5 modules), and `AdapterCapabilities` CRITICAL/exact (5 direct; 16 total / 11 processes / 11 modules). Shared boundaries were not edited. `TransportIngress` context was UNKNOWN/test-only; source audit found no production construction/call.
+- Locked `nonebot-adapter-discord==1.1.10` source was installed only under `/tmp`. Its Gateway message model does not carry channel type, so normalization requires an injected trusted resolver. Resolver evidence is required for text/announcement channels and public/private/announcement threads; thread identity and outbound target are the actual thread channel ID, with category ancestry kept as metadata. Guild and direct-message intents are checked; guild content is accepted only with message-content intent or adapter-confirmed bot mention/reply; group DMs and cross-channel replies are rejected. Attachments remain metadata-only.
+- Added explicit opt-in Discord normalization/export/target codecs; no default matcher/startup registration. Outbound mentions are disabled, text is capped at 1900 characters, reply references require an existing target, explicit adapter permission failure maps FAILED, ambiguous network outcomes map UNKNOWN, and UNKNOWN is not retried.
+- Validation: focused Discord fixtures 7 passed; isolated regression command using `STELLA_HOME=/tmp/stella-p06-discord-regression-20261025` and the locked wheel under `/tmp` passed 74 tests / 2 existing warnings. Changed-file Ruff, py_compile, lazy-import boundary, docs (121 files / 1322 links / 577 anchors / 0 errors), and diff check passed. `generate_message_flow.py --check` exits 1 on the known same-topology body-anchor drift; immutable refresh remains deferred to P10.
+- Official protocol sources reviewed: [Gateway intents and events](https://docs.discord.com/developers/events/gateway), [message content, replies and allowed mentions](https://docs.discord.com/developers/resources/message), and [channel/thread permission rules](https://docs.discord.com/developers/topics/permissions). No live Discord account, permission grant, driver lifecycle, bot, or production data was used. Matrix remains 0/32 certified and Discord `not_certified`.
+- GitNexus recovery: the first incremental write did not complete and default 16 GiB detect attempts could not open the database; neither was treated as clean. Re-running `analyze --index-only --pdg --workers 1` with `GITNEXUS_LBUG_MAX_DB_SIZE=68719476736` exited 0, rebuilt the index, and status became up-to-date at P06-T HEAD with 794 reported flows. Limits: 39 large files skipped, 3276/3476 entry candidates unranked, 925 callees skipped, 46 walks cut, 23 traces depth-capped. Repeated staged P06-D detections varied: `scope=all` on 9 files returned both LOW/0-process and CRITICAL aggregate results; `scope=compare base_ref=main` on 58 files remained CRITICAL. Zero-process results were source-audited: Discord references occur only in the adapter, fixture and matrix, with none in adapter_loader/outbound/ingress, consistent with deliberate no-production-registration but still lower-bound under graph extraction limits. Generic `channel_id`/`user_id`/`__init__` attribution reaches unrelated Get_config/Cometa-auth flows; preserve compare CRITICAL without waiver.
+- Package fixture work is complete; separate commit closeout remains. P04 native wheel/API-schema parity and restore drill remain open; overall plan remains NOT READY.
+
 ### 4.2 五个主符号及直接消费者核算（source-derived）
 
 | 主符号 | 已确认生产消费者/接线 | 计划对应 |
@@ -196,7 +206,7 @@ resolve_reply_target 增加按完整连接/规范会话/不透明 message ID 查
 
 ## 7. Implementation Sequence
 
-工作包均为未来实施；按顺序单任务推进。建议一包一个可审查提交，关联本计划和目标提交；不得用本轮“计划 done”关闭 XPLAT/CORONA 的运行验收。
+工作包按依赖顺序单任务推进，建议一包一个可审查提交并关联本计划；已实施包的证据与状态列于§4和§13。计划状态不关闭 XPLAT/CORONA 的运行验收。
 
 | 包/依赖 | 具体工作与文件范围 | 完成证据与停靠点 | 回滚/风险 |
 | --- | --- | --- | --- |
@@ -208,7 +218,7 @@ resolve_reply_target 增加按完整连接/规范会话/不透明 message ID 查
 | **P04 / P03** | 原子消息附加表、有效投影、opaque reply、迁移和Python/native合同 | schema22临时库→候选23；dry-run、故障注入、重跑、旧行不丢；commit失败不captured；Python/native一致；新wheel读写实际常量 | 建新表加列；API4仅在接口未变时保留。先备份锁库，再升级；不能让旧native打开新schema |
 | **P05 / P03,P04** | exporter/codec注册、精确Bot、独立限流bucket、deadline、逐段回执；通用fake exporter先验证 | 队列/429/过期/断连/unknown/partial、重启/代际、同self_id不同adapter与冲突槽负例 | 不承诺exactly-once；限流排队有界；不明结果不重投 |
 | **P06-T / P04,P05** | Telegram专用normalizer/exporter/codec并接入配置connection引用 | private/group/topic fixtures→文本live→关系/媒体live；实际身份/目标/消息回执匹配 | 每连接opt-in；无live保留not_certified |
-| **P06-D / P06-T** | Discord专用适配；channel/thread/DM与权限收窄 | 同频道不同thread、权限不足、缺intents、引用不可取、格式与长文本fixture/live | 缺权限不能启用旁听；不把parent/guild当回复目标 |
+| **P06-D / P06-T** | Discord专用适配；channel/thread/DM与权限收窄（fixtures已完成，见§4.1.3；live未认证） | 同频道不同thread、权限不足、缺intents、引用不可取、格式与长文本fixture/live | 缺权限不能启用旁听；不把parent/guild当回复目标 |
 | **P06-Q / P06-D** | QQ官方专用适配，按锁定adapter验证事件窗口、私聊/群/频道子集 | 必要真实事件fixture、窗口内/外、消息ID不透明、主动限制与live | 不复制OneBot能力；超期不得换账号补发 |
 | **P07 / P02,P06-Q** | Persona/Platforms会话策略编辑、场景查询和history分页；前后端route/OpenAPI同步 | managed与legacy保存/回读；field来源和applied显示；Nucleus不可用；身份过滤；UI auth与路由；构建/同步 | 保留旧/groups兼容及QQ计数；人格内容与绑定分开反馈 |
 | **P08 / P04,P05,P07** | 将QQ/WebChat委托共用服务，逐入口保留旧命令/插件优先级、capturegate及生成协议 | policy五调用者、record四调用者、send所有调用点逐项回归；每事件1行/1轮/1次send；真实QQ/WebChat与模型验收单列 | 显式可回退开关；不得同时启用两套写入/生成路径 |
@@ -310,7 +320,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ```json
 {
   "implementation_context": {
-    "task_summary": "G0 and P00–P05 are separately committed; P04 Rust/native wheel/API-schema parity and restore drill remain open. P05 commit is f44cee13633760b8be248f774f80316c2f965809. P06-T Telegram fixture implementation is complete and being closed as a separate package; live Telegram certification is unavailable, the 32-adapter matrix remains 0 certified, and the overall plan is NOT READY.",
+    "task_summary": "G0 and P00–P05 are separately committed; P04 Rust/native wheel/API-schema parity and restore drill remain open. P05 commit is f44cee13633760b8be248f774f80316c2f965809. P06-T Telegram fixture is committed as ef06712ca322a970d528fc9a9c8a2f878c133193. P06-D Discord fixture implementation and isolated validation are complete and closing as its own package; live Discord and Telegram certification are unavailable, the 32-adapter matrix remains 0 certified, and the overall plan is NOT READY.",
     "acceptance_criteria": [
       "Current graph/PDG and every d=1 reconciled before code edits",
       "Managed/legacy settings preserve revision/CAS/idempotency/apply recovery",
@@ -322,12 +332,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
     ],
     "evidence_provenance": {
       "schema_version": 2,
-      "head_commit": "f44cee13633760b8be248f774f80316c2f965809",
+      "head_commit": "ef06712ca322a970d528fc9a9c8a2f878c133193",
       "generated_plan_path": "docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md",
       "global_dirty_digest": {
         "algorithm": "sha256",
         "canonicalization": "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records",
-        "value": "f22012d994d420b0437cb54ab7b45ec323ad03e9a443cc676ecfa05af6318791"
+        "value": "5290df4023d4e04cec594dec6562f9cd8070e6ffdc243672b96c6adef31bf2ce"
       },
       "cited_path_manifest": [
         {
@@ -478,16 +488,16 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "path": "core/transport/adapters/discord.py",
           "object_kind": {
             "head": "absent",
-            "index": "absent",
-            "worktree": "absent",
+            "index": "regular",
+            "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "absent",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "absent",
-          "index_digest": "absent",
-          "worktree_digest": "absent",
+          "index_digest": "sha256:b71714c3ede8677cad647a30dce1e30964134090d040ce22fdbfde3294a57378",
+          "worktree_digest": "sha256:b71714c3ede8677cad647a30dce1e30964134090d040ce22fdbfde3294a57378",
           "untracked_digest": "absent"
         },
         {
@@ -525,15 +535,15 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
         {
           "path": "core/transport/adapters/telegram.py",
           "object_kind": {
-            "head": "absent",
+            "head": "regular",
             "index": "regular",
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "absent",
+          "head_digest": "sha256:120bed8eb9d27233a8e89b5046d5882a7f9b4d4bab5016101bcafa55694fa02e",
           "index_digest": "sha256:120bed8eb9d27233a8e89b5046d5882a7f9b4d4bab5016101bcafa55694fa02e",
           "worktree_digest": "sha256:120bed8eb9d27233a8e89b5046d5882a7f9b4d4bab5016101bcafa55694fa02e",
           "untracked_digest": "absent"
@@ -981,9 +991,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:e6bc7fc7593ea9f5ee3c9211aa1351fa81e8e702b707f7f8b1e1bf990d7ba5d2",
-          "index_digest": "sha256:d5a1eed761fc2b3c30cb8a58e7369dae213a721bd9c58e9f88ee2cb72a22b45c",
-          "worktree_digest": "sha256:d5a1eed761fc2b3c30cb8a58e7369dae213a721bd9c58e9f88ee2cb72a22b45c",
+          "head_digest": "sha256:d5a1eed761fc2b3c30cb8a58e7369dae213a721bd9c58e9f88ee2cb72a22b45c",
+          "index_digest": "sha256:40ddd8772c80df787a2a4b19aaf5b09460e6ad648f3b0a5d75882a34d1645da6",
+          "worktree_digest": "sha256:40ddd8772c80df787a2a4b19aaf5b09460e6ad648f3b0a5d75882a34d1645da6",
           "untracked_digest": "absent"
         },
         {
@@ -997,9 +1007,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:e0c5bb88896b1fbd5f04512e31c34c8853abcbf3e6f0b1e1a426b18832b9067c",
-          "index_digest": "sha256:270b3d0c3eef84ac5d0004d996ef5e4a7fdecc9eadb5e0f2f6e8156cb06bccb9",
-          "worktree_digest": "sha256:270b3d0c3eef84ac5d0004d996ef5e4a7fdecc9eadb5e0f2f6e8156cb06bccb9",
+          "head_digest": "sha256:270b3d0c3eef84ac5d0004d996ef5e4a7fdecc9eadb5e0f2f6e8156cb06bccb9",
+          "index_digest": "sha256:43968f4da9fc48dbae7a771c145570371efcbed8c19baadc8bd6eb88c2b449fd",
+          "worktree_digest": "sha256:43968f4da9fc48dbae7a771c145570371efcbed8c19baadc8bd6eb88c2b449fd",
           "untracked_digest": "absent"
         },
         {
@@ -1093,9 +1103,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:08bc06d39a86f51a51d8de1abbe4e33723af70eb3dcfad49adb8210e0e1bf13b",
-          "index_digest": "sha256:c776093fe8d3672d4be997bcb80703187c1c9a3e9eb45a30bcc083323e62d762",
-          "worktree_digest": "sha256:c776093fe8d3672d4be997bcb80703187c1c9a3e9eb45a30bcc083323e62d762",
+          "head_digest": "sha256:c776093fe8d3672d4be997bcb80703187c1c9a3e9eb45a30bcc083323e62d762",
+          "index_digest": "sha256:ef556aba4f2a40d1782257ac09f1b162e1134f04fb171d8a1bd94b2ff0163f59",
+          "worktree_digest": "sha256:ef556aba4f2a40d1782257ac09f1b162e1134f04fb171d8a1bd94b2ff0163f59",
           "untracked_digest": "absent"
         },
         {
@@ -1301,9 +1311,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:f1fd89e324f2003ac0430882c59341e75cbd9c86adebc9fb8a315e4109886adc",
-          "index_digest": "sha256:c0dc562bca841266e8893eeeb5e08652a924d04f96daad7985fae900c0455bcf",
-          "worktree_digest": "sha256:c0dc562bca841266e8893eeeb5e08652a924d04f96daad7985fae900c0455bcf",
+          "head_digest": "sha256:c0dc562bca841266e8893eeeb5e08652a924d04f96daad7985fae900c0455bcf",
+          "index_digest": "sha256:e03b495728cb1c75c24f0978f952ae6c219e41e0b5d392e4408a51c6ca900a1e",
+          "worktree_digest": "sha256:e03b495728cb1c75c24f0978f952ae6c219e41e0b5d392e4408a51c6ca900a1e",
           "untracked_digest": "absent"
         },
         {
@@ -1317,9 +1327,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:78212e228b19b22f8bebf1e0be4bf5db24b49ae9662c3945205c4efcb07dc65a",
-          "index_digest": "sha256:da57954ed0cd727d0d96f07bd0040a7903601acfe27e71cc89d1398d2eb1d331",
-          "worktree_digest": "sha256:da57954ed0cd727d0d96f07bd0040a7903601acfe27e71cc89d1398d2eb1d331",
+          "head_digest": "sha256:da57954ed0cd727d0d96f07bd0040a7903601acfe27e71cc89d1398d2eb1d331",
+          "index_digest": "sha256:50c6c9bdb426daba530a3aaff214b0f7898bfa88869e9a3e5d0f7186fcef3ad9",
+          "worktree_digest": "sha256:50c6c9bdb426daba530a3aaff214b0f7898bfa88869e9a3e5d0f7186fcef3ad9",
           "untracked_digest": "absent"
         },
         {
@@ -1573,9 +1583,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:1964b095b8f789cbceb86e99a6eec952e00c4932a8d7b526afa781f16529b1ef",
-          "index_digest": "sha256:34448ae5df918ef81b2528c7425c327927b28dd08d4c1af7e2f860a8363e0a43",
-          "worktree_digest": "sha256:34448ae5df918ef81b2528c7425c327927b28dd08d4c1af7e2f860a8363e0a43",
+          "head_digest": "sha256:34448ae5df918ef81b2528c7425c327927b28dd08d4c1af7e2f860a8363e0a43",
+          "index_digest": "sha256:902f7e0f2b0f35503996361763f45c6143fd6569051fab0c25525cae8beb78a0",
+          "worktree_digest": "sha256:902f7e0f2b0f35503996361763f45c6143fd6569051fab0c25525cae8beb78a0",
           "untracked_digest": "absent"
         },
         {
@@ -1595,7 +1605,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
-          "path": "tests/platforms/test_telegram_adapter.py",
+          "path": "tests/platforms/test_discord_adapter.py",
           "object_kind": {
             "head": "absent",
             "index": "regular",
@@ -1606,6 +1616,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "rename_from": null,
           "rename_to": null,
           "head_digest": "absent",
+          "index_digest": "sha256:2c9c3895ed9039fe32a457ac0a3f216cb3801971ef99d6a6c2939869e47a7f16",
+          "worktree_digest": "sha256:2c9c3895ed9039fe32a457ac0a3f216cb3801971ef99d6a6c2939869e47a7f16",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/platforms/test_telegram_adapter.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:8e3764af4ccefd50f7ec9b21085069c0057bc30176c391d1dddd149d92cbf233",
           "index_digest": "sha256:8e3764af4ccefd50f7ec9b21085069c0057bc30176c391d1dddd149d92cbf233",
           "worktree_digest": "sha256:8e3764af4ccefd50f7ec9b21085069c0057bc30176c391d1dddd149d92cbf233",
           "untracked_digest": "absent"
@@ -2481,6 +2507,26 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
         "file": "dashboard/src/components/ConversationPolicyEditor.vue",
         "symbols": [],
         "intended_change": "拟新增: scoped policy/scene editor with revision and capability status"
+      },
+      {
+        "file": "tests/platforms/test_discord_adapter.py",
+        "symbols": [],
+        "intended_change": "P06-D Discord identity, permission, reply, send, and opt-in fixtures."
+      },
+      {
+        "file": "tests/platforms/adapter_matrix.json",
+        "symbols": [],
+        "intended_change": "Record P06-D fixture observations and live certification gaps."
+      },
+      {
+        "file": "docs/development/contracts.md",
+        "symbols": [],
+        "intended_change": "Document P06-D Discord adapter contract."
+      },
+      {
+        "file": "docs/development/contracts.en.md",
+        "symbols": [],
+        "intended_change": "Document P06-D Discord adapter contract."
       }
     ],
     "tests": [
@@ -2637,6 +2683,15 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "拟新增: scene filtering, string IDs, unsupported state, partial persona save notice"
         ],
         "state": "proposed_new"
+      },
+      {
+        "file": "tests/platforms/test_discord_adapter.py",
+        "scenarios": [
+          "channel/thread/DM identity and resolver evidence",
+          "intent and message-content gates",
+          "reply/cross-channel safety, exact thread target, no mentions, failed/unknown no-replay and long text"
+        ],
+        "state": "P06-D completed"
       }
     ],
     "verification_commands": [
@@ -2650,7 +2705,8 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
       "python3 scripts/generate_message_flow.py --check",
       "cargo fmt --manifest-path memory_rust/native/Cargo.toml --check",
       "cargo test --manifest-path memory_rust/native/Cargo.toml",
-      "GitNexus upstream impact before each code edit; structured detect_changes all and compare main before commit"
+      "GitNexus upstream impact before each code edit; structured detect_changes all and compare main before commit",
+      "STELLA_HOME=/tmp/stella-p06-discord-regression-20261025 PYTHONPATH=/tmp/stella-p06-discord-bootstrap:/tmp/stella-p06-discord-pkg .venv/bin/python -m pytest tests/test_private_chat_ingress.py tests/test_transport_normalizers.py tests/test_transport_connection_registry.py tests/test_transport_outbound.py tests/platforms/test_adapter_matrix.py tests/platforms/test_transport_pipeline.py tests/platforms/test_discord_adapter.py -q"
     ],
     "verification_prerequisites": [
       "use §8 shell setup for isolated STELLA_HOME; no production data",
@@ -2831,7 +2887,8 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "implementation": "SDK-lazy Telegram normalizer/exporter/target codec and static capabilities behind explicit configured connection plus injected ingress mapping. Private/group/supergroup/forum message_thread_id identity, exact canonical chat/topic routing, safe media hints, unresolved same-conversation reply relation, exact Bot send_to receipt, FAILED vs UNKNOWN and no replay. Locked adapter 0.1.0b20 lacks current Bot API direct_messages_topic_id, so those topics stay unsupported. No default matcher/startup registration.",
           "verification": "Exact locked wheel installed only in /tmp; repo .venv unchanged. Isolated focused suite: 72 passed, 2 existing warnings. Ruff, py_compile, import boundary and docs passed (121 files / 1322 links / 577 anchors / 0 errors). generate_message_flow.py --check exits 1 with same topology and 21 body anchors changed; immutable flow refresh deferred to P10.",
           "live_gap": "No live account/credentials/driver lifecycle/permissions, persistent relation/media exchange, send windows/rate limits or clean VM. Telegram remains not_certified; matrix remains 0/32 certified and overall plan NOT READY.",
-          "gitnexus_closeout": "Repeated identical staged structured detect_changes calls returned no error/partial/truncated: scope all = 9 files, 26–35 symbols, 784–791 affected processes, CRITICAL; compare base_ref=main = 56 files, 144–155 symbols, 791–792 affected processes, CRITICAL. Last repeated result: all 26 symbols / 791 processes; compare 144 symbols / 791 processes. Generic common-property attribution includes unrelated Get_config/Cometa/skill/main flows; preserve CRITICAL without waiver. Index limits: 39 large files skipped; 3262/3462 candidate entries unranked; 925 callees skipped; 46 walks cut; 23 traces capped."
+          "gitnexus_closeout": "Repeated identical staged structured detect_changes calls returned no error/partial/truncated: scope all = 9 files, 26–35 symbols, 784–791 affected processes, CRITICAL; compare base_ref=main = 56 files, 144–155 symbols, 791–792 affected processes, CRITICAL. Last repeated result: all 26 symbols / 791 processes; compare 144 symbols / 791 processes. Generic common-property attribution includes unrelated Get_config/Cometa/skill/main flows; preserve CRITICAL without waiver. Index limits: 39 large files skipped; 3262/3462 candidate entries unranked; 925 callees skipped; 46 walks cut; 23 traces capped.",
+          "package_commit": "ef06712ca322a970d528fc9a9c8a2f878c133193"
         }
       },
       {
@@ -2840,7 +2897,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "P06-T"
         ],
         "objective": "Discord fixture then per-capability live",
-        "status": "planned"
+        "status": "done",
+        "evidence": {
+          "source_head": "ef06712ca322a970d528fc9a9c8a2f878c133193",
+          "scope": "Discord fixture implementation complete; per-capability live certification remains open.",
+          "upstream_impact": "Before edit EventNormalizer CRITICAL/exact (5 direct; 193 total / 182 reported processes / 20 modules), NormalizedEvent CRITICAL/exact (5 direct; 9 total / 7 processes / 5 modules), AdapterCapabilities CRITICAL/exact (5 direct; 16 total / 11 processes / 11 modules). Shared boundaries were not edited. TransportIngress context UNKNOWN/test-only; source audit found no production construction/call.",
+          "source_audit": "Locked nonebot-adapter-discord 1.1.10 was inspected/installed only under /tmp. Gateway message has no channel type; trusted resolver is required. Group DMs/cross-channel references rejected. New adapter remains explicit opt-in with no startup registration.",
+          "implementation": "SDK-lazy Discord normalizer, target codec and exporter. Validates intents and guild-content availability; preserves guild/channel/category/thread paths with actual thread channel as scene and send target; attachments are safe metadata only; replies fail if missing; allowed_mentions empty; text cap 1900; permission failure is FAILED, ambiguous network outcome UNKNOWN, with no replay.",
+          "verification": "Focused tests 7 passed; isolated regression command STELLA_HOME=/tmp/stella-p06-discord-regression-20261025 PYTHONPATH=/tmp/stella-p06-discord-bootstrap:/tmp/stella-p06-discord-pkg .venv/bin/python -m pytest tests/test_private_chat_ingress.py tests/test_transport_normalizers.py tests/test_transport_connection_registry.py tests/test_transport_outbound.py tests/platforms/test_adapter_matrix.py tests/platforms/test_transport_pipeline.py tests/platforms/test_discord_adapter.py -q passed 74 tests / 2 existing warnings. Ruff, py_compile, import-boundary probe, docs (121 files / 1322 links / 577 anchors / 0 errors) and diff check passed. Message-flow --check exits 1 due same-topology body-anchor drift; refresh deferred to P10.",
+          "live_gap": "No live Discord account, credentials, permission grant, driver lifecycle, message-window or clean VM acceptance. Discord remains not_certified; adapter matrix 0/32 certified and overall plan NOT READY.",
+          "gitnexus_closeout": "Initial incremental rebuild was interrupted and default 16 GiB detect could not open the database; neither was treated as clean. Full recovery rebuild with GITNEXUS_LBUG_MAX_DB_SIZE=68719476736 exited 0; status up-to-date at ef06712, 794 reported flows. Limits: 39 large files skipped; 3276/3476 entries unranked; 925 callees skipped; 46 walks cut; 23 traces depth-capped. Repeated staged detections varied: all on 9 files returned both LOW/0-process and CRITICAL aggregate results; compare-main on 58 files remained CRITICAL. Zero-process results were source-audited: Discord references occur only in its adapter, fixture and matrix, with none in adapter_loader/outbound/ingress, consistent with deliberate no-production-registration but still lower-bound under extraction limits. Generic channel_id/user_id/__init__ attribution reaches unrelated Get_config/Cometa-auth flows; preserve compare CRITICAL without waiver.",
+          "external_sources": [
+            "https://docs.discord.com/developers/events/gateway",
+            "https://docs.discord.com/developers/resources/message",
+            "https://docs.discord.com/developers/topics/permissions"
+          ]
+        }
       },
       {
         "id": "P06-Q",
@@ -2933,7 +3005,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ### 未解决门禁与明确延期
 
 1. G0图恢复和d=1/PDG已在实施入口完成；每个新源包仍须重跑upstream impact。索引有39个大文件跳过及入口/边/路径预算上限；UNKNOWN和聚合CRITICAL保持未解决证据状态，不视为LOW。
-2. P06-T隔离 fixture、Ruff、py_compile、导入边界与文档门禁已运行；消息flow `--check` 因同拓扑正文锚点漂移退出1，按计划延期至P10。全量Python、Dashboard、本地native wheel/API-schema parity和恢复演练、live/model/VM验收仍未完成，整体NOT READY。cargo/maturin不在当前环境可用。
+2. P06-T/P06-D隔离 fixtures、Ruff、py_compile、导入边界与文档门禁已运行；消息flow `--check` 因同拓扑正文锚点漂移退出1，按计划延期至P10。全量Python、Dashboard、本地native wheel/API-schema parity和恢复演练、live/model/VM验收仍未完成，整体NOT READY。cargo/maturin不在当前环境可用。
 3. 本环境没有Telegram/Discord/QQ live凭据与测试窗口；不能读生产配置补齐。各平台live、权限和发送时窗仍须另行验收，无live就不认证。
 4. 延期：跨平台账号绑定/转发、群成员独立模型分支、所有AstrBot插件仿真、原件媒体归档、全库历史回填与自动重写长期记忆、其余适配器的一次性认证、Corona默认模式切换。它们不是P00–P10隐含工作。
 5. 上一轮dirty研究/state已定向stash并在外部备份；两份旧研究原字节恢复，状态按最新远端合并，stash留作恢复点。G0前不删除其他stash或无关分支。
