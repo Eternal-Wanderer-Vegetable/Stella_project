@@ -14,6 +14,38 @@
   },
   "denominator": 32,
   "interpretation": "An observed installed distribution is not a compatibility certification. Not-run and partial results never count as certified.",
+  "p00_baseline": {
+    "date": "2026-10-25",
+    "source_commit": "ef8c9b89231c490e0955941143428dddf08231d4",
+    "python_version": "3.12.14",
+    "stella_home": "isolated temporary directory; no production data copied or opened",
+    "regression_suites": [
+      {
+        "scope": "OneBot/WebChat transport, identity, memory and ingress regressions",
+        "command": "STELLA_HOME=<isolated-temp> .venv/bin/python -m pytest tests/test_private_chat_ingress.py tests/test_transport_normalizers.py tests/test_conversation_registry.py tests/test_transport_outbound.py tests/test_context_projection_identity.py tests/test_message_relations.py tests/test_migrations.py tests/test_personal_memory_scope.py tests/test_personal_memory_sharing.py tests/runtime/test_session_ownership.py -q",
+        "result": "142 passed; 1 warning; 12.61s"
+      },
+      {
+        "scope": "managed/legacy config, Corona bindings, WebUI/platform routes, scheduling, observability and adapter matrix",
+        "command": "STELLA_HOME=<isolated-temp> .venv/bin/python -m pytest tests/corona/test_config_api.py tests/corona/test_group_bindings.py tests/webui/test_platform_adapters.py tests/nucleus/test_internal_api.py tests/nucleus/test_route_catalog.py tests/scheduling/test_scheduling_delivery.py tests/observability/test_background_flow_roots.py tests/platforms -q",
+        "result": "51 passed; 2 warnings; 16.25s"
+      }
+    ],
+    "harness_adjustment": "The first transport/memory invocation without tests/test_private_chat_ingress.py had 120 passed and 7 failures because tests/test_message_relations.py imports bot_main inside tests before NoneBot initialization. Re-running with the existing ingress test included initialized the driver during collection and passed all 142 tests.",
+    "ci_contract": "Repository CI test matrix is Python 3.10, 3.11 and 3.12; this P00 local evidence covers only the installed Python version.",
+    "adapter_status": {
+      "denominator": 32,
+      "certified": 0,
+      "not_certified": 32
+    },
+    "not_run": [
+      "live platform exchange",
+      "real model",
+      "Rust/native build",
+      "clean VM/installer"
+    ],
+    "matrix_guard": "STELLA_HOME=<same-isolated-temp> .venv/bin/python -m pytest tests/platforms -q; 2 passed in 0.33s after metadata update."
+  },
   "adapters": [
     {
       "platform": "OneBot V11",
