@@ -1172,6 +1172,8 @@ Read and save it through the authenticated `GET/PUT /api/v1/platform/conversatio
 
 Store credential references such as `env:TELEGRAM_BOT_TOKEN` or a managed UUID reference; never store token, password, or API-key values. This stage provides validation, storage, and readback only. The new bundle is not yet wired into runtime message ingress or adapter connections, so it does not enable or certify a new platform.
 
+`STELLA_SHARED_INGRESS_ENABLED` defaults to `true`. Existing QQ and WebChat handlers then share policy evaluation, the capture gate, message persistence, and RuntimeFacade coordination while retaining their event parsing, command/plugin priority, conversation relations, and delivery logic. Set it to `false` and restart the Bot/WebUI processes to select the direct rollback callbacks retained by the coordinator. Each event uses one path.
+
 ## OneBot Connection
 
 The Bot communicates with NapCat through a OneBot V11 WebSocket. **NapCat must be logged in first**: install [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) and complete QQ login. The Bot no longer manages the NapCat process; automatic login falls back to QR-code scanning, so a person must be present for login

@@ -128,7 +128,6 @@ from core.social.delivery import (
 )
 from core.stop_signal import clear_stop_request, is_stop_requested, read_stop_request
 from core.transport import (
-    AdmissionPolicy,
     BotRef,
     DeliveryTarget,
     MediaSource,
@@ -139,6 +138,7 @@ from core.transport import (
     get_outbound_service,
     normalize_onebot11,
 )
+from core.transport.legacy_ingress import shared_legacy_ingress
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
 from gravitas.errors import DeadlineExceeded
@@ -259,7 +259,6 @@ _reply_check_tasks: set[asyncio.Task] = set()
 # 插件已处理标记：event_key -> timestamp，限长 256，避免 pydantic 模型上 setattr 的兼容问题
 _plugin_handled_msgs: OrderedDict[str, float] = OrderedDict()
 _addressing_decisions: OrderedDict[str, AddressingRequest] = OrderedDict()
-_ingress_admission = AdmissionPolicy()
 
 
 def _normalized_onebot_event(event: Any):
@@ -893,13 +892,28 @@ async def _run_turn_via_engine(session_key: str, ctx: ChatContext) -> ChatContex
     （与主动发言竞争同一会话，锁嵌套语义不变）；私聊用规范会话键
     （计划 §6.1）。deadline 与旧引擎单次生成超时对齐。
     """
-    from core.runtime.facade import ensure_shared_facade_started
-
     if ctx.turn_deadline is None:
         ctx.turn_deadline = new_turn_deadline()
-    facade = await ensure_shared_facade_started()
-    return await facade.submit_turn(
-        session_key, pipeline, ctx, deadline=LLM_TIMEOUT, turn_deadline=ctx.turn_deadline
+
+    async def _legacy_submit() -> ChatContext:
+        from core.runtime.facade import ensure_shared_facade_started
+
+        facade = await ensure_shared_facade_started()
+        return await facade.submit_turn(
+            session_key,
+            pipeline,
+            ctx,
+            deadline=LLM_TIMEOUT,
+            turn_deadline=ctx.turn_deadline,
+        )
+
+    return await shared_legacy_ingress.submit_turn(
+        session_key,
+        pipeline,
+        ctx,
+        deadline=LLM_TIMEOUT,
+        turn_deadline=ctx.turn_deadline,
+        legacy_submit=_legacy_submit,
     )
 
 
@@ -1168,7 +1182,7 @@ async def record_group_chat(event: GroupMessageEvent):
         if needs_images and vision_available()
         else []
     )
-    admission = _ingress_admission.decide(
+    admission = shared_legacy_ingress.decide(
         normalized,
         purpose="passive",
         enabled=event.group_id in ALLOWED_GROUPS,
@@ -1185,8 +1199,8 @@ async def record_group_chat(event: GroupMessageEvent):
     _flow_checkpoint(fctx, "ingress.passive.filter", summary="passed")
     # 采集就绪门（计划 §6.3）：资格过滤之后、落库与一切内容派生副作用之前。
     # 关闭时本条消息不落库、不排队、不回放——恢复后从下一条新消息开始采集。
-    capture = capture_gate.ingress_decision()
-    if capture is not None and not capture.allowed:
+    capture = shared_legacy_ingress.capture_decision(capture_gate)
+    if not shared_legacy_ingress.capture_allowed(capture):
         _flow_decision(fctx, "ingress.passive.persist", status="skipped",
                        reason_code="capture_closed")
         logger.info(
@@ -1252,7 +1266,9 @@ async def record_group_chat(event: GroupMessageEvent):
     except Exception:
         pass
     with _flow_span(fctx, "ingress.passive.persist"):
-        await record_message(ctx, capture=capture)
+        await shared_legacy_ingress.record_message(
+            record_message, ctx, capture=capture
+        )
         # 身份声明 hook（多人身份修复计划 §6.3）：入库拿到 source_row_id 后
         # 解析本人自我介绍/有目标纠正；零命中零写库，异常不拖垮消息链路。
         with contextlib.suppress(Exception):
@@ -1476,7 +1492,7 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
         and vision_available()
         and bool(extract_image_sources(normalized))
     )
-    admission = _ingress_admission.decide(
+    admission = shared_legacy_ingress.decide(
         normalized,
         purpose="group_chat",
         enabled=event.group_id in ALLOWED_GROUPS,
@@ -1502,7 +1518,7 @@ async def is_plugin_trigger(event: MessageEvent) -> bool:
     normalized = _normalized_onebot_event(event)
     if isinstance(normalized, UnsupportedEvent):
         return False
-    if not _ingress_admission.decide(normalized, purpose="plugin").allowed:
+    if not shared_legacy_ingress.decide(normalized, purpose="plugin").allowed:
         return False
     from astrbot_compat.pipeline import should_dispatch
 
@@ -1931,7 +1947,7 @@ async def is_private_trigger(event: PrivateMessageEvent) -> bool:
         and vision_available()
         and bool(extract_image_sources(normalized))
     )
-    admission = _ingress_admission.decide(
+    admission = shared_legacy_ingress.decide(
         normalized,
         purpose="private_chat",
         enabled=PRIVATE_CHAT_ENABLED,
@@ -2229,8 +2245,8 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
         # 采集就绪门（计划 §6.3）：落库、身份声明、共享授权、整合触发都是
         # 内容派生副作用，门关闭时全部跳过；回复链路照走——这是记忆采集
         # 变更，不是全局无 AI 模式（计划 §9）。
-        capture = capture_gate.ingress_decision()
-        capture_open = capture is None or capture.allowed
+        capture = shared_legacy_ingress.capture_decision(capture_gate)
+        capture_open = shared_legacy_ingress.capture_allowed(capture)
         if not capture_open:
             _flow_decision(fctx, "chat.persist", status="skipped",
                            reason_code="capture_closed")
@@ -2242,7 +2258,9 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
             # 用户消息**先**持久化（source PRIVATE_DIRECT，锁内落库），再组上下文
             # ——锁覆盖「历史插入 ↔ 压缩」竞态（计划 §6.2）。
             with _flow_span(fctx, "chat.persist"):
-                await record_message(ctx, capture=capture)
+                await shared_legacy_ingress.record_message(
+                    record_message, ctx, capture=capture
+                )
                 # 身份声明 hook（多人身份修复计划 §6.3）：私聊同契约
                 with contextlib.suppress(Exception):
                     from memory.conversation_identity import process_message_identity
@@ -3795,8 +3813,8 @@ async def _record_bot_lines(
     # 确认回执、运行时开关/重载应答、能力答复、主动发言与睡醒播报——无 AI
     # 播报不能在采集门关闭时变成新记忆行。门未安装（单测/显式调用方）保持
     # 旧语义；关闭时整段台词不落库。
-    capture = capture_gate.ingress_decision()
-    if capture is not None and not capture.allowed:
+    capture = shared_legacy_ingress.capture_decision(capture_gate)
+    if not shared_legacy_ingress.capture_allowed(capture):
         logger.debug(
             f"🚪 [CaptureGate] 采集门关闭，{len(segments)} 段 Bot 台词不落库"
         )
@@ -3831,7 +3849,8 @@ async def _record_bot_lines(
         platform_id_text = parse_platform_message_id(platform_id) or ""
         platform_id_num = parse_qq_message_id(platform_id) or 0
         try:
-            await record_message(
+            await shared_legacy_ingress.record_message(
+                record_message,
                 ChatContext(
                     user_id=self_id,
                     group_id=group_id,

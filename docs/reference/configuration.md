@@ -1186,6 +1186,8 @@ STELLA_ADAPTER_MODULES=nonebot.adapters.onebot.v11
 
 bundle 中只写凭据引用，例如 `env:TELEGRAM_BOT_TOKEN` 或受管理的 UUID 引用；不得写入 token、密码或 API key 原文。此阶段只提供配置校验、保存和回读，尚未把新 bundle 接入运行时消息入口或连接 adapter；新平台仍不能据此宣称已启用或通过认证。
 
+`STELLA_SHARED_INGRESS_ENABLED` 默认 `true`，让现有 QQ 与 WebChat 入口共用策略判定、采集门、消息写入和 RuntimeFacade 协调边界，同时保留各自的事件解析、命令/插件优先级、会话关系与投递逻辑。若回归发现问题，可设为 `false` 并重启 Bot/WebUI 进程，改走协调器保留的直接回退回调；单个事件只选择其中一路。
+
 ## OneBot 连接
 
 Bot 通过 OneBot V11 WebSocket 与 NapCat 通信。**NapCat 侧必须先登录**：用

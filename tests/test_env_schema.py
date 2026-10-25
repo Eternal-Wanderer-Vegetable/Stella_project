@@ -136,3 +136,13 @@ def test_schema_includes_memory_capture_gate_settings():
     assert "探针间隔" in interval["description"]
     assert "探针超时" in timeout["description"]
     assert "inherits" not in interval and "inherits" not in timeout
+
+
+def test_schema_includes_shared_ingress_rollback_switch():
+    """QQ/WebChat shared ingress can be reverted to direct legacy calls."""
+    schema = build_schema(PROJECT_ROOT / "config" / "settings.py")
+    fields = {field["key"]: field for field in schema["fields"]}
+    ingress = fields["STELLA_SHARED_INGRESS_ENABLED"]
+    assert ingress["type"] == "bool"
+    assert ingress["default"] == "true"
+    assert "关闭后" in ingress["description"]
