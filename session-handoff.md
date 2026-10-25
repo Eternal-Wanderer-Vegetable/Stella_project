@@ -1,4 +1,27 @@
-# Session Handoff
+## Current Objective — XPLAT pipeline implementation (2026-10-25)
+
+- Status: `XPLAT-PIPELINE-IMPLEMENTATION` is the sole active and in-progress feature. G0 graph/PDG refresh and caller reconciliation are complete; P00 baseline is next. `CORONA-IMPL` is blocked pending its previously recorded QQ, authenticated UI, live model/WebChat, and clean-VM/installer acceptance; this task does not resume its rollout.
+- Branch/base: `codex/multiplatform-policy-message-pipeline` at source baseline `17e631028344332fcab5dc0f7dbb1ff0cdd0c64b`.
+- Plan: [2026-10-25 GitNexus plan](docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md). Work through G0/P00–P10 in order, one package per reviewable commit; never enable a platform by default or claim live certification from fixtures.
+- G0 evidence: GitNexus 1.6.12 index-only PDG build succeeded; status is up-to-date at the source HEAD with no incomplete reasons. Five primary impacts and local PDG slices were queried. Admission and recorder are CRITICAL, outbound is HIGH, registry MEDIUM, group-binding execute is LOW lower-bound; unresolved receiver-typed call sites and process-extraction truncation are recorded in progress.md and the plan.
+- Limits/blockers: no production source edits or tests yet. `cargo` and `maturin` are unavailable in this checkout; handle at P04/P10 with a prepared isolated build environment. Live platform credentials/test windows are not present and will remain NOT CERTIFIED until supplied. No `STELLA_HOME` data or service has been touched.
+- Preservation: current feature-list/progress/handoff and both 2026-10-24 bilingual research plans are existing task artifacts; include them with the plan in the initial plan-context commit. Keep all prior stashes and unrelated branches intact.
+- Next: re-anchor the plan with G0 graph/PDG evidence through the GitNexus helper, stage the plan context and commit it, then P00 isolated baseline, adapter-matrix audit and existing regression suite.
+
+## Prior AstrBot research — preserved 2026-10-24
+
+
+- Status: research complete (done); business implementation NOT STARTED / NOT READY. Registry active_feature retains the existing CORONA-IMPL in_progress entry without resuming it.
+- Baseline: local main fast-forwarded to origin/main `3825f994cbec8e7633b2284e7f55271793c99fe5`, 0/0 commits, initially clean. AstrBot fixed source `ec77b16eec6096dc75c76292ca329af08766af14`.
+- Files: [Chinese plan](docs/plans/2026-10-24-astrbot-multiplatform-adaptation.md), [English plan](docs/plans/2026-10-24-astrbot-multiplatform-adaptation.en.md), feature_list.json, progress.md and this file. No business-source edits, commit or push this session.
+- Findings: reuse V2 identities, memory authorization and NoneBot. Add common speaking-policy resolution, scene/persona bindings, non-OneBot ingress/exporters/Bot resolvers, safe component history and cross-platform browsing. Current default delivery/ingress remains mainly OneBot; installed/configurable adapters are not runtime certification. Source contract is schema 22/API 4.
+- Verification: baseline docs passed 121/1307/577/0. GitNexus query/context/upstream and refreshed index completed. Admission HIGH; space/recorder CRITICAL; unknown/zero references supplemented. Graph coverage limits are preserved in the plan. Final docs passed 121/1311/577/0; explicit dated-plan link check passed 39/39, JSON/diff/scope passed. With both new plans included, all/compare main each report 5 files, 29 symbols, zero processes, LOW; the CLI hides 14 entries, so structured LocalBackend reruns verified all 29 symbols with no error/partial/truncated fields. Existing index extraction omissions remain. Registry inconsistency during drafting was corrected without changing CORONA status.
+- Data boundary: STELLA_HOME unset; resolver create=False returned /home/vegetable/repos/StellaData without creating it. No credentials/chats/configuration/production DB opened; no service started or restarted.
+- Blockers: none for research. No business tests or live/model/QQ/platform/migration/VM acceptance; existing CORONA and XPLAT statuses retain their acceptance gaps.
+- Recommended Next Step: review the plan; on a separate implementation request start phase A, then B→C→D→E, one feature at a time. Do not automatically resume earlier lifecycle work. This research record can be archived after final checks.
+
+
+## Upstream handoff — inherited PR #123
 
 ## Current Session — Corona / Nucleus implementation
 

@@ -1,4 +1,25 @@
-# Session Progress Log
+## Current Implementation State — 2026-10-25
+
+- Task: `XPLAT-PIPELINE-IMPLEMENTATION` is the sole `in_progress` `active_feature`; `CORONA-IMPL` is `blocked` pending its previously recorded QQ, authenticated UI, live model/WebChat, and clean-VM/installer acceptance. G0 is complete; P00 baseline is next.
+- Branch/source: `codex/multiplatform-policy-message-pipeline`, based on `17e631028344332fcab5dc0f7dbb1ff0cdd0c64b`. Plan: [多平台发言策略与统一消息流水线](docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md).
+- G0 graph: GitNexus 1.6.12 `analyze --index-only --pdg --workers 1` exited 0 after recovering the previous incomplete index. `status --json` reports current runner, matching index/HEAD, `incompleteReasons=[]`, `up-to-date`; 114,888 nodes / 289,075 edges / 1,193 clusters / 796 flows. Index still reports 39 large files skipped and flow extraction limits of 3,203/3,403 candidates, 952 callees, 43 walks and 23 depth caps.
+- Current graph risks: `AdmissionPolicy.decide` CRITICAL (7 d=1, 5 production callers, 3 reported processes); `record_message` CRITICAL (19 d=1, 3 receiver-typing omissions); `OutboundService.send` HIGH (7 d=1, 4 receiver-typing omissions); `register_conversation_v2` MEDIUM (6 d=1, all tests); `GroupBindingsCoordinator.execute` LOW lower-bound (1 d=1, 15 unresolved generic execute calls). Source reference audit corroborates the planned production callers; full scope remains bounded by the unresolved edges above.
+- PDG: CLI statement slices available. Admission opaque-scene guard at `normalizers.py:326` reaches its rejection/allowed-purpose returns; recorder pressure branch at `pre_processors.py:292` reaches deny/rollback/return and prevents insert; outbound status at `outbound.py:542` reaches stop/partial/result assembly. Cross-function bridge and return-summary extraction are incomplete; these results do not replace source review.
+- Preservation/data: planning and bilingual research files are kept in the worktree for the first plan-context commit. `STELLA_HOME` data, credentials, production DBs and services have not been opened or started. No business-source edits, tests, live/model/platform/native/VM checks have run yet.
+- P00 next: lock the OneBot/WebChat and managed/legacy baseline using isolated temp storage, reconcile adapter-matrix denominator 32 without certifying unrun/live cases, run the plan's existing targeted regressions, record CI/current contracts, then commit P00 atomically.
+
+## 2026-10-24 — Prior AstrBot research (preserved)
+
+
+**Last Updated:** 2026-10-24 (Asia/Shanghai)
+**Research Task:** XPLAT-ASTRBOT-RESEARCH — 方案研究完成；业务实施未启动。feature_list 的 active_feature 保留既有 CORONA-IMPL，以满足单一 in_progress 状态合同；本轮未续跑该任务。
+**Scope / Completion:** 同步 main；固定版本研究两个方向；核对 Stella 现状，交付增量合同、迁移和验收；仅修改中英文方案与任务状态。最终检查结果见下方本轮验证条目。
+**Result:** 研究起点 `main@3825f994cbec8e7633b2284e7f55271793c99fe5` 与 origin/main 为 0/0，原工作区干净。AstrBot 基线 `ec77b16eec6096dc75c76292ca329af08766af14`。发现适配器配置能力与实际业务接线存在差距：generic normalizer/V2 register 未找到生产接线，默认 exporter 与后台 Bot resolver 仍为 OneBot；统一策略、场景绑定、组件历史和管理面是后续重点。源码 memory schema 22/API 4；旧状态里的 19/3 不代表当前源码。
+**Files:** [中文方案](docs/plans/2026-10-24-astrbot-multiplatform-adaptation.md)、[English plan](docs/plans/2026-10-24-astrbot-multiplatform-adaptation.en.md)、feature_list.json、progress.md、session-handoff.md。
+**Evidence / Limits:** 基线 docs 121 files / 1307 links / 577 anchors / 0 errors。GitNexus 1.6.12 refreshed index: 114602 nodes / 288471 edges / 796 flows；AdmissionPolicy HIGH，resolve_space/record_message CRITICAL。图遗漏 3200/3400 入口候选、952 callees、43 walks、23 depth-capped traces，38 大文件跳过。未知/零调用已补查源码引用。STELLA_HOME 未设置，只读解析候选 `/home/vegetable/repos/StellaData`，未创建或读取生产数据。
+**Final Verification:** `python3 scripts/check_docs.py` passed: 121 maintained files / 1311 links / 577 anchors / 0 errors；日期计划另查 39 个本地链接，0 errors；JSON parse、`git diff --check` 与 5-file scope 检查通过。中间 docs 因新旧任务同时 in_progress 失败，保留 CORONA 状态、将已完成研究登记 done 后复查通过。新方案包含在图检查中：刷新后 114630 nodes / 288542 edges / 796 flows；all 与 compare/main 各 5 files / 29 symbols / 0 affected processes / LOW。CLI 固定只展示前 15 行，因此使用同版 LocalBackend 的 detect_changes 重跑并核对 29/29 结构化符号，无 error/partial/truncated 字段；索引自身抽取限制仍保留，LOW 只适用于本轮文档。没有提交或推送方案；本地与 origin/main 提交差异仍 0/0。
+**Blockers / Next:** 方案研究无外部阻塞。下一步由用户单独启动 A 阶段合同与接线盘点，后续再做适配实现和各平台 fixture/live。未运行业务测试、模型、QQ/多平台、迁移、部署或干净 VM；运行适配仍 NOT READY。既有 CORONA/XPLAT 验收缺口保留，不自动续跑。新增方案/状态暂未提交或推送；同步结论对应研究起点。
+
 
 ## 2026-10-25 — PR #123 hosted acceptance
 
@@ -17,7 +38,7 @@
 - Repository gates: `python scripts/check_docs.py` passed (121 files / 1,316 links / 577 anchors / 0 errors); `python scripts/generate_message_flow.py --check` passed; changed-file Ruff and `git diff --check` passed. Rust was not changed by this repair set.
 - Remaining external acceptance: real QQ outgoing delivery after a user-originated message, authenticated visual review of the pages, live model/WebChat behavior, clean-VM/installer lifecycle and rollback. `CORONA-IMPL` remains `in_progress` / NOT READY.
 
-## Current State
+## Upstream State — inherited PR #123 record
 
 **Last Updated:** 2026-10-25 (Asia/Shanghai)
 **Active Feature:** CORONA-IMPL remains `in_progress` / NOT READY for external acceptance. PR #120 is merged to `main`; the latest repair set is pushed on `codex/managed-runtime-webui-repairs`; PR #123 is open and mergeable against `main`. Hosted CI on head `9e0500a` passed all configured jobs; the PR is not merged. The Windows console flashes, Providers page 500, NapCat reverse WebSocket handshake, Welcome page bound-group count, and Gravitas status route are repaired; the live OneBot link reconnected in the active managed generation. The latest generated-reply send failure was traced to the managed runtime using `C:\Python314\python.exe`, which lacked the already-declared Alconna dependency; the same instance is now running under the Conda environment where `Target` imports. No post-restart QQ reply has yet been observed. The chat composer layout repair and Welcome-only system status banner are built and served; visual confirmation after browser refresh is pending.

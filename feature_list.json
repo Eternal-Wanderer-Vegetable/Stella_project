@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-10-25",
-  "active_feature": "CORONA-IMPL",
+  "active_feature": "XPLAT-PIPELINE-IMPLEMENTATION",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -960,7 +960,7 @@
       "id": "CORONA-IMPL",
       "name": "Corona / Nucleus 双进程实施",
       "description": "依工程计划执行 CN00–CN11，按阶段验收并切换默认入口；规划不等于实现。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [
         "CORONA-PLAN"
       ],
@@ -1127,6 +1127,10 @@
           "report": "progress.md#2026-10-25--pr-123-hosted-acceptance",
           "command": "GitHub Actions PR checks for head 9e0500a1755f80b7c2006c5745c53d2f8576e1c2",
           "result": "PR #123 is open and mergeable against main, not merged. CI run 40109252080 passed all 11 jobs, including full Python 3.10/3.11/3.12 tests, Windows native reliability, CLI Rust checks, flow, docs, Ruff, security and benchmark. Dashboard CI 40109252056 and Docker Publish 40109252032 passed. External QQ outgoing, authenticated visual, live model/WebChat, and clean-VM/installer gates remain open; CORONA-IMPL remains in_progress / NOT READY."
+        },
+        {
+          "command": "feature-state reconciliation under the one-feature-at-a-time workflow",
+          "result": "CORONA-IMPL is blocked pending the previously recorded live QQ, authenticated UI, live model/WebChat, and clean-VM/installer acceptance. XPLAT-PIPELINE-IMPLEMENTATION is the sole active feature; no Corona code or rollout was resumed."
         }
       ]
     },
@@ -1896,6 +1900,104 @@
       ],
       "acceptance": "源码和本机 doctor/浏览器依赖已修复并部署静态资源；登录态页面视觉验收仍需用户刷新欢迎页和设置页确认。",
       "branch": "main"
+    },
+    {
+      "id": "XPLAT-ASTRBOT-RESEARCH",
+      "name": "AstrBot 多平台发言与统一消息存储方案研究",
+      "description": "同步本地与远端 main，基于固定 AstrBot/Stella 提交研究统一发言设置、消息处理存储与增量适配方案；不改业务代码。",
+      "status": "done",
+      "dependencies": [
+        "XPLAT-PLAN"
+      ],
+      "scope": [
+        "Git main fast-forward synchronization",
+        "docs/plans/2026-10-24-astrbot-multiplatform-adaptation.md",
+        "docs/plans/2026-10-24-astrbot-multiplatform-adaptation.en.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "main 与 origin/main 在研究起点差异为 0，无既有工作丢失",
+        "两方向结论有固定版本源码依据，说明 AstrBot 设计及边界",
+        "核验 Stella 现状并给出增量合同、迁移、阶段依赖与验收",
+        "仅变更研究文档与状态，完成 docs/JSON/diff 与 GitNexus all/compare 检查"
+      ],
+      "evidence": [
+        {
+          "command": "git fetch origin --prune; git switch main; git merge --ff-only origin/main; git rev-list --left-right --count main...origin/main",
+          "result": "Clean worktree synchronized at 3825f994cbec8e7633b2284e7f55271793c99fe5; 0/0 commits. Former branch is contained in main; no rewrite, stash operation or push required."
+        },
+        {
+          "command": "GitHub connector fixed-ref source reads; GitNexus 1.6.12 analyze/query/context/upstream impact; source reference audit",
+          "result": "AstrBot ec77b16eec6096dc75c76292ca329af08766af14 compared with Stella main. Generic/V2 contracts are not production-wired; default exporter/background resolution OneBot-only. Speaking policy HIGH; space and recorder CRITICAL. Baseline docs 121/1307/577/0. See bilingual plan."
+        },
+        {
+          "command": "python3 scripts/check_docs.py; explicit dated-plan local-link validation; JSON parse; git diff --check; GitNexus detect-changes all and compare main",
+          "result": "Docs passed: 121 maintained files / 1311 links / 577 anchors / 0 errors; 39 additional dated-plan local links passed; JSON and diff checks passed. GitNexus refreshed with both plans: all and compare main each 5 files / 29 changed symbols / 0 affected processes / LOW. CLI listing hides 14 rows, so reran LocalBackend detect_changes and inspected all 29 structured symbols; no error/partial/truncated fields. Exactly 5 documentation/state files changed, no business source. Existing CORONA-IMPL in_progress/active status preserved without resuming it. Research only, runtime acceptance NOT READY."
+        }
+      ]
+    },
+    {
+      "id": "XPLAT-ENGINEERING-PLAN",
+      "name": "最新主分支多平台发言与消息流水线工程计划",
+      "description": "使用 GitNexus plan 深度流程重新核验最新 Stella/AstrBot，输出13节计划、阶段与schema2实施包；只规划。",
+      "status": "done",
+      "dependencies": [
+        "XPLAT-ASTRBOT-RESEARCH"
+      ],
+      "scope": [
+        "docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "同步最新 main 并保留上一轮未提交研究/状态",
+        "5主符号与相关源码核验，调用与PDG不足明确披露，不把UNKNOWN当LOW",
+        "实施阶段、配置与存储合同、迁移回滚、测试与验收可执行",
+        "完整schema2上下文由原版helper生成和安全发布，文档/链接/JSON/diff校验并尝试图变更检查"
+      ],
+      "evidence": [
+        {
+          "command": "git fetch origin --prune; restricted stash of prior 5 research/state files; git merge --ff-only --no-stat origin/main",
+          "result": "main=origin/main=17e631028344332fcab5dc0f7dbb1ff0cdd0c64b at planning start. Prior documents restored byte-for-byte; prior research state reconciled; safety stash and external backup retained. No business implementation, commit or push."
+        },
+        {
+          "command": "GitNexus plan 1.6.12 deep; status/provenance, analyze --index-only --pdg --workers 1, resource/query/context/impact/PDG; latest-source targeted verification",
+          "result": "Runner identity current; refresh FAILED exit1 with no explicit error diagnostic. Graph remains 3825f99/incremental-in-progress/4 commits behind; impacts UNKNOWN and PDG empty. Latest source is authoritative. G0 requires graph restoration before code edits; no second refresh/build during planning. AstrBot pinned f61a7f42696da6df25dc7a249ec9b8d54ed9da18."
+        },
+        {
+          "command": "Original evidence-provenance.mjs schema2 snapshot/write-plan/read-plan; check_docs; explicit plan validation; JSON; git diff --check; structured detect_changes all/compare main",
+          "result": "13-section plan and full implementation pack published and validation recorded in plan/current session outputs. Graph change checks are diagnostic only under stale/incomplete index, not clean approval; source scope review is authoritative for this documentation-only change. Runtime tests/live/model/native/VM not run; implementation NOT READY. Existing CORONA-IMPL in_progress/active status preserved without resuming it."
+        }
+      ]
+    },
+    {
+      "id": "XPLAT-PIPELINE-IMPLEMENTATION",
+      "name": "多平台发言策略与统一消息流水线实施",
+      "description": "按 2026-10-25 GitNexus 工程计划执行 G0、P00–P10；逐包验证与提交，live/模型/VM验收单列。",
+      "status": "in_progress",
+      "dependencies": [
+        "XPLAT-ENGINEERING-PLAN"
+      ],
+      "scope": [
+        "G0 GitNexus graph/PDG refresh and d=1 reconciliation",
+        "P00 OneBot/WebChat and managed/legacy baseline",
+        "P01–P10 policy, configuration, ingress, storage, outbound, adapters, UI and acceptance",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "G0 complete and every code edit has current upstream impact evidence with unresolved graph boundaries source-audited",
+        "Managed/legacy settings preserve revision/CAS/idempotency/apply recovery and QQ saga behavior",
+        "Opaque identity, connection, scene, channel/thread ownership and private-memory isolation pass positive and negative cases",
+        "Message body, parts and relations commit atomically; commit failure never reports captured",
+        "Exact Bot/target delivery, independent quotas, deadlines, windows and UNKNOWN/PARTIAL handling prevent ambiguous replay",
+        "Schema migration, Python/native parity, wheel contract and rollback drill have isolated evidence",
+        "OneBot/WebChat regressions and Telegram/Discord/official QQ fixture/live levels are separately recorded; external gaps remain NOT READY"
+      ],
+      "evidence": [
+        {
+          "command": "node .gitnexus/run.cjs analyze --index-only --pdg --workers 1; status --json; query/context/upstream impact; impact --mode pdg; descriptor-anchored plan read/snapshot",
+          "result": "G0 complete on branch codex/multiplatform-policy-message-pipeline at source HEAD 17e631028344332fcab5dc0f7dbb1ff0cdd0c64b. Analyze exited 0 after recovering the prior incomplete index; status up-to-date, index commit matches HEAD, incompleteReasons empty. Impact: AdmissionPolicy.decide CRITICAL (7 d=1); record_message CRITICAL (19 d=1, 3 receiver-typing omissions); OutboundService.send HIGH (7 d=1, 4 receiver-typing omissions); register_conversation_v2 MEDIUM (6 d=1, all tests); GroupBindingsCoordinator.execute LOW lower-bound (1 d=1, 15 unresolved execute callsites). PDG local slices work for admission, capture/pressure and outbound; flow extraction remains truncated (3203/3403 candidate entries dropped, 952 callees, 43 walks, 23 depth caps; 39 large files skipped). No source implementation or tests run yet; P00 begins next."
+        }
+      ]
     }
   ]
 }
