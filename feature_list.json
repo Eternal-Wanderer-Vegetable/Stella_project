@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-25",
+  "updated_at": "2026-10-26",
   "active_feature": "XPLAT-PIPELINE-IMPLEMENTATION",
   "features": [
     {
@@ -2080,6 +2080,10 @@
         {
           "command": "P08 state closeout: GitNexus detect-changes --scope all and --scope compare --base-ref main; plan JSON validation; scripts/check_docs.py; git diff --check",
           "result": "State-file scope all: 4 files / 10 symbols / 0 affected processes / LOW; changed graph entities are Markdown sections in plan/progress/handoff. Source audit confirms only feature/state/plan documentation changed. Compare main is cumulative: 80 files / 911 symbols / 90 processes / CRITICAL, with earlier code changes and generic config/property attribution; retain CRITICAL, it is not waived. CLI showed capped symbol/flow detail (896 additional symbols beyond the short display) but complete aggregate counts, with no partial/truncated marker emitted. Feature JSON/plan implementation_context validated, docs passed 121 files / 1322 local links / 577 migration anchors / 0 errors, and diff check passed."
+        },
+        {
+          "command": "P09 background delivery: isolated focused pytest across policy/route fixtures, outbound scheduler, Scheduling store/runtime/gates, Cometa delivery/recovery, Participation/proactive, transport pipeline; Ruff; py_compile; check_docs; message-flow check; GitNexus all/compare and post-commit index refresh",
+          "result": "Committed as f8bdc71. New background policy requires an exact enabled BotRef/SceneRef binding, explicit proactive opt-in, adapter proactive capability and quiet-hours clearance; effective scene requests-per-window becomes a distinct outbound request bucket. Registry exact binding is preferred; only exact legacy QQ can use its compatibility fallback. Isolated STELLA_HOME=/tmp/stella-p09-check-20261025 targeted suite: 234 passed / 1 existing NoneBot no-adapters warning. Ruff, changed-file py_compile, docs 121/1322/577/0 and diff check passed. Message-flow check remains same-topology body-anchor drift (no topology change), deferred to P10. Precommit GitNexus all 5 files/1 symbol/0 processes/LOW; compare main 85/398/791/CRITICAL cumulative, no partial/truncated marker. Postcommit index refresh first failed with incremental-in-progress; retry succeeded and status is current at f8bdc71, covering 2,049 files. Known process extraction limits remain (39 large files; 3,323/3,523 candidates; 931 callees; 46 walks; 23 traces; 364 cross-language property sites). No production STELLA_HOME, credentials, database, service, Bot, model, live platform, VM or release use. Matrix remains 0/32 certified; P04 native wheel/API parity and restore drill remain open; overall NOT READY. State closeout GitNexus: all 4 files/7 symbols/0 processes/LOW; complete compare main 85 files/957 symbols/90 processes/CRITICAL cumulative. The initial partial compare and a later partial all (file-symbol lookup interruption) were discarded; complete serial reruns had no partial/truncated markers. Source audit confirms only state/plan files changed."
         }
       ]
     }
