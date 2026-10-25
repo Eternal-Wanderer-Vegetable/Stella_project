@@ -20,6 +20,7 @@
 - 记忆 schema 23 / backend API 4：`memory/schema.py`、`memory_rust/backend.py` 与 `memory_rust/native/src/schema.rs` 必须一致。原生包版本不能替代导出常量校验。v23 追加 transport event/parts/relations，并保留旧整数 `msg_id` 供显式 QQ 兼容路径使用。
 - Social schema 5：`social_deliveries.platform_message_ids_json` 保存一个物理发送片段的全部平台消息 ID；v4→v5 迁移只把既有首 ID 包装成单元素列表，不重新解释 ID。WP06 保留单 ID 兼容字段，同时支持不透明 ID 和逐段回执。
 - Scheduling schema 2：task/run/audit/quota 记录保存可验证的 DeliveryTarget、主体与 scope；旧 QQ task 只有在 Bot/群目标明确可绑定时才迁移为可发送，其他行保持不可路由，旧配额放入隔离的 legacy scope。发送必须精确解析持久化 BotRef，unknown 不自动重试。
+- P05 出站合同：`OutboundService.send` 按完整 Bot/scene/route 目标 FIFO 串行；每目标最多 32 个排队项，目标 lane 与配额状态各有 4096 项上限。`rate_limit_buckets` 独立同时执行 adapter、connection、scene、target 作用域与 `api`、`request` 类别；旧限流字段分别保留为 adapter API 桶与 connection API 桶，不把不同窗口压成一个限值。限流状态是进程内滑动窗口，进程重启后清零。每个物理片段及重试都占用配额；仅明确 FAILED、标准限流错误码且附带 retry-after 的请求可重试，默认最多 2 次，单次 retry-after 等待最多 30 秒，并仍受消息 deadline/窗口约束。UNKNOWN 永不重投；回执保存物理片段状态、尝试次数和不透明消息 ID。排队期间 Bot 绑定代际变化或断连会拒绝发送。同 self_id 可在不同 adapter 并存，同一 adapter 槽冲突仍拒绝。
 - Cometa Origin v3：BotRef 与 DeliveryTarget 同时保存并交叉校验；v1/v2 只按已知旧 OneBot QQ 语义兼容，无法证明目标身份的旧记录 fail closed。Cometa SQL 表结构保持 schema 1。
 - 消息流程：`python scripts/generate_message_flow.py --check` 检查源码锚点、闭包与 manifest；源码变化后按生成器更新归档，不能把静态可达性当作实际执行。
 - 前端：`pnpm --dir dashboard test`、`pnpm --dir dashboard build`；本地随包快照用 `pnpm --dir dashboard sync:webui` 同步。
