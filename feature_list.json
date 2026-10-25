@@ -1977,7 +1977,7 @@
       "id": "XPLAT-PIPELINE-IMPLEMENTATION",
       "name": "多平台发言策略与统一消息流水线实施",
       "description": "按 2026-10-25 GitNexus 工程计划执行 G0、P00–P10；逐包验证与提交，live/模型/VM验收单列。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [
         "XPLAT-ENGINEERING-PLAN"
       ],
@@ -2084,6 +2084,10 @@
         {
           "command": "P09 background delivery: isolated focused pytest across policy/route fixtures, outbound scheduler, Scheduling store/runtime/gates, Cometa delivery/recovery, Participation/proactive, transport pipeline; Ruff; py_compile; check_docs; message-flow check; GitNexus all/compare and post-commit index refresh",
           "result": "Committed as f8bdc71. New background policy requires an exact enabled BotRef/SceneRef binding, explicit proactive opt-in, adapter proactive capability and quiet-hours clearance; effective scene requests-per-window becomes a distinct outbound request bucket. Registry exact binding is preferred; only exact legacy QQ can use its compatibility fallback. Isolated STELLA_HOME=/tmp/stella-p09-check-20261025 targeted suite: 234 passed / 1 existing NoneBot no-adapters warning. Ruff, changed-file py_compile, docs 121/1322/577/0 and diff check passed. Message-flow check remains same-topology body-anchor drift (no topology change), deferred to P10. Precommit GitNexus all 5 files/1 symbol/0 processes/LOW; compare main 85/398/791/CRITICAL cumulative, no partial/truncated marker. Postcommit index refresh first failed with incremental-in-progress; retry succeeded and status is current at f8bdc71, covering 2,049 files. Known process extraction limits remain (39 large files; 3,323/3,523 candidates; 931 callees; 46 walks; 23 traces; 364 cross-language property sites). No production STELLA_HOME, credentials, database, service, Bot, model, live platform, VM or release use. Matrix remains 0/32 certified; P04 native wheel/API parity and restore drill remain open; overall NOT READY. State closeout GitNexus: all 4 files/7 symbols/0 processes/LOW; complete compare main 85 files/957 symbols/90 processes/CRITICAL cumulative. The initial partial compare and a later partial all (file-symbol lookup interruption) were discarded; complete serial reruns had no partial/truncated markers. Source audit confirms only state/plan files changed."
+        },
+        {
+          "command": "P10 local validation: isolated full pytest; Ruff; Dashboard Vitest/build/sync; observability suite; docs and dual-interpreter message-flow check; GitNexus source/state closeout",
+          "result": "P10 local implementation committed as 30cdf87 (Corona lazy import boundary/G05 assertion), cefec48 (cross-Python flow serialization), and 47548f0 (final immutable flow). Locked Python 3.12.14 full suite: 4245 passed / 34 skipped / 3 existing warnings; Ruff passed; Dashboard 9 files/110 tests, typecheck/build and sync:webui passed with existing Vite warnings; observability 139 passed/1 existing fixture deprecation. Python 3.12.3 and 3.12.14 both pass the final flow --check and produce the same full manifest hash. See docs/reports/2026-10-26-xplat-p10-validation.md. P10 remains blocked: Python 3.10/3.11 full matrix, Rust/native wheel API/schema parity, restore drill, live platform/model, official adapter certification and clean Windows VM/release acceptance are unavailable. Matrix 0/32 certified; overall NOT READY. GitNexus risks: app/G05 HIGH; flow generator CRITICAL broad counts attribution; large flow JSON has no indexed symbol overlap; cumulative compare-main CRITICAL. No risk waived. Tests used isolated temporary data; no production data or service accessed. State-file GitNexus detection: all 5 files/11 symbols/0 processes/LOW; repeated compare main 90 files/317–444 symbols/783–797 processes/CRITICAL cumulative, display capped and no partial/truncated marker; retain CRITICAL without waiver."
         }
       ]
     }

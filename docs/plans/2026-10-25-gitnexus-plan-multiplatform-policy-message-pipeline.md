@@ -3,7 +3,7 @@
 > Task: 按 G0/P00–P10 逐包实施多平台发言策略、可信会话、统一消息存储与精确回投；本文件同时保留原研究基线与每包执行证据。
 > Evidence verified at commit `17e631028344332fcab5dc0f7dbb1ff0cdd0c64b`（main，与本轮 fetch 后 origin/main 一致）。AstrBot `f61a7f42696da6df25dc7a249ec9b8d54ed9da18`（4.29.3）。日期：2026-10-25，Asia/Shanghai。
 > Depth: deep · form: full · freshness: strict requested · impact_depth: 3。GitNexus 1.6.12 runner 身份已核验 current；唯一一次 `analyze --index-only --pdg --workers 1` 退出 1，日志无明确错误原因，索引仍为旧 `3825f99` 并标记 `incremental-in-progress`。**当前图不承担实施放行依据；本计划为 source-weighted，执行必须先完成 G0 图恢复门禁。**
-> Provenance: schema 2; global dirty digest 107e17e582b703b96ff3b98f16441ab6d0253a7c5682f1e11eba27d31f3f42f3; 147 sorted cited-path entries; exact generated plan path excluded.
+> Provenance: schema 2; global dirty digest 9df46ee465a469b97a8da7062e0a23ca8d3334c9b0f6b9adec9e58c62b0ba5d5; 151 sorted cited-path entries; exact generated plan path excluded.
 
 G0 implementation re-anchor (2026-10-25): the verified GitNexus 1.6.12 runner rebuilt an index with PDG successfully at source HEAD 17e631028344332fcab5dc0f7dbb1ff0cdd0c64b. status --json is up-to-date with no incomplete reasons; current upstream impacts and local PDG slices are recorded in sections 4, 5 and 9. Flow extraction still drops candidate entry points, callees and traces; source reference checks remain required where impact is lower-bound.
 
@@ -352,7 +352,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ```json
 {
   "implementation_context": {
-    "task_summary": "G0 and P00–P09 are separately committed. P09 background delivery/policy package is f8bdc71c2f359cefc77727cc96ab8c3892cda1dc; P10 full gates, docs/release/CI, and the final single immutable message-flow refresh are now in progress. P04 native wheel/API parity and restore drill remain open, the official adapter matrix remains 0/32 certified, and live/model/VM/release acceptance is absent; overall NOT READY.",
+    "task_summary": "G0 and P00–P10 local implementation packages are committed. P10 commits: 30cdf87 (Corona import boundary/G05 assertion), cefec48 (cross-Python flow serialization), and 47548f0 (single final immutable flow). Local Python 3.12.14 full suite, Ruff, Dashboard tests/build/sync, docs, observability and dual-interpreter flow checks passed. P10 remains blocked on Python 3.10/3.11 full matrix, Rust/native API/schema parity and restore drill, live model/platform and official adapter acceptance, and clean Windows VM/release evidence. Matrix 0/32 certified; overall NOT READY.",
     "acceptance_criteria": [
       "Current graph/PDG and every d=1 reconciled before code edits",
       "Managed/legacy settings preserve revision/CAS/idempotency/apply recovery",
@@ -365,12 +365,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
     ],
     "evidence_provenance": {
       "schema_version": 2,
-      "head_commit": "f8bdc71c2f359cefc77727cc96ab8c3892cda1dc",
+      "head_commit": "47548f055413c5611b8e258bacdfcb584fa6a726",
       "generated_plan_path": "docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md",
       "global_dirty_digest": {
         "algorithm": "sha256",
         "canonicalization": "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records",
-        "value": "107e17e582b703b96ff3b98f16441ab6d0253a7c5682f1e11eba27d31f3f42f3"
+        "value": "9df46ee465a469b97a8da7062e0a23ca8d3334c9b0f6b9adec9e58c62b0ba5d5"
       },
       "cited_path_manifest": [
         {
@@ -467,6 +467,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:ba87053ff01467bc09edaeaaa254d2c69cd1b6dd05001b82a3bb4f09d58b29da",
           "index_digest": "sha256:ba87053ff01467bc09edaeaaa254d2c69cd1b6dd05001b82a3bb4f09d58b29da",
           "worktree_digest": "sha256:ba87053ff01467bc09edaeaaa254d2c69cd1b6dd05001b82a3bb4f09d58b29da",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "core/observability/flows/message-flow.462d5c256f73.json",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:1c6f5599dbb8d43967248b4e78d0df0a700de0d0afbc5af2ebf83c32053579a0",
+          "index_digest": "sha256:1c6f5599dbb8d43967248b4e78d0df0a700de0d0afbc5af2ebf83c32053579a0",
+          "worktree_digest": "sha256:1c6f5599dbb8d43967248b4e78d0df0a700de0d0afbc5af2ebf83c32053579a0",
           "untracked_digest": "absent"
         },
         {
@@ -784,9 +800,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:cd9521956e446135749ead0779d06e0d30218d9e7f3ee5ec166ef2f2d0ce8782",
-          "index_digest": "sha256:cd9521956e446135749ead0779d06e0d30218d9e7f3ee5ec166ef2f2d0ce8782",
-          "worktree_digest": "sha256:cd9521956e446135749ead0779d06e0d30218d9e7f3ee5ec166ef2f2d0ce8782",
+          "head_digest": "sha256:73ed3fb238f2b998841092efe14ebd6f946846e9b2fac1017cd9f0c332665126",
+          "index_digest": "sha256:73ed3fb238f2b998841092efe14ebd6f946846e9b2fac1017cd9f0c332665126",
+          "worktree_digest": "sha256:73ed3fb238f2b998841092efe14ebd6f946846e9b2fac1017cd9f0c332665126",
           "untracked_digest": "absent"
         },
         {
@@ -1254,6 +1270,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "docs/reports/2026-10-26-xplat-p10-validation.md",
+          "object_kind": {
+            "head": "absent",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "mixed",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "absent",
+          "index_digest": "sha256:2769e28c03be0fe9d1dfc577dc26f3ac7b3c56d723e5705cdefa50cc29393dba",
+          "worktree_digest": "sha256:334243290c18dcd2b37143142d2a8f335c695f0992ff7338530b092929b18f24",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "feature_list.json",
           "object_kind": {
             "head": "regular",
@@ -1261,12 +1293,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "mixed",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:59b0d6e6f3fe11998ae72d03bc5456abd26bfedc4e3e74e0ea3651ac79eab4ab",
-          "index_digest": "sha256:b7400523c02fd0925493c437e33bec987ade1752a320c5f7285d9e9888eb22e7",
-          "worktree_digest": "sha256:b7400523c02fd0925493c437e33bec987ade1752a320c5f7285d9e9888eb22e7",
+          "head_digest": "sha256:b7400523c02fd0925493c437e33bec987ade1752a320c5f7285d9e9888eb22e7",
+          "index_digest": "sha256:7b4e2ebb71e9f2ca7ee8d29ff21590bc2f245df8329f01ef48a96ec4929e8f00",
+          "worktree_digest": "sha256:fb8598a0c39fb0fe82aa84c5ff78951948357238a04e8635e635065859d69ec8",
           "untracked_digest": "absent"
         },
         {
@@ -1485,12 +1517,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "mixed",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:9fe218560a6ceb4e16e98916ccf2872055825aac1db37676489bead995636cb6",
-          "index_digest": "sha256:90732d1ac8390b50a1656b35e7f8e18b40d76d043c0e176abecd280c5b15329b",
-          "worktree_digest": "sha256:90732d1ac8390b50a1656b35e7f8e18b40d76d043c0e176abecd280c5b15329b",
+          "head_digest": "sha256:90732d1ac8390b50a1656b35e7f8e18b40d76d043c0e176abecd280c5b15329b",
+          "index_digest": "sha256:c97322d96677509aa75805de49e3b756542f4f8f56523eb97d53f141390d5b4f",
+          "worktree_digest": "sha256:a0710bd6205feac1842d89e6b84ea42970520da323a2823bddbbc537a0a56f45",
           "untracked_digest": "absent"
         },
         {
@@ -1526,6 +1558,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "scripts/generate_message_flow.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:22c3e01e741589dcb301956ca48055da43fdf6c83d0b06f5d39e7d699582e3c3",
+          "index_digest": "sha256:22c3e01e741589dcb301956ca48055da43fdf6c83d0b06f5d39e7d699582e3c3",
+          "worktree_digest": "sha256:22c3e01e741589dcb301956ca48055da43fdf6c83d0b06f5d39e7d699582e3c3",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "session-handoff.md",
           "object_kind": {
             "head": "regular",
@@ -1533,12 +1581,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "mixed",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:50ec9e88937a4c6b7e0c7899a8a9f3bb8850eeebc7aa55a378642a086c677a9a",
-          "index_digest": "sha256:a98260606cc47603bc56125d952715c77a555216b017be23c54b0d04a23ec65b",
-          "worktree_digest": "sha256:a98260606cc47603bc56125d952715c77a555216b017be23c54b0d04a23ec65b",
+          "head_digest": "sha256:a98260606cc47603bc56125d952715c77a555216b017be23c54b0d04a23ec65b",
+          "index_digest": "sha256:65aeba2e689f35189e0c86bb7db9262e8ff7a9a72cd40a8c5e241cf4cbdf9c2f",
+          "worktree_digest": "sha256:29efe123304d9e69fcefe7f902acfc598f96cf9c67c02c6e159f2bf476dcdf2e",
           "untracked_digest": "absent"
         },
         {
@@ -1859,6 +1907,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:82f3c44af541b8de0c4a9230c563a441561cd3da0cae4a0a804b6fa9834a7b63",
           "index_digest": "sha256:82f3c44af541b8de0c4a9230c563a441561cd3da0cae4a0a804b6fa9834a7b63",
           "worktree_digest": "sha256:82f3c44af541b8de0c4a9230c563a441561cd3da0cae4a0a804b6fa9834a7b63",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "tests/gravitas/test_g05_pressure_boundaries.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:a21290fdf19f9b0799bf98c00b5275f1b7dc7ca2d829822aa3923ea091871d64",
+          "index_digest": "sha256:a21290fdf19f9b0799bf98c00b5275f1b7dc7ca2d829822aa3923ea091871d64",
+          "worktree_digest": "sha256:a21290fdf19f9b0799bf98c00b5275f1b7dc7ca2d829822aa3923ea091871d64",
           "untracked_digest": "absent"
         },
         {
@@ -3746,7 +3810,16 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "P09"
         ],
         "objective": "full gates, docs/release, final single immutable flow refresh",
-        "status": "in_progress"
+        "status": "blocked",
+        "package_commits": [
+          "30cdf87 fix(transport): close final validation boundary gaps",
+          "cefec48 fix(observability): stabilize flow closure across Python versions",
+          "47548f0 chore(observability): publish stable P10 message flow"
+        ],
+        "report": "docs/reports/2026-10-26-xplat-p10-validation.md",
+        "verification": "Locked Python 3.12.14 full suite 4245 passed / 34 skipped / 3 existing warnings; Ruff passed; Dashboard 9 files/110 tests, typecheck/build and sync:webui passed; observability 139 passed/one existing fixture deprecation. Python 3.12.3 and 3.12.14 both pass final flow --check for message-flow.462d5c256f73.json with matching full-content hash. Final flow has 144 nodes / 142 source-resolved / 9688 closure sites / 15598 reachable symbols. Final docs check: 121 files / 1324 links / 577 migration anchors / 0 errors; git diff --check passed.",
+        "gitnexus_closeout": "Pre-edit create_corona_app MEDIUM (18 impacted/9 direct/1 main process); record_message UNKNOWN/0 plus three omitted receiver-typed calls, supplemented with source audit (only test assertion edited); platform_conversation_settings_put UNKNOWN/0 but source-confirmed FastAPI route and untouched; generator file LOW (4 direct imports/3 modules). Source batches after edits: Corona/G05 HIGH (3 files/4 symbols/6 processes); generator CRITICAL (2 files/1 symbol/753 processes, broad generic counts attribution, retained without waiver); final large flow artifact changed one file with no indexed symbol overlap, so its graph coverage is unresolved. Cumulative compare-main remains CRITICAL. Current index extraction omits 40 large files, leaves 3324/3524 candidates unranked, drops 931 callees, cuts 46 walks, depth-caps 23 traces and leaves 364 cross-language property sites unresolved. Final staged state-file checks: scope all 5 files/11 symbols/0 processes/LOW; repeated compare main 90 files/317–444 symbols/783–797 processes/CRITICAL cumulative, no partial/truncated marker. Compare display is capped (variable capped symbol listing and up to 787 flows omitted) and generic user_id attribution remains noisy; retain CRITICAL without waiver.",
+        "limitations": "Python 3.10/3.11 full test matrix unavailable locally; cargo/rustc/rustup/maturin unavailable; P04 native wheel/API/schema parity and restore drill not run; no live model/platform credentials/test window or clean Windows VM/release runner. Official adapter matrix remains 0/32 certified and overall NOT READY. No production STELLA_HOME/data/configuration/service was accessed."
       }
     ],
     "index_refresh": [
@@ -3824,7 +3897,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 - [x] P07 scene/policy/history APIs 与 Dashboard revisions 已独立提交；定向检查通过。
 - [x] P08 legacy QQ/WebChat shared ingress 独立提交，focused checks 完成。
 - [x] P09 后台投递路由、quiet hours 与策略配额已独立提交 `f8bdc71`；fixture 与定向检查完成。
-- [ ] P10 完整门禁、文档/发布/CI 与最终单次 immutable flow refresh；P04 native wheel/API parity、恢复演练及全部 live/模型/VM 门禁仍未完成。
+- [ ] P10 本地 Python/Dashboard/文档与最终单次 immutable flow 已完成（见[验证报告](../reports/2026-10-26-xplat-p10-validation.md)）；Python 3.10/3.11、P04 native wheel/API parity与恢复演练、live/模型/VM及发布门禁仍未完成，P10保持blocked。
 - [x] 生成计划仍由原版helper snapshot与safe write维护，禁止直接写目标计划路径。
 
 ### 整体实施产品验收（尚未全部完成）
