@@ -196,8 +196,9 @@ class ChatContext:
     recorded_row_id: int = 0  # record_message 写入后的行 id（0=未入库）
     # 采集结果码（记忆采集就绪门，memory.capture_gate）："" = 调用方未给采集
     # 决策（遗留/显式调用）；"captured" = 已落库；"not_captured_unavailable" =
-    # 可用性门关闭；"not_captured_pressure" = backlog pressure cap 在写入前拒采。
-    # 两种拒绝都不排队不回放。消费方据此区分「拒绝」与「写失败」。
+    # 可用性门关闭；"not_captured_pressure" = backlog pressure cap 在写入前拒采；
+    # "not_captured_storage_error" = 存储/事务失败，row id 归零且不报 captured。
+    # 拒绝与失败都不排队不回放。消费方据此区分拒采与落库失败。
     capture_result: str = ""
     relation_version: int = 0  # 信封写入时的关系 schema 版本（0=无关系）
     identity_revision: int = 0  # 会话身份版本快照（M3 写入；缓存/CAS 用）

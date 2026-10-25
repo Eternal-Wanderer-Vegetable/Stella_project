@@ -1211,6 +1211,7 @@ async def record_group_chat(event: GroupMessageEvent):
         event.group_id,
         bot_id=str(event.self_id),
         conversation_key=conversation_key,
+        legacy_qq=True,
     )
     ctx = ChatContext(
         user_id=event.user_id,
@@ -1629,6 +1630,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                     event.group_id,
                     bot_id=str(event.self_id),
                     conversation_key=ref.conversation_key,
+                    legacy_qq=True,
                 ),
                 mentioned_user_ids=tuple(_mentioned),
                 relation_version=1,
@@ -2203,6 +2205,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                     ref.storage_session_id,
                     bot_id=bot_id,
                     conversation_key=ref.conversation_key,
+                    legacy_qq=True,
                 ),
                 mentioned_user_ids=tuple(_mentioned),
                 relation_version=1,

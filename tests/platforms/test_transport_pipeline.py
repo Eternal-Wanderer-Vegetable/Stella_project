@@ -174,7 +174,6 @@ def _service(settings, **kwargs):
         (SceneRef("thread", "thread-without-id", ("channel:1",)), {}, "thread_identity_missing"),
         (SceneRef("group", "room:007"), {"connection_id": "33333333-3333-4333-8333-333333333333"}, "connection_not_configured"),
         (SceneRef("group", "room:007"), {"self_id": "spoofed-bot"}, "bot_identity_mismatch"),
-        (SceneRef("group", "room:007"), {"event_kind": "edit"}, "event_kind_not_supported"),
     ],
 )
 def test_untrusted_or_unsupported_events_stop_before_registration_or_writes(
@@ -249,6 +248,33 @@ def test_closed_capture_gate_writes_no_body_but_keeps_passive_runtime_independen
     assert result.turn_status == "submitted"
     assert len(registrations) == 1  # metadata registration is separate from message content
     assert writes == []
+
+
+@pytest.mark.parametrize(("event_kind", "text"), [("edit", "revised"), ("delete", "")])
+def test_edits_and_deletes_are_captured_without_starting_a_turn(event_kind, text):
+    captured, facade = [], RecordingFacade()
+    service = _service(
+        _settings(defaults={
+            "capture_enabled": True,
+            "llm_enabled": True,
+            "wake_mode": "all",
+        }),
+        capture_gate=lambda *_: True,
+        capture_writer=lambda _ctx, dto: captured.append(dto.event_kind),
+        runtime_facade=facade,
+        pipeline_factory=lambda *_: object(),
+    )
+    result = asyncio.run(
+        service.handle_event(
+            CONNECTION_A,
+            object(),
+            _event(event_kind=event_kind, text=text),
+        )
+    )
+    assert result.capture_status == "captured"
+    assert result.turn_status == "not_triggered"
+    assert captured == [event_kind]
+    assert facade.calls == []
 
 
 def test_capture_denial_happens_before_v2_registration_when_no_turn_is_requested():

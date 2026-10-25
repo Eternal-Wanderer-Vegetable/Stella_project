@@ -59,8 +59,8 @@ from nonebot import logger
 
 from config import DB_PATH
 
-# 当前 Schema 版本（v22：连接身份、地址偏好与分享授权作用域，见 migrate_v22）。
-SCHEMA_VERSION = 22
+# 当前 Schema 版本（v23：transport message events/parts/relations，见 migrate_v23）。
+SCHEMA_VERSION = 23
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -1265,6 +1265,12 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
         with contextlib.suppress(sqlite3.OperationalError):
             create_conversation_identity_claims_table(conn)
             create_conversation_identity_versions_table(conn)
+    # v23：消息事件/组件/关系与旧 group_messages 共用一个事务写入。
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            from memory.message_store import create_message_store_tables
+
+            create_message_store_tables(conn)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

@@ -81,7 +81,9 @@ def test_reply_resolves_to_original_author_same_conversation(msg_db):
         user_id=int(B), msg_id=112,
         reply_to_msg_id="111", relation_version=1,
     )
-    ctx.reply_target_user_id = resolve_reply_target("111", GROUP, bot_id=BOT, conversation_key=KEY)
+    ctx.reply_target_user_id = resolve_reply_target(
+        "111", GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
+    )
     asyncio.run(record_message(ctx))
     rows = _rows(msg_db)
     assert rows[1]["reply_to_msg_id"] == "111"
@@ -91,14 +93,19 @@ def test_reply_resolves_to_original_author_same_conversation(msg_db):
 
 def test_reply_unknown_when_message_missing_or_cross_conversation(msg_db):
     # 完全不存在的 msg_id → unknown
-    assert resolve_reply_target("999999", GROUP, bot_id=BOT, conversation_key=KEY) == ""
+    assert resolve_reply_target(
+        "999999", GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
+    ) == ""
     # 同 msg_id 出现在另一个 canonical conversation（不同群）→ 当前会话查不到
     asyncio.run(record_message(_ctx(user_id=int(A), msg_id=111, group_id=8888,
                                     storage_session_id=8888, peer_id="8888",
                                     conversation_key=f"qq:{BOT}:group:8888")))
-    assert resolve_reply_target("111", GROUP, bot_id=BOT, conversation_key=KEY) == ""
+    assert resolve_reply_target(
+        "111", GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
+    ) == ""
     assert resolve_reply_target("111", 8888, bot_id=BOT,
-                                conversation_key=f"qq:{BOT}:group:8888") == A
+                                conversation_key=f"qq:{BOT}:group:8888",
+                                legacy_qq=True) == A
 
 
 # ── G3：有符号平台 message ID（归属修复计划 §6.1） ────────────────────
@@ -108,8 +115,12 @@ def test_signed_message_ids_end_to_end(msg_db):
     """负数平台 ID 与正数行为一致：回执落库 → 引用解析 → 作者命中。"""
     # A 的输入带负数平台 ID
     asyncio.run(record_message(_ctx(user_id=int(A), msg_id=-111, message="摸摸")))
-    assert resolve_reply_target("-111", GROUP, bot_id=BOT, conversation_key=KEY) == A
-    assert resolve_reply_target(-111, GROUP, bot_id=BOT, conversation_key=KEY) == A
+    assert resolve_reply_target(
+        "-111", GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
+    ) == A
+    assert resolve_reply_target(
+        -111, GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
+    ) == A
     # Bot 确认回执带负数平台 ID（真实回执 -558868042 的回归）
     from stella_project.plugins.bot_main import ai_gateway
 
@@ -121,14 +132,16 @@ def test_signed_message_ids_end_to_end(msg_db):
     rows = [r for r in _rows(msg_db) if r["source_kind"] == "BOT_SELF"]
     assert rows[0]["msg_id"] == -558868042  # 旧代码这里是 0
     assert resolve_reply_target(
-        "-558868042", GROUP, bot_id=BOT, conversation_key=KEY
+        "-558868042", GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
     ) == str(BOT)
 
 
 def test_invalid_message_ids_stay_unknown(msg_db):
     asyncio.run(record_message(_ctx(user_id=int(A), msg_id=111, message="摸摸")))
     for bad in ("0", "abc", "", "+111", "007", "11.5"):
-        assert resolve_reply_target(bad, GROUP, bot_id=BOT, conversation_key=KEY) == "", bad
+        assert resolve_reply_target(
+            bad, GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
+        ) == "", bad
 
 
 # ── G1/G2：适配器清洗后的关系提取 ─────────────────────────────────────
@@ -208,7 +221,9 @@ def test_extraction_conflict_and_invalid_stay_unknown(msg_db):
     assert ai_gateway._extract_message_relations(event)[0] == "0"
     event.original_message = [_seg("reply", id=0)]
     assert ai_gateway._extract_message_relations(event)[0] == "0"
-    assert resolve_reply_target("0", GROUP, bot_id=BOT, conversation_key=KEY) == ""
+    assert resolve_reply_target(
+        "0", GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
+    ) == ""
     # 正文伪装的 reply CQ 不能产生引用
     event = SimpleNamespace(
         self_id=int(BOT),
@@ -440,7 +455,7 @@ def test_capture_allowed_preserves_envelope_contract(msg_db):
     )
     ctx = _ctx(user_id=int(B), msg_id=112, reply_to_msg_id="111", relation_version=1)
     ctx.reply_target_user_id = resolve_reply_target(
-        "111", GROUP, bot_id=BOT, conversation_key=KEY
+        "111", GROUP, bot_id=BOT, conversation_key=KEY, legacy_qq=True
     )
     out = asyncio.run(record_message(ctx, capture=allowed))
     assert out.capture_result == CAPTURE_RESULT_OK

@@ -33,6 +33,7 @@ from config import (
 )
 from config.spaces import resolve_space
 from core.context import ChatContext
+from core.transport.message_event import MessageEventV1
 from gravitas.dependency_recovery import StorageDomain, connect_sqlite
 from memory.cache_keys import POLICY_VERSION
 from memory.capture_gate import (
@@ -46,6 +47,14 @@ from memory.conversation_projection import (
     TranscriptRecord,
     parse_qq_message_id,
     render_transcript_record,
+)
+from memory.message_store import (
+    append_message_event,
+    create_message_store_tables,
+    effective_history_filter,
+    event_dedupe_key,
+    find_existing_event,
+    mark_source_unavailable,
 )
 from memory.prompt_builder import build_memory_context, estimate_tokens
 from memory.retriever import get_group_memories, get_related_memories, get_user_memories
@@ -73,6 +82,7 @@ _BOT_SELF_RATIO_WARN = 0.7
 _TAIL_SCAN_ROW_CAP = 48
 _TAIL_UNIT_TOKEN_CAP = 1400
 CAPTURE_RESULT_PRESSURE_DENIED = "not_captured_pressure"
+CAPTURE_RESULT_STORAGE_FAILED = "not_captured_storage_error"
 _capture_pressure_provider: Callable[[object, float], object] | None = None
 
 
@@ -190,7 +200,9 @@ def _has_column(cursor: sqlite3.Cursor, table: str, column: str) -> bool:
 
 
 async def record_message(
-    ctx: ChatContext, capture: CaptureDecision | None = None
+    ctx: ChatContext,
+    capture: CaptureDecision | None = None,
+    message_event: MessageEventV1 | None = None,
 ) -> ChatContext:
     """把本条消息写入群消息表（group_messages），供后续整合器消费。
 
@@ -211,6 +223,7 @@ async def record_message(
     回填 ``not_captured_pressure``，只记有界缺口统计，不保存正文或建立补录队列。
 
     参数：ctx — 拥有 group_id / user_id / message 及可选信封字段的上下文；
+    message_event — 可选的受信任传输事件；提供时旧消息行与事件/组件/关系同事务提交；
     副作用：插入一条群消息记录并建表（幂等）；拒绝时零写库；
     返回：ctx（recorded_row_id 与 capture_result 已回填；失败行 id 保持 0）。
     """
@@ -222,9 +235,11 @@ async def record_message(
             f" scope={ctx.trace_scope} 原因={capture.reason_code or 'closed'}"
         )
         return ctx
+    conn = None
     try:
         conn = connect_sqlite(StorageDomain.MEMORY, DB_PATH)
         cursor = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         cursor.execute(_GROUP_MESSAGES_V16_DDL)
         # 老库的 group_messages 已存在且 ensure_v2_schema 可能晚于首条消息执行，
         # 这里自补 source_kind / msg_id / v16 信封列（失败即说明列已存在）
@@ -261,6 +276,13 @@ async def record_message(
                     cursor.execute(
                         f"ALTER TABLE group_messages ADD COLUMN {column} {decl}"
                     )
+        platform_message_id = str(getattr(ctx, "platform_message_id", "") or "")
+        if message_event is not None:
+            if not isinstance(message_event, MessageEventV1):
+                raise TypeError("message_event must be a MessageEventV1")
+            if platform_message_id and platform_message_id != message_event.platform_message_id:
+                raise ValueError("context and transport event message IDs must match")
+            platform_message_id = message_event.platform_message_id
         # messages 表为旧版兼容（只读回退），新消息统一写入 group_messages
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -283,8 +305,30 @@ async def record_message(
             CREATE INDEX IF NOT EXISTS idx_group_messages_subject
             ON group_messages (conversation_key, subject_key, id)
         """)
+        event_direction = "outbound" if normalize_source_kind(ctx.source_kind) == "BOT_SELF" else "inbound"
+        event_dedupe = ""
+        if message_event is not None:
+            conversation_key = str(getattr(ctx, "conversation_key", "") or "").strip()
+            if not connection_id or not conversation_key:
+                raise ValueError(
+                    "transport message events require trusted connection and conversation IDs"
+                )
+            create_message_store_tables(conn)
+            event_dedupe = event_dedupe_key(message_event)
+            existing = find_existing_event(
+                conn,
+                connection_id=connection_id,
+                conversation_key=conversation_key,
+                direction=event_direction,
+                event=message_event,
+                dedupe_key=event_dedupe,
+            )
+            if existing is not None:
+                conn.commit()
+                ctx.recorded_row_id = existing.legacy_row_id or 0
+                ctx.capture_result = CAPTURE_RESULT_OK
+                return ctx
         if _capture_pressure_provider is not None:
-            cursor.execute("BEGIN IMMEDIATE")
             snapshot = _pending_backlog_snapshot(
                 cursor, str(ctx.storage_key())
             )
@@ -293,48 +337,76 @@ async def record_message(
                 ctx.recorded_row_id = 0
                 ctx.capture_result = CAPTURE_RESULT_PRESSURE_DENIED
                 conn.rollback()
-                conn.close()
                 logger.info(
                     "[CapturePressure] 消息未落库；仅记录缺口计数与原因"
                     f" scope={ctx.trace_scope}"
                     f" reason={getattr(pressure_decision, 'reason_code', 'pressure_denied')}"
                 )
                 return ctx
-        cursor.execute("""
-            INSERT INTO group_messages (
-                group_id, user_id, content, source_kind, msg_id,
-                platform_message_id, subject_key, connection_id,
-                conversation_key, bot_id, sender_display_name,
-                reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json,
-                logical_message_id, part_index, origin_msg_id,
-                reply_recipient_user_id, turn_id, relation_version
+        legacy_row_id = None
+        if message_event is None or message_event.event_kind != "delete":
+            cursor.execute("""
+                INSERT INTO group_messages (
+                    group_id, user_id, content, source_kind, msg_id,
+                    platform_message_id, subject_key, connection_id,
+                    conversation_key, bot_id, sender_display_name,
+                    reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json,
+                    logical_message_id, part_index, origin_msg_id,
+                    reply_recipient_user_id, turn_id, relation_version
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                str(ctx.storage_key()), str(getattr(ctx, "raw_user_id", "") or ctx.user_id), ctx.message,
+                normalize_source_kind(ctx.source_kind), int(ctx.msg_id or 0),
+                platform_message_id or None,
+                str(getattr(ctx, "subject_key", "") or ""),
+                connection_id,
+                str(getattr(ctx, "conversation_key", "") or ""),
+                str(getattr(ctx, "bot_id", "") or ""),
+                str(getattr(ctx, "sender_display_name", "") or ""),
+                str(getattr(ctx, "reply_to_msg_id", "") or ""),
+                str(getattr(ctx, "reply_target_user_id", "") or ""),
+                json.dumps(list(getattr(ctx, "mentioned_user_ids", ()) or ()), ensure_ascii=False),
+                str(getattr(ctx, "logical_message_id", "") or ""),
+                int(getattr(ctx, "part_index", 0) or 0),
+                str(getattr(ctx, "origin_msg_id", "") or ""),
+                str(getattr(ctx, "reply_recipient_user_id", "") or ""),
+                str(getattr(ctx, "turn_id", "") or ""),
+                int(getattr(ctx, "relation_version", 0) or 0),
+            ))
+            legacy_row_id = int(cursor.lastrowid or 0)
+        if message_event is not None:
+            append_message_event(
+                conn,
+                connection_id=connection_id,
+                conversation_key=str(ctx.conversation_key),
+                direction=event_direction,
+                event=message_event,
+                legacy_row_id=legacy_row_id,
+                dedupe_key=event_dedupe,
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            str(ctx.storage_key()), str(getattr(ctx, "raw_user_id", "") or ctx.user_id), ctx.message,
-            normalize_source_kind(ctx.source_kind), int(ctx.msg_id or 0),
-            str(getattr(ctx, "platform_message_id", "") or "") or None,
-            str(getattr(ctx, "subject_key", "") or ""),
-            connection_id,
-            str(getattr(ctx, "conversation_key", "") or ""),
-            str(getattr(ctx, "bot_id", "") or ""),
-            str(getattr(ctx, "sender_display_name", "") or ""),
-            str(getattr(ctx, "reply_to_msg_id", "") or ""),
-            str(getattr(ctx, "reply_target_user_id", "") or ""),
-            json.dumps(list(getattr(ctx, "mentioned_user_ids", ()) or ()), ensure_ascii=False),
-            str(getattr(ctx, "logical_message_id", "") or ""),
-            int(getattr(ctx, "part_index", 0) or 0),
-            str(getattr(ctx, "origin_msg_id", "") or ""),
-            str(getattr(ctx, "reply_recipient_user_id", "") or ""),
-            str(getattr(ctx, "turn_id", "") or ""),
-            int(getattr(ctx, "relation_version", 0) or 0),
-        ))
-        ctx.recorded_row_id = int(cursor.lastrowid or 0)
-        ctx.capture_result = CAPTURE_RESULT_OK
+            if message_event.event_kind == "delete":
+                mark_source_unavailable(
+                    conn,
+                    conversation_key=str(ctx.conversation_key),
+                    connection_id=connection_id,
+                    direction=event_direction,
+                    platform_message_id=message_event.platform_message_id,
+                )
         conn.commit()
-        conn.close()
+        ctx.recorded_row_id = legacy_row_id or 0
+        ctx.capture_result = CAPTURE_RESULT_OK
     except Exception as e:
+        ctx.recorded_row_id = 0
+        ctx.capture_result = CAPTURE_RESULT_STORAGE_FAILED
+        if conn is not None:
+            with contextlib.suppress(Exception):
+                conn.rollback()
         logger.error(f"记录消息失败: {e}")
+    finally:
+        if conn is not None:
+            with contextlib.suppress(Exception):
+                conn.close()
     return ctx
 
 
@@ -344,6 +416,8 @@ def resolve_reply_target(
     *,
     bot_id: str = "",
     conversation_key: str = "",
+    connection_id: str = "",
+    legacy_qq: bool = False,
 ) -> str:
     """把平台被回复 message ID 解析为原消息作者（多人身份修复计划 §6.2）。
 
@@ -351,33 +425,62 @@ def resolve_reply_target(
     msg_id 缺失或命中多条（跨群重复 ID）一律返回空串 = unknown——禁止猜
     「最近发言的人」。DB 异常同样返回 unknown（历史渲染降级，不拖垮主链路）。
 
-    QQ legacy message ID 允许负数（回执实测 -558868042）：按旧 INTEGER 列的
-    十进制 codec 查找；0、前导零或非数字 opaque ID 在 schema 扩展前均 unknown。
+    新传输仅按完整 connection/conversation 与 opaque ID 查找当前有效事件；未命中、
+    删除或歧义均为 unknown。旧 INTEGER codec 只在调用方明确传入 ``legacy_qq=True``
+    时启用，QQ message ID 允许负数（回执实测 -558868042）。
     """
-    # group_messages.msg_id is still the legacy QQ INTEGER column. Keep its
-    # decimal codec isolated until the schema migration adds the opaque-ID field.
-    target = parse_qq_message_id(reply_to_msg_id)
-    if target is None:
-        return ""
+    conn = None
     try:
         conn = connect_sqlite(StorageDomain.MEMORY, DB_PATH)
         cursor = conn.cursor()
-        params: list = [str(group_key), target]
-        sql = (
-            "SELECT DISTINCT user_id FROM group_messages "
-            "WHERE group_id = ? AND msg_id = ? AND user_id != ''"
-        )
-        if _has_column(cursor, "group_messages", "conversation_key"):
-            sql += " AND conversation_key = ?"
-            params.append(str(conversation_key or ""))
-            if _has_column(cursor, "group_messages", "bot_id") and bot_id:
-                sql += " AND bot_id = ?"
-                params.append(str(bot_id))
-        rows = cursor.execute(sql, params).fetchall()
-        conn.close()
+        rows = []
+        if connection_id and conversation_key:
+            has_transport_events = cursor.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' "
+                "AND name='transport_message_events'"
+            ).fetchone() is not None
+            if has_transport_events:
+                rows = cursor.execute(
+                    "SELECT DISTINCT messages.user_id "
+                    "FROM transport_message_events AS current "
+                    "JOIN group_messages AS messages "
+                    "ON messages.id = current.legacy_row_id "
+                    "WHERE current.connection_id = ? AND current.conversation_key = ? "
+                    "AND current.platform_message_id = ? "
+                    "AND current.event_seq = (SELECT MAX(latest.event_seq) "
+                    "FROM transport_message_events AS latest "
+                    "WHERE latest.connection_id = current.connection_id "
+                    "AND latest.conversation_key = current.conversation_key "
+                    "AND latest.direction = current.direction "
+                    "AND latest.platform_message_id = current.platform_message_id) "
+                    "AND current.event_kind IN ('create', 'edit') "
+                    "AND current.availability = 'available' "
+                    "AND messages.user_id != ''",
+                    (str(connection_id), str(conversation_key), str(reply_to_msg_id)),
+                ).fetchall()
+        if not rows and legacy_qq:
+            target = parse_qq_message_id(reply_to_msg_id)
+            if target is None:
+                return ""
+            params: list = [str(group_key), target]
+            sql = (
+                "SELECT DISTINCT user_id FROM group_messages "
+                "WHERE group_id = ? AND msg_id = ? AND user_id != ''"
+            )
+            if _has_column(cursor, "group_messages", "conversation_key"):
+                sql += " AND conversation_key = ?"
+                params.append(str(conversation_key or ""))
+                if _has_column(cursor, "group_messages", "bot_id") and bot_id:
+                    sql += " AND bot_id = ?"
+                    params.append(str(bot_id))
+            rows = cursor.execute(sql, params).fetchall()
     except Exception as e:
         logger.debug(f"[PreProcessors.resolve_reply_target] 解析失败（unknown）: {e}")
         return ""
+    finally:
+        if conn is not None:
+            with contextlib.suppress(Exception):
+                conn.close()
     if len(rows) != 1:
         return ""
     return str(rows[0][0] or "")
@@ -460,6 +563,7 @@ async def build_context(ctx: ChatContext) -> ChatContext:
             summary_revision,
             summary_format,
             summary_valid,
+            _max_transport_event_seq(cursor, ctx.storage_key()),
         )
         # key 含 DB_PATH：与检索缓存同款隔离（换库/测试临时库绝不互读缓存）
         cache_key = (
@@ -576,6 +680,29 @@ def _max_message_id(cursor: sqlite3.Cursor, group_id: int) -> int:
         return 0
 
 
+def _max_transport_event_seq(cursor: sqlite3.Cursor, group_id: int) -> int:
+    """Return the latest transport event order for conversations owned by this session."""
+    try:
+        exists = cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='transport_message_events'"
+        ).fetchone()
+        if exists is None:
+            return 0
+        row = cursor.execute(
+            "SELECT MAX(events.event_seq) FROM transport_message_events AS events "
+            "WHERE EXISTS (SELECT 1 FROM group_messages AS messages "
+            "WHERE messages.group_id = ? "
+            "AND messages.connection_id = events.connection_id "
+            "AND messages.conversation_key = events.conversation_key)",
+            (str(group_id),),
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+    except sqlite3.OperationalError as e:
+        log_sqlite_error("PreProcessors._max_transport_event_seq", e)
+        return 0
+
+
 def _query_tail_rows_with_relations(
     cursor: sqlite3.Cursor, group_id: int, row_cap: int
 ) -> list[tuple] | None:
@@ -588,12 +715,15 @@ def _query_tail_rows_with_relations(
     msg_id, origin_msg_id, bot_id, conversation_key)。
     """
     try:
+        effective_filter = effective_history_filter(cursor)
         return cursor.execute(
             "SELECT id, user_id, content, source_kind, timestamp, "
             "reply_to_msg_id, reply_target_user_id, mentioned_user_ids_json, "
             "logical_message_id, part_index, reply_recipient_user_id, "
             "msg_id, origin_msg_id, bot_id, conversation_key "
-            "FROM group_messages WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+            "FROM group_messages WHERE group_id = ? "
+            + effective_filter
+            + " ORDER BY id DESC LIMIT ?",
             (str(group_id), row_cap),
         ).fetchall()
     except sqlite3.OperationalError as e:
@@ -829,10 +959,11 @@ def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[
 
     返回 (id, user_id, content, source_kind, timestamp) 五元组列表。
     """
+    effective_filter = effective_history_filter(cursor)
     try:
         return cursor.execute(
             "SELECT id, user_id, content, source_kind, timestamp FROM group_messages "
-            "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+            "WHERE group_id = ? " + effective_filter + " ORDER BY id DESC LIMIT ?",
             (str(group_id), limit),
         ).fetchall()
     except sqlite3.OperationalError as e:
@@ -843,7 +974,7 @@ def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[
             (mid, uid, content, "PASSIVE", ts)
             for mid, uid, content, ts in cursor.execute(
                 "SELECT id, user_id, content, timestamp FROM group_messages "
-                "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                "WHERE group_id = ? " + effective_filter + " ORDER BY id DESC LIMIT ?",
                 (str(group_id), limit),
             ).fetchall()
         ]
@@ -854,7 +985,7 @@ def _query_tail_rows(cursor: sqlite3.Cursor, group_id: int, limit: int) -> list[
             (mid, uid, content, "PASSIVE", None)
             for mid, uid, content in cursor.execute(
                 "SELECT id, user_id, content FROM group_messages "
-                "WHERE group_id = ? ORDER BY id DESC LIMIT ?",
+                "WHERE group_id = ? " + effective_filter + " ORDER BY id DESC LIMIT ?",
                 (str(group_id), limit),
             ).fetchall()
         ]

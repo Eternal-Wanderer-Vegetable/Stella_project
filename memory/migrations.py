@@ -1050,6 +1050,19 @@ def migrate_v22(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationRes
     return result
 
 
+def migrate_v23(conn: sqlite3.Connection, ctx: MigrationContext) -> MigrationResult:
+    """v23: add append-only transport message event, part and relation tables."""
+    from memory.message_store import create_message_store_tables
+
+    create_message_store_tables(conn)
+    return MigrationResult(
+        version=23,
+        notes=[
+            "transport message event/part/relation tables created; existing group_messages rows preserved"
+        ],
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], MigrationResult]] = {
     7: migrate_v7,
     8: migrate_v8,
@@ -1067,6 +1080,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection, MigrationContext], Migration
     20: migrate_v20,
     21: migrate_v21,
     22: migrate_v22,
+    23: migrate_v23,
 }
 
 

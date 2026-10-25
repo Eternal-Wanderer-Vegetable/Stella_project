@@ -4,20 +4,20 @@
 
 <a id="source-contracts-and-release-gates-in-610"></a>
 
-Verified against the WP07 implementation contract on 2026-10-21 (`codex/cross-platform-implementation`). The current memory source contract is schema 22/API 4, the social side-table contract is schema 5, Scheduling SQL is schema 2, and Cometa Origin JSON is v3. Released assets remain subject to their own build contract; an older native wheel must not load a schema 22 database.
+P04 advanced the memory source contract to schema 23/API 4 on 2026-10-25, adding append-only transport message event, part, and relation tables. The social side-table contract is schema 5, Scheduling SQL is schema 2, and Cometa Origin JSON is v3. Released assets retain their own build contracts; an older native wheel must not load a schema 23 database. Source constants are aligned, but a deployed wheel was not verified in this stage.
 
 | Source | Current constant |
 | --- | --- |
-| [Python schema](../../memory/schema.py) | SCHEMA_VERSION = 22 |
-| [Python/native contract](../../memory_rust/backend.py) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 22 |
-| [Rust schema](../../memory_rust/native/src/schema.rs) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 22 |
+| [Python schema](../../memory/schema.py) | SCHEMA_VERSION = 23 |
+| [Python/native contract](../../memory_rust/backend.py) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 23 |
+| [Rust schema](../../memory_rust/native/src/schema.rs) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 23 |
 | [Social schema](../../memory/social_schema.py) | SOCIAL_SCHEMA_VERSION = 5 |
 | [Scheduling SQL schema](../../stella_project/plugins/bot_main/scheduling/migrations.py) | SCHEMA_VERSION = 2 |
 | [Cometa Origin JSON](../../cometa/models.py) | schema_version = 3 |
 
 The values describe source compatibility, not proof that a particular wheel was built, loaded, or accepted. Recheck constants when changing branches.
 
-- Memory schema 22/API 4 must agree in `memory/schema.py`, `memory_rust/backend.py`, and `memory_rust/native/src/schema.rs`. Validate exported constants, not just the wheel package version. WP03 adds `group_messages.platform_message_id` and `subject_key`; WP04 adds trusted connection and subject scope to sharing/address contracts. The legacy integer `msg_id` remains for the QQ compatibility path.
+- Memory schema 23/API 4 must agree in `memory/schema.py`, `memory_rust/backend.py`, and `memory_rust/native/src/schema.rs`. Validate exported constants, not just the wheel package version. v23 appends transport event/parts/relations and retains the legacy integer `msg_id` for the explicit QQ compatibility path.
 - Social schema 5 stores every opaque platform message ID returned for a physical delivery part in `social_deliveries.platform_message_ids_json`. The v4→v5 migration wraps the existing primary ID in a one-item list without reinterpreting it. WP06 retains the singular compatibility field while adding complete per-part receipts.
 - Scheduling schema 2 stores verifiable DeliveryTarget, subject, and scope on tasks/runs/audit/quota. Legacy QQ tasks become sendable only when the Bot/group destination can be bound unambiguously; other rows stay unroutable, and old quota is preserved in an isolated legacy scope. Sending resolves the persisted BotRef exactly; unknown results are not retried automatically.
 - Cometa Origin v3 stores BotRef and DeliveryTarget together and validates that they agree. v1/v2 compatibility is limited to known legacy OneBot QQ semantics; records whose target identity cannot be proven fail closed. The Cometa SQL table remains schema 1.

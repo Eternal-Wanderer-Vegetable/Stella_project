@@ -100,6 +100,12 @@ def test_rust_requires_matching_contract():
         get_backend("rust", native_loader=incompatible)
 
 
+def test_python_memory_schema_contract_matches_source_version():
+    from memory.schema import SCHEMA_VERSION
+
+    assert SCHEMA_VERSION == MEMORY_SCHEMA_VERSION == 23
+
+
 def test_rust_requires_matching_api_version():
     def incompatible():
         return _native(BACKEND_API_VERSION=BACKEND_API_VERSION - 1)

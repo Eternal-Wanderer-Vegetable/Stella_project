@@ -306,9 +306,10 @@ class TransportIngress:
         message_event = normalized.message_event
         if message_event is None:
             return IngressResult("rejected", "message_event_contract_missing")
-        if message_event.event_kind != "create":
-            return IngressResult("rejected", "event_kind_not_supported")
-        if command_matched or plugin_handled or normalized.text.strip().startswith("/"):
+        is_create = message_event.event_kind == "create"
+        if is_create and (
+            command_matched or plugin_handled or normalized.text.strip().startswith("/")
+        ):
             return IngressResult("rejected", "command_or_plugin_precedence")
 
         try:
@@ -316,9 +317,13 @@ class TransportIngress:
             effective = _policy_layers(self._settings, connection, binding)
         except (TypeError, ValueError):
             return IngressResult("rejected", "scene_policy_invalid")
-        wake_reason = _wake_reason(normalized, effective)
+        # Edits and deletes update the stored projection but never start a new turn.
+        wake_reason = _wake_reason(normalized, effective) if is_create else ""
         turn_requested = bool(
-            effective.values.get("llm_enabled") and wake_reason and normalized.text.strip()
+            is_create
+            and effective.values.get("llm_enabled")
+            and wake_reason
+            and normalized.text.strip()
         )
         capture_requested = bool(effective.values.get("capture_enabled"))
         capture_available = self._capture_gate is not None and self._capture_writer is not None

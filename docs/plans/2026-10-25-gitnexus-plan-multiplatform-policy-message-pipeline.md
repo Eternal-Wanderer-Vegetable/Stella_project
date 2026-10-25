@@ -302,7 +302,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ```json
 {
   "implementation_context": {
-    "task_summary": "G0, P00, P01, P02 and P03 implementation are complete. P02 committed as 5c7c8253a4da7c12290c23e779423af0671bb130. P03 added a dependency-injected trusted ingress around MessageEventV1, exact V2 identity registration, capture/admission, RuntimeFacade and channel/thread memory ownership. P04 is next; no platform matcher/live certification was enabled.",
+    "task_summary": "G0, P00, P01, P02 and P03 are complete and separately committed. P04 source implementation is complete: atomic transport event/parts/relations store, effective edit/delete projection, opaque reply lookup, capture-after-commit, schema 22→23 and Python/Rust source contract23 with API4 unchanged. P04 remains in_progress pending native build, candidate wheel export/parity and restore drill. Adapter matrix is 0/32 certified; no live platform/model/clean-VM acceptance. P05 is next after the P04 source commit.",
     "acceptance_criteria": [
       "Current graph/PDG and every d=1 reconciled before code edits",
       "Managed/legacy settings preserve revision/CAS/idempotency/apply recovery",
@@ -314,12 +314,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
     ],
     "evidence_provenance": {
       "schema_version": 2,
-      "head_commit": "5c7c8253a4da7c12290c23e779423af0671bb130",
+      "head_commit": "3f2316b02edf9dd4c792097bd1fb5f0046b5965f",
       "generated_plan_path": "docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md",
       "global_dirty_digest": {
         "algorithm": "sha256",
         "canonicalization": "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records",
-        "value": "e7b68a3f90bd2ec576c5c400a7255f456481ba72da72d3bdf0fe1f2094855201"
+        "value": "1916139fc3a6afe19d8412ddf79118fc6bd94dfbd9e9c7f6ae6f823dfd443018"
       },
       "cited_path_manifest": [
         {
@@ -413,9 +413,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:3691227011927e540e55cfdb6c95bd7cd67c6b55680729402131d456478ae312",
-          "index_digest": "sha256:50a996da0b12d550d68e96141582544506815fc568d3669142a0eb853f340df4",
-          "worktree_digest": "sha256:50a996da0b12d550d68e96141582544506815fc568d3669142a0eb853f340df4",
+          "head_digest": "sha256:50a996da0b12d550d68e96141582544506815fc568d3669142a0eb853f340df4",
+          "index_digest": "sha256:ba87053ff01467bc09edaeaaa254d2c69cd1b6dd05001b82a3bb4f09d58b29da",
+          "worktree_digest": "sha256:ba87053ff01467bc09edaeaaa254d2c69cd1b6dd05001b82a3bb4f09d58b29da",
           "untracked_digest": "absent"
         },
         {
@@ -565,7 +565,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
         {
           "path": "core/transport/ingress.py",
           "object_kind": {
-            "head": "absent",
+            "head": "regular",
             "index": "regular",
             "worktree": "regular",
             "untracked": "absent"
@@ -573,9 +573,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "absent",
-          "index_digest": "sha256:9a417a300fc9fec01f26c37bb1539fb6b6d1ebee85da86fab8c4416d1d112704",
-          "worktree_digest": "sha256:9a417a300fc9fec01f26c37bb1539fb6b6d1ebee85da86fab8c4416d1d112704",
+          "head_digest": "sha256:9a417a300fc9fec01f26c37bb1539fb6b6d1ebee85da86fab8c4416d1d112704",
+          "index_digest": "sha256:a1569bd127ff801dbedce21cde312b437e71c7218e2f18952e6740cca4e71aa8",
+          "worktree_digest": "sha256:a1569bd127ff801dbedce21cde312b437e71c7218e2f18952e6740cca4e71aa8",
           "untracked_digest": "absent"
         },
         {
@@ -618,10 +618,10 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:0212e61bb105620156c012d0877d9b03bff0046c5533d84d481b497eb08a12f9",
+          "head_digest": "sha256:65ee3aca863c27122acef43eef90801785aa484552ffdfb991b3fc61c8768060",
           "index_digest": "sha256:65ee3aca863c27122acef43eef90801785aa484552ffdfb991b3fc61c8768060",
           "worktree_digest": "sha256:65ee3aca863c27122acef43eef90801785aa484552ffdfb991b3fc61c8768060",
           "untracked_digest": "absent"
@@ -938,12 +938,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:5be37f9adc2eed8b78057b6820655c73fb3876fd6d944a16b95e94d375739242",
-          "index_digest": "sha256:5be37f9adc2eed8b78057b6820655c73fb3876fd6d944a16b95e94d375739242",
-          "worktree_digest": "sha256:5be37f9adc2eed8b78057b6820655c73fb3876fd6d944a16b95e94d375739242",
+          "index_digest": "sha256:22f54e8e94359e97d8bc516be276e302d58b03100c78b30b68319952dbfa1e61",
+          "worktree_digest": "sha256:22f54e8e94359e97d8bc516be276e302d58b03100c78b30b68319952dbfa1e61",
           "untracked_digest": "absent"
         },
         {
@@ -1037,9 +1037,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:4d2b7755a8450127ff9180f20d1e41eb70c4775a7efbf607ff15dfc9c1395ced",
-          "index_digest": "sha256:f5ef409cf6c0b45ad07a2b5be0830dbc466d60b90fb52c151a2cceca726b29a1",
-          "worktree_digest": "sha256:f5ef409cf6c0b45ad07a2b5be0830dbc466d60b90fb52c151a2cceca726b29a1",
+          "head_digest": "sha256:f5ef409cf6c0b45ad07a2b5be0830dbc466d60b90fb52c151a2cceca726b29a1",
+          "index_digest": "sha256:28ee350a61a348af90622cf7a9c53b54448648da5b2607983870ddeba9018c38",
+          "worktree_digest": "sha256:28ee350a61a348af90622cf7a9c53b54448648da5b2607983870ddeba9018c38",
           "untracked_digest": "absent"
         },
         {
@@ -1078,16 +1078,16 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "path": "memory/message_store.py",
           "object_kind": {
             "head": "absent",
-            "index": "absent",
-            "worktree": "absent",
+            "index": "regular",
+            "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "absent",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "absent",
-          "index_digest": "absent",
-          "worktree_digest": "absent",
+          "index_digest": "sha256:b17dccd65b04f347c729cc73c71ed26dfb6d8c486fab9403b7be16abf600db4d",
+          "worktree_digest": "sha256:b17dccd65b04f347c729cc73c71ed26dfb6d8c486fab9403b7be16abf600db4d",
           "untracked_digest": "absent"
         },
         {
@@ -1098,12 +1098,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:58beaf37743804478184e6df14ccd9da2d609695f9f406a22eeaf45764029711",
-          "index_digest": "sha256:58beaf37743804478184e6df14ccd9da2d609695f9f406a22eeaf45764029711",
-          "worktree_digest": "sha256:58beaf37743804478184e6df14ccd9da2d609695f9f406a22eeaf45764029711",
+          "index_digest": "sha256:66495314b943cfa0607c50f82f084e9db62d1758238e79711bf6fe415d7a9eb2",
+          "worktree_digest": "sha256:66495314b943cfa0607c50f82f084e9db62d1758238e79711bf6fe415d7a9eb2",
           "untracked_digest": "absent"
         },
         {
@@ -1114,10 +1114,10 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:49245fc9aa24f85da65391ed7f0eef5f51ee2ac8df6849ff75725d4388e12fbf",
+          "head_digest": "sha256:fd24a0482708c73c38a66a511cf753d10e6b75c2fa3fd24bea0770e52dc01660",
           "index_digest": "sha256:fd24a0482708c73c38a66a511cf753d10e6b75c2fa3fd24bea0770e52dc01660",
           "worktree_digest": "sha256:fd24a0482708c73c38a66a511cf753d10e6b75c2fa3fd24bea0770e52dc01660",
           "untracked_digest": "absent"
@@ -1130,12 +1130,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:2e472cfccdb74171e477a2b1e88e04a6c9070982ddd199668375cf01335081eb",
-          "index_digest": "sha256:2e472cfccdb74171e477a2b1e88e04a6c9070982ddd199668375cf01335081eb",
-          "worktree_digest": "sha256:2e472cfccdb74171e477a2b1e88e04a6c9070982ddd199668375cf01335081eb",
+          "index_digest": "sha256:573f055e11c640c28649e6b94fb0a6a7e6e8963c636196795a854dc7a6774b88",
+          "worktree_digest": "sha256:573f055e11c640c28649e6b94fb0a6a7e6e8963c636196795a854dc7a6774b88",
           "untracked_digest": "absent"
         },
         {
@@ -1146,12 +1146,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:129296e819f2b219a9f02a30fa1a068e4a8bc29335fd5f8cb65c4d1187d8d462",
-          "index_digest": "sha256:129296e819f2b219a9f02a30fa1a068e4a8bc29335fd5f8cb65c4d1187d8d462",
-          "worktree_digest": "sha256:129296e819f2b219a9f02a30fa1a068e4a8bc29335fd5f8cb65c4d1187d8d462",
+          "index_digest": "sha256:8def3a12e30fd42de70b84b056005a5ffc7e3c54824718a4873f611b48a19605",
+          "worktree_digest": "sha256:8def3a12e30fd42de70b84b056005a5ffc7e3c54824718a4873f611b48a19605",
           "untracked_digest": "absent"
         },
         {
@@ -1162,12 +1162,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:b9cede943d950d47a09d2ec9b6e6a09440c0e317c9db2290af8f1fa62e5f36df",
-          "index_digest": "sha256:b9cede943d950d47a09d2ec9b6e6a09440c0e317c9db2290af8f1fa62e5f36df",
-          "worktree_digest": "sha256:b9cede943d950d47a09d2ec9b6e6a09440c0e317c9db2290af8f1fa62e5f36df",
+          "index_digest": "sha256:93514f0c0f5daec33baf3389e3242d2e4f32885c1bf8e976ebd2c6be93a44302",
+          "worktree_digest": "sha256:93514f0c0f5daec33baf3389e3242d2e4f32885c1bf8e976ebd2c6be93a44302",
           "untracked_digest": "absent"
         },
         {
@@ -1178,12 +1178,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:876dc9d630ba5a2e85ca734758eba06df8a1749c735c105f9069bfb80ae37205",
-          "index_digest": "sha256:876dc9d630ba5a2e85ca734758eba06df8a1749c735c105f9069bfb80ae37205",
-          "worktree_digest": "sha256:876dc9d630ba5a2e85ca734758eba06df8a1749c735c105f9069bfb80ae37205",
+          "index_digest": "sha256:d533a9825bf2aeb1e2d65506977feaf6ea29f58f90dc1dc06690355f70247d2d",
+          "worktree_digest": "sha256:d533a9825bf2aeb1e2d65506977feaf6ea29f58f90dc1dc06690355f70247d2d",
           "untracked_digest": "absent"
         },
         {
@@ -1245,9 +1245,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:bf612c5828e2d2cf0ad4693116ffc30e95c67c3934f9940c7ddef1d24c39c8da",
-          "index_digest": "sha256:f911be2656995a5f4fc41c96e02dced1d5fef9ae46b90c67df06d8994ed63cd9",
-          "worktree_digest": "sha256:f911be2656995a5f4fc41c96e02dced1d5fef9ae46b90c67df06d8994ed63cd9",
+          "head_digest": "sha256:f911be2656995a5f4fc41c96e02dced1d5fef9ae46b90c67df06d8994ed63cd9",
+          "index_digest": "sha256:e9c21e0aaeab52c20fcddff898e1b086d44244adfa439ec7d955444a4ab8b787",
+          "worktree_digest": "sha256:e9c21e0aaeab52c20fcddff898e1b086d44244adfa439ec7d955444a4ab8b787",
           "untracked_digest": "absent"
         },
         {
@@ -1261,9 +1261,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:f91cd1cf4d52bdff954f3e6f124d7e7483fa834ed2d4674c49f522add755a98a",
-          "index_digest": "sha256:babefcb5a54c570852b7fa532e76946bd8e42d7cd44caab771ae931186c40654",
-          "worktree_digest": "sha256:babefcb5a54c570852b7fa532e76946bd8e42d7cd44caab771ae931186c40654",
+          "head_digest": "sha256:babefcb5a54c570852b7fa532e76946bd8e42d7cd44caab771ae931186c40654",
+          "index_digest": "sha256:7dfa85582bd6540bd09d875434dbd6a3781a955cbffa103287b1f9c4cb46d0cb",
+          "worktree_digest": "sha256:7dfa85582bd6540bd09d875434dbd6a3781a955cbffa103287b1f9c4cb46d0cb",
           "untracked_digest": "absent"
         },
         {
@@ -1370,12 +1370,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:1e330e1c6f9adfaa9dcc26974a5a139575229d4de9f1bdd7a03c2e40d7ea3818",
-          "index_digest": "sha256:1e330e1c6f9adfaa9dcc26974a5a139575229d4de9f1bdd7a03c2e40d7ea3818",
-          "worktree_digest": "sha256:1e330e1c6f9adfaa9dcc26974a5a139575229d4de9f1bdd7a03c2e40d7ea3818",
+          "index_digest": "sha256:631fd59e200701ef49a5e1bb321ea408bb361f01102dbee7a9a6cec9ba6835a2",
+          "worktree_digest": "sha256:631fd59e200701ef49a5e1bb321ea408bb361f01102dbee7a9a6cec9ba6835a2",
           "untracked_digest": "absent"
         },
         {
@@ -1541,7 +1541,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
         {
           "path": "tests/platforms/test_transport_pipeline.py",
           "object_kind": {
-            "head": "absent",
+            "head": "regular",
             "index": "regular",
             "worktree": "regular",
             "untracked": "absent"
@@ -1549,9 +1549,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "absent",
-          "index_digest": "sha256:7f4827a296f87ae5b2638d78aa7951b107cb89bd27821adbbd2c58ff794e6224",
-          "worktree_digest": "sha256:7f4827a296f87ae5b2638d78aa7951b107cb89bd27821adbbd2c58ff794e6224",
+          "head_digest": "sha256:7f4827a296f87ae5b2638d78aa7951b107cb89bd27821adbbd2c58ff794e6224",
+          "index_digest": "sha256:7976bd5c724ca47e0aa159cb7a2d3d359e96a1005d5f1368deee0873640f37fc",
+          "worktree_digest": "sha256:7976bd5c724ca47e0aa159cb7a2d3d359e96a1005d5f1368deee0873640f37fc",
           "untracked_digest": "absent"
         },
         {
@@ -1626,28 +1626,28 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:71e6b12dec1e4ea78160c998d756e22707f48635ae5d88886d5cc8ac399e9ed4",
-          "index_digest": "sha256:71e6b12dec1e4ea78160c998d756e22707f48635ae5d88886d5cc8ac399e9ed4",
-          "worktree_digest": "sha256:71e6b12dec1e4ea78160c998d756e22707f48635ae5d88886d5cc8ac399e9ed4",
+          "index_digest": "sha256:955d648e4066593f9d6e914fca523111cd2ac488f2a28bae245a9e8f324d066a",
+          "worktree_digest": "sha256:955d648e4066593f9d6e914fca523111cd2ac488f2a28bae245a9e8f324d066a",
           "untracked_digest": "absent"
         },
         {
           "path": "tests/test_message_store.py",
           "object_kind": {
             "head": "absent",
-            "index": "absent",
-            "worktree": "absent",
+            "index": "regular",
+            "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "absent",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "absent",
-          "index_digest": "absent",
-          "worktree_digest": "absent",
+          "index_digest": "sha256:d36d3c1530ef2cf59a46281189fa112c573b0ab5ae529217e88bcb6731a5e983",
+          "worktree_digest": "sha256:d36d3c1530ef2cf59a46281189fa112c573b0ab5ae529217e88bcb6731a5e983",
           "untracked_digest": "absent"
         },
         {
@@ -1658,12 +1658,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "clean",
+          "state": "staged",
           "rename_from": null,
           "rename_to": null,
           "head_digest": "sha256:7bbac13c51b7e1f73cce61e150ff6655c5c860e332ac1fb347bd09cd5846c4ad",
-          "index_digest": "sha256:7bbac13c51b7e1f73cce61e150ff6655c5c860e332ac1fb347bd09cd5846c4ad",
-          "worktree_digest": "sha256:7bbac13c51b7e1f73cce61e150ff6655c5c860e332ac1fb347bd09cd5846c4ad",
+          "index_digest": "sha256:60a64917e7948e702fc0aee3b8b6eac98f81aad63071f0c514100ddd7381472c",
+          "worktree_digest": "sha256:60a64917e7948e702fc0aee3b8b6eac98f81aad63071f0c514100ddd7381472c",
           "untracked_digest": "absent"
         },
         {
@@ -2696,7 +2696,17 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "P03"
         ],
         "objective": "atomic message extension, opaque relations, candidate schema23/native parity",
-        "status": "planned"
+        "status": "in_progress",
+        "evidence": {
+          "source_head": "3f2316b",
+          "scope": "Add atomic transport event/parts/relations persistence with effective edit/delete projection and opaque reply lookup; move capture success after commit; migrate schema 22→23 and align Python/Rust native schema guards while retaining API 4.",
+          "upstream_impact": "GitNexus 1.6.12: record_message CRITICAL (18 affected, 4 direct, lower-bound with 3 receiver-typing omissions); resolve_reply_target HIGH (3 direct); memory.schema._migrate_db HIGH (40 affected, 2 direct); _fetch_recent_tail LOW (1 direct). migrate_v22, SCHEMA_VERSION and Python/Rust MEMORY_SCHEMA_VERSION were UNKNOWN/zero graph edges.",
+          "source_audit": "MIGRATIONS.get(version) dynamically dispatches versioned migrations; _migrate_db reads/writes SCHEMA_VERSION. memory_rust.selector validates Python and exported native version constants; Rust ensure_supported strictly compares schema_meta.version. record_message has QQ and WebChat production paths plus three unresolved receiver-typed callers.",
+          "verification": "Baseline at P03 commit: 214 passed, 1 existing NoneBot warning. Final isolated command STELLA_HOME=/tmp/stella-xplat-p04-final-20261025-2 .venv/bin/python -m pytest tests/test_message_store.py tests/test_message_relations.py tests/test_migrations.py tests/test_retrieval_v2_and_schema.py tests/test_retriever.py tests/test_context_tail.py tests/test_context_projection_identity.py tests/test_memory_rust_selector.py tests/test_transport_identity.py tests/platforms/test_transport_pipeline.py tests/test_capture_ingress_gating.py tests/test_session_context_cache.py -q: 167 passed, 1 existing NoneBot warning. Changed-file Ruff passed; scripts/check_docs.py: 121 files / 1322 links / 577 anchors / 0 errors; git diff --check passed.",
+          "implementation": "Added append-only transport_message_events/parts/relations. Event and body snapshot commit atomically; create replay and trusted revisions dedupe; unversioned edits keep local identities. Latest local append order drives effective edit/delete history and tail filtering. Opaque reply lookup is exact by connection+conversation+message ID; integer fallback requires explicit legacy_qq. Delete marks source evidence unavailable and transactionally bumps owner scope versions. Schema 22→23; Python/Rust source schema 23; API 4 unchanged.",
+          "native_gap": "cargo, rustc, maturin and installed memory_rust._native are unavailable. cargo fmt/tests, built wheel API/schema constants, native parity/old-schema rejection and rollback/restore drill remain NOT RUN. This remains a P04 acceptance blocker; overall plan is NOT READY.",
+          "gitnexus_closeout": "Analyze --index-only --pdg --workers 1 with GITNEXUS_LBUG_MAX_DB_SIZE=68719476736 exited 0; status up-to-date at 3f2316b02edf9dd4c792097bd1fb5f0046b5965f, incompleteReasons empty; 116529 nodes / 293728 edges / 1198 clusters / 792 flows. Limits: 39 large files skipped; 3243/3443 candidates unranked; 928 callees skipped; 46 walks cut; 23 depth-capped traces. Repeated staged detect results varied: all 20–22 files / 43–62 symbols / 588–597 processes; compare main 46–48 / 234–266 / 603; every run CRITICAL. Latest limit=2000 run: all 22 / 62 / 597, compare 48 / 251 / 603. Generic capture/settings attribution fans into unrelated Get_config/Cometa-auth flows; retain CRITICAL, no waiver. CLI flow listing is sampled; graph extraction remains incomplete."
+        }
       },
       {
         "id": "P05",
