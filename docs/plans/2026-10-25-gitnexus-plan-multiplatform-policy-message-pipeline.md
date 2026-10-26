@@ -352,7 +352,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ```json
 {
   "implementation_context": {
-    "task_summary": "P00–P10 package work is recorded on codex/multiplatform-policy-message-pipeline. Python 3.12.14 full suite, Dashboard, docs, local Rust/native abi3 wheel/API4/schema23 parity, restore drill, and four-version message-flow checks have local evidence. P04 native acceptance was closed with follow-up commit d03d9b5; final flow refresh is message-flow.7c3a08d0677e.json (commit bc2f396). Python 3.10.21/3.11.16 latest sequential full suites remain unstable (3.10: 4243 passed/34 skipped/2 failed; 3.11: 4244/34/1); observed failures pass isolated reruns, so the matrix remains NOT GREEN. Real platform/model verification is deferred until this branch is merged to main per user instruction. Clean Windows VM/release acceptance remains open; overall plan NOT READY. Final docs check passed 121 files / 1,327 local links / 577 anchors / 0 errors.",
+    "task_summary": "P00–P10 local package work is recorded on codex/multiplatform-policy-message-pipeline. Final sequential full Python suites pass on 3.10.21, 3.11.16, and 3.12.14 (each 4,247 passed / 34 skipped / 3 warnings). Full-suite diagnosis fixed PyJWT future-iat rejection while retaining signature/exp checks, and clamps a negative compact backlog age at the compact call site. P04 isolated native ABI3 wheel/API4/schema23 parity, Rust 26 tests, fullchain, and schema22→23 restore/re-migrate drill are complete. Latest immutable flow is message-flow.f34e06379153.json (144 nodes, 142 source-resolved, 9,694 closure sites, 15,598 reachable symbols), checked on Python 3.10.21, 3.11.16, 3.12.3, and 3.12.14. Real platform/model checks are deferred until merge to main per user instruction; clean Windows VM/release acceptance remains open. Matrix 0/32 certified; overall NOT READY.",
     "acceptance_criteria": [
       "Current graph/PDG and every d=1 reconciled before code edits",
       "Managed/legacy settings preserve revision/CAS/idempotency/apply recovery",
@@ -365,12 +365,12 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
     ],
     "evidence_provenance": {
       "schema_version": 2,
-      "head_commit": "bc2f396dda85bc879a4910b3e8253ef1c164e5c1",
+      "head_commit": "dae99f966d1102cedd0401e9020645676247c445",
       "generated_plan_path": "docs/plans/2026-10-25-gitnexus-plan-multiplatform-policy-message-pipeline.md",
       "global_dirty_digest": {
         "algorithm": "sha256",
         "canonicalization": "gitnexus-evidence-provenance-v2 NUL-framed UTF-8 records",
-        "value": "6fc56fc6bb722f6f690bdf1de1898acead9874c4fa56f03ad360dbddd62a7893"
+        "value": "d91261adfa34126bbd26de7ea41c2b83fd151d482b3fced3e8b1d21f839a396d"
       },
       "cited_path_manifest": [
         {
@@ -499,6 +499,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:dabeec0ecb2bd1bbb8dae5e55cbbc6abf1f4661c618c5dbf458fd5a012783bad",
           "index_digest": "sha256:dabeec0ecb2bd1bbb8dae5e55cbbc6abf1f4661c618c5dbf458fd5a012783bad",
           "worktree_digest": "sha256:dabeec0ecb2bd1bbb8dae5e55cbbc6abf1f4661c618c5dbf458fd5a012783bad",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "core/observability/flows/message-flow.f34e06379153.json",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:6e6422cd77d663279ddbc592d433287d4c7b8eaf0601a3f6b0c95295a55caa4c",
+          "index_digest": "sha256:6e6422cd77d663279ddbc592d433287d4c7b8eaf0601a3f6b0c95295a55caa4c",
+          "worktree_digest": "sha256:6e6422cd77d663279ddbc592d433287d4c7b8eaf0601a3f6b0c95295a55caa4c",
           "untracked_digest": "absent"
         },
         {
@@ -1133,10 +1149,10 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:b5d43174c0c1262f8d0a40ecc4bd9fdda50b6684f968af1ca56f6c94f38a2fde",
+          "head_digest": "sha256:7118651c438bf639aa7f872363d899c262982e393e96ada737462cfb849bb1e4",
           "index_digest": "sha256:7118651c438bf639aa7f872363d899c262982e393e96ada737462cfb849bb1e4",
           "worktree_digest": "sha256:7118651c438bf639aa7f872363d899c262982e393e96ada737462cfb849bb1e4",
           "untracked_digest": "absent"
@@ -1149,10 +1165,10 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
             "worktree": "regular",
             "untracked": "absent"
           },
-          "state": "staged",
+          "state": "clean",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:68486a9f6000f56365670310067b9f005bc9629e837d09eef0349043fbdce180",
+          "head_digest": "sha256:cdc473d28c143225a5405389b045b4f3a5daf9a43da60a89ab88040de39ae185",
           "index_digest": "sha256:cdc473d28c143225a5405389b045b4f3a5daf9a43da60a89ab88040de39ae185",
           "worktree_digest": "sha256:cdc473d28c143225a5405389b045b4f3a5daf9a43da60a89ab88040de39ae185",
           "untracked_digest": "absent"
@@ -1296,9 +1312,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:97a4c707074035507fa2e67b5916353aa56922fc359260d9c177013ca6871547",
-          "index_digest": "sha256:212c12f2512a223b269c59b858f0b4d809cde7be5624fcb57888347c596a30a7",
-          "worktree_digest": "sha256:212c12f2512a223b269c59b858f0b4d809cde7be5624fcb57888347c596a30a7",
+          "head_digest": "sha256:212c12f2512a223b269c59b858f0b4d809cde7be5624fcb57888347c596a30a7",
+          "index_digest": "sha256:3d23e69a36757bcb0e07bc33789e31c9896c3b63d724323e151b67ef114c1a3a",
+          "worktree_digest": "sha256:3d23e69a36757bcb0e07bc33789e31c9896c3b63d724323e151b67ef114c1a3a",
           "untracked_digest": "absent"
         },
         {
@@ -1312,9 +1328,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:ad3cef845d4f18d8607f316322e9d6af4bedf74e5e287c5dd86e6b9ca8466443",
-          "index_digest": "sha256:5885f5b60dcead78930830cacb2532a20a0af9a23e2b27f6609357283c85f4ce",
-          "worktree_digest": "sha256:5885f5b60dcead78930830cacb2532a20a0af9a23e2b27f6609357283c85f4ce",
+          "head_digest": "sha256:5885f5b60dcead78930830cacb2532a20a0af9a23e2b27f6609357283c85f4ce",
+          "index_digest": "sha256:a5ba1ccaadb15539fd71877ea273872223cb39e491910397e261757089066edb",
+          "worktree_digest": "sha256:a5ba1ccaadb15539fd71877ea273872223cb39e491910397e261757089066edb",
           "untracked_digest": "absent"
         },
         {
@@ -1446,6 +1462,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "memory/session_compact.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:dd9e10d077276adc695d05fbd9d5f7e12e97c69ac71d32663e1dde9afbdadc46",
+          "index_digest": "sha256:dd9e10d077276adc695d05fbd9d5f7e12e97c69ac71d32663e1dde9afbdadc46",
+          "worktree_digest": "sha256:dd9e10d077276adc695d05fbd9d5f7e12e97c69ac71d32663e1dde9afbdadc46",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "memory_rust/backend.py",
           "object_kind": {
             "head": "regular",
@@ -1552,9 +1584,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:aaa10fce21c3703c2bd635e716f39f973a2b1c7f787bbbddcbdd6d3e020a34b6",
-          "index_digest": "sha256:0efdb3b0ee9eedc62e84c6e2cf052e60aba64647551eb0a04c95c869749b2c47",
-          "worktree_digest": "sha256:0efdb3b0ee9eedc62e84c6e2cf052e60aba64647551eb0a04c95c869749b2c47",
+          "head_digest": "sha256:0efdb3b0ee9eedc62e84c6e2cf052e60aba64647551eb0a04c95c869749b2c47",
+          "index_digest": "sha256:25b12a33d0f31db9413ec2a3bf8341e2ad1c1e32e6790e10bfd998c5c1f2728c",
+          "worktree_digest": "sha256:25b12a33d0f31db9413ec2a3bf8341e2ad1c1e32e6790e10bfd998c5c1f2728c",
           "untracked_digest": "absent"
         },
         {
@@ -1632,9 +1664,9 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "state": "staged",
           "rename_from": null,
           "rename_to": null,
-          "head_digest": "sha256:8c225b0e6100ccb5dcef099eb00b7820f65552ea0f791c0b3cc47f337cd2fe63",
-          "index_digest": "sha256:2e456d59ad79fb30c398aaeedcc3f33b54a6b8f141476014dc113c56dbd6f52a",
-          "worktree_digest": "sha256:2e456d59ad79fb30c398aaeedcc3f33b54a6b8f141476014dc113c56dbd6f52a",
+          "head_digest": "sha256:2e456d59ad79fb30c398aaeedcc3f33b54a6b8f141476014dc113c56dbd6f52a",
+          "index_digest": "sha256:c886bd8efb11a4baf80a74b4a714f183f80d17a0e8310873e411de1923c85b3e",
+          "worktree_digest": "sha256:c886bd8efb11a4baf80a74b4a714f183f80d17a0e8310873e411de1923c85b3e",
           "untracked_digest": "absent"
         },
         {
@@ -2502,6 +2534,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "tests/test_session_compact.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:e3a9ba637a8140fe3d78245a9cef9c9b8cd245faf67fd2a354d57ef098488e2e",
+          "index_digest": "sha256:e3a9ba637a8140fe3d78245a9cef9c9b8cd245faf67fd2a354d57ef098488e2e",
+          "worktree_digest": "sha256:e3a9ba637a8140fe3d78245a9cef9c9b8cd245faf67fd2a354d57ef098488e2e",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "tests/test_transport_background_delivery.py",
           "object_kind": {
             "head": "regular",
@@ -2678,6 +2726,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "untracked_digest": "absent"
         },
         {
+          "path": "tests/webui/test_webui_auth.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:7d28a1ad8c4a0ec2e405ff8225c3a5c14206d588ca09c51010bd0891e178e591",
+          "index_digest": "sha256:7d28a1ad8c4a0ec2e405ff8225c3a5c14206d588ca09c51010bd0891e178e591",
+          "worktree_digest": "sha256:7d28a1ad8c4a0ec2e405ff8225c3a5c14206d588ca09c51010bd0891e178e591",
+          "untracked_digest": "absent"
+        },
+        {
           "path": "tests/webui/test_webui_chat.py",
           "object_kind": {
             "head": "regular",
@@ -2755,6 +2819,22 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "head_digest": "sha256:a8257f84d51018b1e70efc414b5bc4b11fd3aa292676279f35daeb30bac9a64c",
           "index_digest": "sha256:a8257f84d51018b1e70efc414b5bc4b11fd3aa292676279f35daeb30bac9a64c",
           "worktree_digest": "sha256:a8257f84d51018b1e70efc414b5bc4b11fd3aa292676279f35daeb30bac9a64c",
+          "untracked_digest": "absent"
+        },
+        {
+          "path": "webui/security.py",
+          "object_kind": {
+            "head": "regular",
+            "index": "regular",
+            "worktree": "regular",
+            "untracked": "absent"
+          },
+          "state": "clean",
+          "rename_from": null,
+          "rename_to": null,
+          "head_digest": "sha256:686fc5fa4a34787c85b21328d99ae841ab0d5d0b3ab6acac9b385a10f5e8b3d6",
+          "index_digest": "sha256:686fc5fa4a34787c85b21328d99ae841ab0d5d0b3ab6acac9b385a10f5e8b3d6",
+          "worktree_digest": "sha256:686fc5fa4a34787c85b21328d99ae841ab0d5d0b3ab6acac9b385a10f5e8b3d6",
           "untracked_digest": "absent"
         },
         {
@@ -3867,10 +3947,13 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
           "cefec48 fix(observability): stabilize flow closure across Python versions",
           "47548f0 chore(observability): publish stable P10 message flow",
           "d03d9b5 fix(memory): align native promotion evidence contract",
-          "bc2f396 chore(observability): refresh P10 flow after native follow-up"
+          "bc2f396 chore(observability): refresh P10 flow after native follow-up",
+          "6023108 fix(auth): tolerate future iat on signed webui tokens",
+          "4cdca91 fix(memory): clamp future timestamps during compact admission",
+          "dae99f9 chore(observability): refresh flow after local auth and compact fixes"
         ],
         "report": "docs/reports/2026-10-26-xplat-p10-validation.md",
-        "verification": "Locked Python 3.12.14 full suite 4245 passed / 34 skipped / 3 existing warnings; Ruff, Dashboard 110 tests/build/typecheck/sync, observability 139 tests passed. P04 isolated Linux abi3 wheel exports API4/schema23 and fullchain PASS; Rust 26 tests; restore drill 3 integrity checks PASS. Final message-flow 7c3a08d0677e checks under Python 3.10.21/3.11.16/3.12.10/3.12.14. Latest sequential Python 3.10 full suite 4243/34/2 failed (stale revision 401 vs 200; participation stream had no data), each isolated rerun passed. Latest Python 3.11 full suite 4244/34/1 failed (empty objective 401 vs 422), isolated rerun passed. Docs: 121 files/1327 local links/577 migration anchors/0 errors.",
+        "verification": "Final isolated sequential full suites: Python 3.10.21 4,247 passed / 34 skipped / 3 warnings (307.58s); Python 3.11.16 4,247/34/3 (294.21s); Python 3.12.14 4,247/34/3 (295.67s). Compact tests 43 passed on each version; WebUI tests 149 and auth tests 11 passed on Python 3.10/3.11. Ruff check . and changed-file py_compile passed. Flow f34e06379153 checks under Python 3.10.21/3.11.16/3.12.3/3.12.14. Dashboard (110 tests/build/typecheck/sync), observability (139 tests), P04 isolated native wheel/API4/schema23 parity, Rust 26 tests/fullchain, and schema22→23 restore/re-migrate passed. Real platform/model checks are deferred until merge to main; clean Windows VM/release acceptance is open, so P10 remains blocked and overall NOT READY. See docs/reports/2026-10-26-xplat-p10-validation.md. Final docs gate: 121 files / 1,327 local links / 577 migration anchors / 0 errors.",
         "gitnexus_closeout": "Pre-edit create_corona_app MEDIUM (18 impacted/9 direct/1 main process); record_message UNKNOWN/0 plus three omitted receiver-typed calls, supplemented with source audit (only test assertion edited); platform_conversation_settings_put UNKNOWN/0 but source-confirmed FastAPI route and untouched; generator file LOW (4 direct imports/3 modules). Source batches after edits: Corona/G05 HIGH (3 files/4 symbols/6 processes); generator CRITICAL (2 files/1 symbol/753 processes, broad generic counts attribution, retained without waiver); final large flow artifact changed one file with no indexed symbol overlap, so its graph coverage is unresolved. Cumulative compare-main remains CRITICAL. Current index extraction omits 40 large files, leaves 3324/3524 candidates unranked, drops 931 callees, cuts 46 walks, depth-caps 23 traces and leaves 364 cross-language property sites unresolved. Final staged state-file checks: scope all 5 files/14 symbols/0 processes/LOW; repeated compare main 90 files/314–444 symbols/777–797 processes/CRITICAL cumulative, no partial/truncated marker. Compare display is capped (variable capped symbol listing and latest display omitted 787 flows) and generic user_id attribution remains noisy; retain CRITICAL without waiver. Native follow-up pre-edit `verify_candidate_evidence` upstream impact CRITICAL (11 nodes, about 183 process attributions / 20 modules), retained without waiver; production process_new_candidates path was not edited. Native source precommit detect all 4 files/12 symbols/770 process attributions/CRITICAL; compare main 91/319/789/CRITICAL. Flow refresh precommit detect all 7 files/8 symbols/0 processes/LOW; compare main 92/324/797/CRITICAL. Outputs had no partial/truncated markers; flow listing was capped and broad db_path/user_id attribution remains.",
         "limitations": "Python 3.10/3.11 full matrix remains not green due to non-reproducible full-suite WebUI/auth/trace failures; isolated passes do not close it. Local native wheel/API/schema parity and restore drill are complete on Linux temporary data, but Windows packaging/clean VM remain unverified. Real platform/model checks are deferred until this branch is merged to main. Adapter matrix remains 0/32 certified; overall NOT READY. No production config/database/service was accessed."
       }
@@ -3936,7 +4019,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 ### 未解决门禁与明确延期
 
 1. G0图恢复和d=1/PDG已在实施入口完成；每个新源包仍须重跑upstream impact。索引有39个大文件跳过及入口/边/路径预算上限；UNKNOWN和聚合CRITICAL保持未解决证据状态，不视为LOW。
-2. P06-T/P06-D/P06-Q 隔离 fixtures、Ruff、py_compile、导入边界与文档门禁已运行；P10 重新生成的 immutable flow 已通过 Python 3.10.21、3.11.16、3.12.10 和 3.12.14 校验。Python 3.12、Dashboard、文档、本地 native wheel/API-schema parity 与 schema22→23 恢复演练有本地证据；Python 3.10/3.11 全量矩阵仍未通过，clean Windows VM/release 验收未完成。真实平台/模型验证按用户要求留待本分支合并至 main 后执行；整体仍 NOT READY。
+2. P06-T/P06-D/P06-Q fixture、Ruff、py_compile、导入边界与文档门禁已有证据；P10 本机 Python 3.10.21/3.11.16/3.12.14 全量套件现均通过（每版 4,247 passed / 34 skipped / 3 warnings）。P04 native wheel/API-schema parity 与 schema22→23 恢复演练完成；真实平台/模型验收按用户要求待本分支合并至 main 后执行，clean Windows VM/release 验收仍未完成。总体仍 NOT READY。
 3. 真实 Telegram/Discord/QQ/WebChat 与模型验收按用户要求待本分支合并至 main 后执行；不读取生产配置补齐。各平台 live、权限和发送时窗仍须另行验收，无 live 就不认证。
 4. 延期：跨平台账号绑定/转发、群成员独立模型分支、所有AstrBot插件仿真、原件媒体归档、全库历史回填与自动重写长期记忆、其余适配器的一次性认证、Corona默认模式切换。它们不是P00–P10隐含工作。
 5. 上一轮dirty研究/state已定向stash并在外部备份；两份旧研究原字节恢复，状态按最新远端合并，stash留作恢复点。G0前不删除其他stash或无关分支。
@@ -3950,7 +4033,7 @@ G0 当前 graph impact：AdmissionPolicy.decide=CRITICAL、record_message=CRITIC
 - [x] P07 scene/policy/history APIs 与 Dashboard revisions 已独立提交；定向检查通过。
 - [x] P08 legacy QQ/WebChat shared ingress 独立提交，focused checks 完成。
 - [x] P09 后台投递路由、quiet hours 与策略配额已独立提交 `f8bdc71`；fixture 与定向检查完成。
-- [ ] P10 Python 3.12、Dashboard、文档与最终 immutable flow 已通过；Python 3.10/3.11 最新顺序全量仍分别有 2 项和 1 项 WebUI/auth/trace 失败，单项复跑通过但根因未解。P04 本地 native wheel/API parity 与恢复演练已完成；真实平台/模型验收待合并至 main 后执行，clean Windows VM 与发布门禁仍未完成。详见[验证报告](../reports/2026-10-26-xplat-p10-validation.md)，P10保持blocked。
+- [x] P10 本机门禁已完成：Python 3.10.21 / 3.11.16 / 3.12.14 全量套件各 4,247 passed / 34 skipped / 3 warnings；本地 Dashboard、文档、native/API parity、恢复演练与 immutable flow 均有证据。真实平台/模型检查待本分支合并至 main 后执行，clean Windows VM 与发布门禁仍未完成；P10 保持 blocked、整体 NOT READY。详见[验证报告](../reports/2026-10-26-xplat-p10-validation.md)。
 - [x] 生成计划仍由原版helper snapshot与safe write维护，禁止直接写目标计划路径。
 
 ### 整体实施产品验收（尚未全部完成）
