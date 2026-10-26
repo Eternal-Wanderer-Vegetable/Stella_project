@@ -204,7 +204,15 @@ def decode_token(token: str) -> str:
     record = load_record()
     secret = record["jwt_secret"] if record else _ephemeral_secret()
     try:
-        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        # Tokens are signed by this service; expiration remains the validity
+        # bound. Treat iat as signed metadata so a wall-clock step between
+        # issuance and verification threads does not invalidate a fresh token.
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            options={"verify_iat": False},
+        )
     except jwt.ExpiredSignatureError as exc:
         raise ApiError("登录已过期，请重新登录", status_code=401) from exc
     except jwt.InvalidTokenError as exc:
