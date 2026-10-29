@@ -12,6 +12,7 @@
 | 记忆被误删 | `logs/memory_compressor_log.md` + `compressor_stats` 表 |
 | 检索选错记忆 | `memory_traces` 表（候选 / 过滤 / 最终 / 拒绝），或 `python -m memory.benchmark --verbose` |
 | 主动发言异常 | 日志里的 `🎯 [主动@]` / `🔇 未回应`；`proactive_state` 表 |
+| 核对 Stella 是否已向平台提交发送 | 查 `logs/stella.jsonl` 中的 `[OutboundDelivery]` 摘要。`status=accepted` 表示适配器接受发送；日志不含正文、群号、目标 ID 或消息 ID。`partial`、`failed`、`unknown` 分别表示部分发送、失败或回执不确定，可结合 `segment_kinds`、`part_count` 和 `error_category` 排查 |
 | 链路掉线 / 收不到消息 | 日志里的 `[LinkMonitor]` 告警（含排查步骤）；NapCatQQ Desktop 日志确认账号是否掉线 |
 | 整合输出被截断 | 日志里的 `finish_reason=length` 告警 |
 | @ 对话完全学不到东西 | `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`；`AT_MENTION` 为 0 说明落库监听器被 `block=True` 拦截（priority 必须为 0） |

@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol
 from urllib.parse import parse_qsl, urlsplit
+
+from loguru import logger
 
 if TYPE_CHECKING:
     from gravitas.contracts import Deadline
@@ -333,6 +336,41 @@ def _opaque_ids(values: Any) -> tuple[str, ...]:
     return tuple(result)
 
 
+def _outbound_shape(message: OutboundMessage) -> str:
+    counts: dict[str, int] = {}
+    for segment in message.segments:
+        kind = segment.kind.value
+        counts[kind] = counts.get(kind, 0) + 1
+    return ",".join(f"{kind}:{count}" for kind, count in counts.items()) or "none"
+
+
+def _outbound_error_category(error_code: str) -> str:
+    code = str(error_code or "").casefold()
+    if not code:
+        return "none"
+    if "timeout" in code or "deadline" in code:
+        return "timeout"
+    if "expired" in code:
+        return "expired"
+    if "rate" in code or "429" in code:
+        return "rate_limited"
+    if "binding" in code or "identity" in code:
+        return "binding"
+    if "capability" in code or "scope" in code:
+        return "unsupported"
+    return "other"
+
+
+def _outbound_log_label(value: str) -> str:
+    label = str(value or "")
+    if not label or len(label) > 48 or any(
+        not (char.isascii() and (char.isalnum() or char in "_.-"))
+        for char in label
+    ):
+        return "other"
+    return label
+
+
 class MessageExporter(Protocol):
     async def send(
         self,
@@ -510,6 +548,56 @@ class OutboundService:
             )
 
     async def send(
+        self,
+        target: DeliveryTarget,
+        message: OutboundMessage,
+        *,
+        bot_handle: Any = None,
+        instance_capabilities: AdapterCapabilities | None = None,
+        deadline: "Deadline | None" = None,
+    ) -> DeliveryResult:
+        started = time.perf_counter()
+        try:
+            result = await self._send(
+                target,
+                message,
+                bot_handle=bot_handle,
+                instance_capabilities=instance_capabilities,
+                deadline=deadline,
+            )
+        except Exception as exc:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            logger.warning(
+                "[OutboundDelivery] status=raised "
+                f"adapter={_outbound_log_label(target.bot.adapter)} "
+                f"scene={_outbound_log_label(target.scene.kind)} "
+                f"segment_kinds={_outbound_shape(message)} "
+                f"error_category=exception exception_type={type(exc).__name__} "
+                f"elapsed_ms={elapsed_ms:.1f}"
+            )
+            raise
+
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        part_counts = {
+            status: sum(part.status is status for part in result.parts)
+            for status in DeliveryStatus
+        }
+        fields = (
+            f"adapter={_outbound_log_label(target.bot.adapter)} "
+            f"scene={_outbound_log_label(target.scene.kind)} "
+            f"segment_kinds={_outbound_shape(message)} part_count={len(result.parts)} "
+            f"accepted_parts={part_counts[DeliveryStatus.ACCEPTED]} "
+            f"failed_parts={part_counts[DeliveryStatus.FAILED]} "
+            f"unknown_parts={part_counts[DeliveryStatus.UNKNOWN]} "
+            f"receipt_count={len(result.message_ids)} "
+            f"error_category={_outbound_error_category(result.error_code)} "
+            f"elapsed_ms={elapsed_ms:.1f}"
+        )
+        log = logger.info if result.status is DeliveryStatus.ACCEPTED else logger.warning
+        log(f"[OutboundDelivery] status={result.status.value} {fields}")
+        return result
+
+    async def _send(
         self,
         target: DeliveryTarget,
         message: OutboundMessage,
