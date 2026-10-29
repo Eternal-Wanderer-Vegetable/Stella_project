@@ -12,6 +12,7 @@
 | Memory deleted incorrectly | `logs/memory_compressor_log.md` + `compressor_stats` table |
 | Wrong memory selected during retrieval | `memory_traces` table (candidate / filtered / final / rejected), or `python -m memory.benchmark --verbose` |
 | Abnormal proactive speech | `🎯 [proactive@]` / `🔇 no response` in the logs; `proactive_state` table |
+| Check whether Stella submitted a message to the platform | Look for the `[OutboundDelivery]` summary in `logs/stella.jsonl`. `status=accepted` means the adapter accepted the send; the log omits message content, group/target IDs, and message IDs. `partial`, `failed`, and `unknown` mean partial delivery, failure, or an uncertain receipt; use `segment_kinds`, `part_count`, and `error_category` to investigate |
 | Link disconnected / messages not received | `[LinkMonitor]` alerts in the logs (including troubleshooting steps); NapCatQQ Desktop logs to confirm whether the account disconnected |
 | Consolidation output truncated | `finish_reason=length` alert in the logs |
 | @ conversations learn nothing at all | `SELECT source_kind, COUNT(*) FROM group_messages GROUP BY source_kind`; `AT_MENTION` at 0 means the persistence listener was intercepted by `block=True` (`priority` must be 0) |

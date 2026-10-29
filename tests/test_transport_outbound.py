@@ -176,6 +176,84 @@ async def test_send_splits_to_capability_and_stops_after_unknown_without_retry()
 
 
 @pytest.mark.asyncio
+async def test_send_logs_payload_free_acceptance_summary(monkeypatch):
+    from core.transport import outbound as outbound_module
+
+    records = []
+
+    class _CaptureLogger:
+        def info(self, message):
+            records.append(("info", message))
+
+        def warning(self, message):
+            records.append(("warning", message))
+
+    monkeypatch.setattr(outbound_module, "logger", _CaptureLogger())
+    exporter = _FakeExporter((AdapterSendResult(
+        DeliveryStatus.ACCEPTED, ("private-receipt-id",)
+    ),))
+    service = _service(
+        exporter,
+        AdapterCapabilities("fake", "test", group=True),
+    )
+
+    result = await service.send(
+        _target(), OutboundMessage.text("private-message-body"), bot_handle=_Bot()
+    )
+
+    assert result.status is DeliveryStatus.ACCEPTED
+    assert len(records) == 1
+    level, record = records[0]
+    assert level == "info"
+    assert "[OutboundDelivery] status=accepted" in record
+    assert "adapter=fake scene=group" in record
+    assert "segment_kinds=text:1" in record
+    assert "part_count=1 accepted_parts=1" in record
+    assert "receipt_count=1 error_category=none" in record
+    assert "private-message-body" not in record
+    assert "private-receipt-id" not in record
+    assert "room:007" not in record
+    assert "bot-1" not in record
+
+
+@pytest.mark.asyncio
+async def test_send_logs_unknown_result_as_warning_without_adapter_error_text(monkeypatch):
+    from core.transport import outbound as outbound_module
+
+    records = []
+
+    class _CaptureLogger:
+        def info(self, message):
+            records.append(("info", message))
+
+        def warning(self, message):
+            records.append(("warning", message))
+
+    monkeypatch.setattr(outbound_module, "logger", _CaptureLogger())
+    exporter = _FakeExporter((AdapterSendResult(
+        DeliveryStatus.UNKNOWN,
+        error_code="send_timeout: private-provider-response",
+    ),))
+    service = _service(
+        exporter,
+        AdapterCapabilities("fake", "test", group=True),
+    )
+
+    result = await service.send(
+        _target(), OutboundMessage.text("private-message-body"), bot_handle=_Bot()
+    )
+
+    assert result.status is DeliveryStatus.UNKNOWN
+    assert len(records) == 1
+    level, record = records[0]
+    assert level == "warning"
+    assert "[OutboundDelivery] status=unknown" in record
+    assert "error_category=timeout" in record
+    assert "private-provider-response" not in record
+    assert "private-message-body" not in record
+
+
+@pytest.mark.asyncio
 async def test_send_deadline_expires_before_first_physical_part():
     from gravitas.clock import system_control_clock
     from gravitas.contracts import Deadline
