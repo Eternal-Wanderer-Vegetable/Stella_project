@@ -1,4 +1,11 @@
-## Current Session — XPLAT P10 local closeout (2026-10-26)
+## Current Handoff — outbound logging and PR #124 review (2026-10-29)
+
+- Status: outbound logging is committed as `838819c` on `codex/outbound-send-logging`; PR #124 is merged at `871671c3a4c636aac9e310029d969bb1f6817c02`. Keep `XPLAT-PIPELINE-IMPLEMENTATION` blocked / NOT READY.
+- Files/evidence: `core/transport/outbound.py`, `tests/test_transport_outbound.py`, and bilingual troubleshooting docs are in commit `838819c`. Targeted outbound tests: 14 passed; repository Ruff, docs (121 / 1,327 / 577 / 0), and message-flow check passed. Available Windows full suite: 4,245 passed / 23 skipped / 5 failed; four failures are existing Starlette `TestClient(client=...)` compatibility issues and one is Windows symlink behavior, outside this patch.
+- PR #124 review: GitHub PR-head Python CI, Dashboard CI, and Docker Publish all succeeded. Source audit found no production call to `TransportIngress` and no production call to `register_telegram_transport`, `register_discord_transport`, or `register_qq_transport`; these appear in fixtures/definitions only. `STELLA_TRANSPORT_SETTINGS_JSON` alone therefore cannot activate the new adapter ingress. P08's existing QQ/WebChat bridge is called by the legacy handlers. The PR's own acceptance report still records 0/32 adapters certified and defers live platform/model, clean Windows VM, and release acceptance.
+- Next: continue the active read-only Windows runtime watch. To satisfy the full multi-platform design, add an explicit production connection-owner/bootstrap path for the new adapters, then validate it with fixtures and authorized live platform/model and clean-VM acceptance. Preserve untested matrix rows as `not_certified`.
+
+## Previous Session — XPLAT P10 local closeout (2026-10-26)
 
 - Status: locally available P10 work is complete, but `XPLAT-PIPELINE-IMPLEMENTATION` stays `blocked` / NOT READY pending real platform/model validation after merge to `main`, clean Windows VM/installer, and release acceptance. The official adapter matrix remains 0/32 certified. No production data/config/service or live platform was accessed.
 - Phase commits: `6023108` fixes signed WebUI token handling when `iat` is a few seconds ahead; `4cdca91` clamps negative compact backlog age at the call site; `dae99f9` publishes `message-flow.f34e06379153.json` (144 nodes / 142 source-resolved / 9,694 closure sites / 15,598 reachable symbols).
