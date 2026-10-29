@@ -1178,6 +1178,16 @@ STELLA_ADAPTER_MODULES=nonebot.adapters.onebot.v11
 
 只有 OneBot V11 有本项目当前使用的事件心跳与 `get_status()` 探活。状态接口会为其他适配器保留连接状态，并把健康度标为未知；不会将其显示成断线。多条 OneBot V11 连接分别监测，整体健康状态要求每条连接都健康。
 
+## 会话策略与多平台连接设置
+
+`STELLA_TRANSPORT_SETTINGS_JSON` 是可选的 version 1 JSON bundle，空值等同于空设置。配置上限为 256 KiB，包含连接、策略档案、场景绑定和默认策略。未知字段、重复 JSON 键、重复连接槽和悬空绑定会被拒绝；未显式设置 `enabled` 的连接保持关闭。
+
+通过已认证的 `GET/PUT /api/v1/platform/conversation-settings` 读取与保存。PUT 必须带 GET 返回的 `If-Match`：托管模式用 desired revision 做 CAS，并可用 `Idempotency-Key` 安全重试；旧版模式用整个 `.env` 内容摘要做 CAS，保存后需按旧版部署方式重启。旧版响应分别显示基础 `.env` 设置、由外部环境或 `.env.dev/.env.prod` 覆盖后的有效设置/来源，以及进程当前值。托管模式 PUT 只更新 desired revision，不会自行 Apply；沿用现有 `/api/v1/system/apply` 操作应用一次，并可从响应查看 desired/applied 修订及配置来源。JSON 无效返回 400，缺少 `If-Match` 返回 428，修订冲突返回 409。
+
+bundle 中只写凭据引用，例如 `env:TELEGRAM_BOT_TOKEN` 或受管理的 UUID 引用；不得写入 token、密码或 API key 原文。此阶段只提供配置校验、保存和回读，尚未把新 bundle 接入运行时消息入口或连接 adapter；新平台仍不能据此宣称已启用或通过认证。
+
+`STELLA_SHARED_INGRESS_ENABLED` 默认 `true`，让现有 QQ 与 WebChat 入口共用策略判定、采集门、消息写入和 RuntimeFacade 协调边界，同时保留各自的事件解析、命令/插件优先级、会话关系与投递逻辑。若回归发现问题，可设为 `false` 并重启 Bot/WebUI 进程，改走协调器保留的直接回退回调；单个事件只选择其中一路。
+
 ## OneBot 连接
 
 Bot 通过 OneBot V11 WebSocket 与 NapCat 通信。**NapCat 侧必须先登录**：用

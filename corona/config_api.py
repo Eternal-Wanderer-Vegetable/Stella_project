@@ -31,7 +31,9 @@ from stella_bootstrap.adapter_names import (
     parse_adapter_modules,
 )
 from stella_bootstrap.adapter_policy import unavailable_adapter_reasons
+from stella_bootstrap.transport_settings import TransportSettingsError
 from webui.responses import ApiError, ok
+from webui.services import conversation_settings as conversation_settings_service
 from webui.services import platformcfg as platformcfg_service
 
 router = APIRouter(
@@ -53,12 +55,23 @@ _ENDPOINT_FIELDS = ("BASE_URL", "API_KEY", "MODEL", "KIND", "CONCURRENCY", "TIME
 @router.get("/api/v1/config/schema")
 async def config_schema(request: Request) -> Any:
     store = _store(request)
-    return ok({"version": 1, "fields": store.schema()})
+    fields = [
+        field
+        for field in store.schema()
+        if field["key"] != conversation_settings_service.SETTINGS_KEY
+    ]
+    return ok({"version": 1, "fields": fields})
 
 
 @router.get("/api/v1/config")
 async def config_current(request: Request) -> Any:
-    return ok(_store(request).public_config())
+    data = _store(request).public_config()
+    data["fields"] = [
+        field
+        for field in data["fields"]
+        if field["key"] != conversation_settings_service.SETTINGS_KEY
+    ]
+    return ok(data)
 
 
 @router.put("/api/v1/config")
@@ -67,6 +80,11 @@ async def config_update(
     payload: dict[str, Any],
     auth: Annotated[AuthContext, Depends(require_auth)],
 ) -> Any:
+    if conversation_settings_service.SETTINGS_KEY in payload:
+        raise ApiError(
+            "use /api/v1/platform/conversation-settings for this field",
+            data={"code": "dedicated_settings_route_required"},
+        )
     result = _save(
         request,
         payload,
@@ -435,6 +453,76 @@ async def platform_adapters_put(
     )
     result["modules"] = list(parsed)
     result["restart_required"] = True
+    return ok(result)
+
+
+@router.get("/api/v1/platform/conversation-settings")
+async def platform_conversation_settings(
+    request: Request,
+    response: Response,
+    auth: Annotated[AuthContext, Depends(require_auth)],
+) -> Any:
+    del auth  # The router dependency enforces access; no actor is needed for a read.
+    store = _store(request)
+    desired, _desired_path = store.current_revision("desired")
+    applied, _applied_path = store.current_revision("applied")
+    data = conversation_settings_service.managed_response_data(
+        desired.values.get(conversation_settings_service.SETTINGS_KEY),
+        applied_raw=applied.values.get(conversation_settings_service.SETTINGS_KEY),
+        desired_revision=desired.revision_id,
+        applied_revision=applied.revision_id,
+        source=desired.sources.get(conversation_settings_service.SETTINGS_KEY, "default"),
+        applied_source=applied.sources.get(
+            conversation_settings_service.SETTINGS_KEY, "default"
+        ),
+    )
+    response.headers["ETag"] = f'"{desired.revision_id}"'
+    return ok(data)
+
+
+@router.put("/api/v1/platform/conversation-settings")
+async def platform_conversation_settings_put(
+    request: Request,
+    response: Response,
+    auth: Annotated[AuthContext, Depends(require_auth)],
+) -> Any:
+    raw_if_match = request.headers.get("if-match")
+    if raw_if_match is None:
+        raise ApiError(
+            "conversation settings require If-Match",
+            status_code=428,
+            data={"code": "if_match_required"},
+        )
+    try:
+        parsed = conversation_settings_service.parse_request_body(await request.body())
+    except TransportSettingsError as exc:
+        raise ApiError(
+            str(exc), data={"code": "transport_settings_invalid"}
+        ) from exc
+    conversation_settings_service.validate_memory_space_bindings(parsed)
+
+    key = conversation_settings_service.SETTINGS_KEY
+    result = _save(
+        request,
+        {key: conversation_settings_service.stored_json(parsed)},
+        expected_revision=_if_match(raw_if_match),
+        idempotency_key=request.headers.get("idempotency-key"),
+        auth=auth,
+        quote_keys={key},
+    )
+    desired, _desired_path = _store(request).get_revision(result["desired_revision"])
+    applied, _applied_path = _store(request).current_revision("applied")
+    result.update(
+        conversation_settings_service.managed_response_data(
+            desired.values.get(key),
+            applied_raw=applied.values.get(key),
+            desired_revision=desired.revision_id,
+            applied_revision=applied.revision_id,
+            source=desired.sources.get(key, "default"),
+            applied_source=applied.sources.get(key, "default"),
+        )
+    )
+    response.headers["ETag"] = f'"{desired.revision_id}"'
     return ok(result)
 
 

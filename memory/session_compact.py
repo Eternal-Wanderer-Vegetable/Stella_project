@@ -856,6 +856,11 @@ async def compact_once(group_id: int, tail_start_id: int) -> bool:
                 if message.timestamp
             ]
             oldest_age = seconds_since(min(timestamps)) if timestamps else None
+            if oldest_age is not None:
+                # A wall-clock correction can make a fresh row briefly appear
+                # to be in the future. Backlog age is a duration, so clamp it
+                # before passing it to the pressure policy.
+                oldest_age = max(0.0, oldest_age)
             resource_id = role_call_context(
                 ROLE_COMPACT,
                 work_class=WorkClass.BACKGROUND,

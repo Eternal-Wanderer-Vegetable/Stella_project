@@ -7,6 +7,7 @@ from core.transport.capabilities import (
     ONEBOT_V11_CAPABILITIES,
     AdapterCapabilities,
     CapabilityProvider,
+    RateLimitBucket,
     StaticCapabilityProvider,
 )
 from core.transport.keys import (
@@ -43,6 +44,7 @@ from core.transport.outbound import (
     get_outbound_service,
     split_outbound_message,
 )
+from core.transport.scheduler import OutboundSendScheduler
 
 __all__ = [
     "ONEBOT_V11_CAPABILITIES",
@@ -66,7 +68,9 @@ __all__ = [
     "OutboundMessage",
     "OutboundPartResult",
     "OutboundSegment",
+    "OutboundSendScheduler",
     "OutboundService",
+    "RateLimitBucket",
     "SceneRef",
     "StaticCapabilityProvider",
     "TargetCodec",

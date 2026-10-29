@@ -10,7 +10,7 @@ nonebot-adapter-onebot>=2.4.6
 nonebot-adapter-ding
 nonebot-adapter-feishu
 nonebot-adapter-telegram
-nonebot-adapter-qq
+nonebot-adapter-qq==1.7.3
 nonebot-adapter-kaiheila
 nonebot-adapter-mirai
 nonebot-adapter-console

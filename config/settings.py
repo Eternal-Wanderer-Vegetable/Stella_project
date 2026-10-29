@@ -100,6 +100,14 @@ _HOME = (
 STELLA_HOME = _HOME.path
 STELLA_HOME_SOURCE = _HOME.source
 
+# Snapshot the legacy process override before dotenv loads. The conversation-settings
+# control API uses it to explain which source currently wins over the base .env file.
+_LEGACY_TRANSPORT_SETTINGS_EXTERNAL = (
+    os.environ.get("STELLA_TRANSPORT_SETTINGS_JSON")
+    if _MANAGED_REVISION is None
+    else None
+)
+
 if _MANAGED_REVISION is None:
     # Legacy mode retains dotenv's existing process-environment behavior.
     load_dotenv(STELLA_HOME / ".env", override=False)
@@ -955,6 +963,13 @@ SEND_INTERVAL = _env_float("SEND_INTERVAL", 0.8)
 STELLA_ADAPTER_MODULES = _env(
     "STELLA_ADAPTER_MODULES", "nonebot.adapters.onebot.v11"
 )
+
+# 由 platform/conversation-settings 专用 CAS API 管理，不放入通用配置表单。
+# 托管模式从不可变 revision 读取，旧版从 STELLA_HOME/.env 读取。
+STELLA_TRANSPORT_SETTINGS_JSON = _env("STELLA_TRANSPORT_SETTINGS_JSON", "")
+# 共享兼容入站协调器的总开关；关闭后 QQ/WebChat 回到各自原有的直接调用路径。
+# 改动后需重启 Bot/WebUI 进程；同一事件不会同时执行共享与直接路径。
+STELLA_SHARED_INGRESS_ENABLED = _env_bool("STELLA_SHARED_INGRESS_ENABLED", "true")
 
 # ---------- OneBot 链路监测 ----------
 # 只监测、不重启。Bot 不再管理 NapCat 进程——QQ 的登录风控会把自动登录退化为

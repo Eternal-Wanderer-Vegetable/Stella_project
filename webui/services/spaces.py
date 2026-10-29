@@ -176,6 +176,30 @@ def delete_space(name: str) -> None:
     data = _load_toml(name)
     if data.get("qq_groups"):
         raise ApiError("空间仍绑定群组，请先解绑", status_code=409)
+    raw_transport_settings = getattr(settings, "STELLA_TRANSPORT_SETTINGS_JSON", None)
+    if raw_transport_settings:
+        from stella_bootstrap.transport_settings import (
+            TransportSettingsError,
+            parse_transport_settings_json,
+        )
+
+        try:
+            parsed = parse_transport_settings_json(str(raw_transport_settings))
+        except TransportSettingsError as exc:
+            raise ApiError(
+                "transport settings are invalid; space deletion is blocked",
+                status_code=409,
+                data={"code": "transport_settings_invalid"},
+            ) from exc
+        if any(
+            binding.persona_ref == name or binding.memory_space == name
+            for binding in parsed.bindings
+        ):
+            raise ApiError(
+                "空间仍被跨平台会话策略使用，请先解除绑定",
+                status_code=409,
+                data={"code": "space_has_transport_bindings"},
+            )
     path = _toml_path(name)
     if path.exists():
         path.unlink()

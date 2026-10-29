@@ -48,6 +48,7 @@ _EXTRA_FIELDS = [
     {"key": "ONEBOT_ACCESS_TOKEN", "type": "str", "default": "",
      "comment": "OneBot WS 鉴权 token（须与 NapCat 一致）", "extra_sensitive": True},
 ]
+_DEDICATED_FIELDS = frozenset({"STELLA_TRANSPORT_SETTINGS_JSON"})
 
 
 def _fields() -> list[dict]:
@@ -56,6 +57,7 @@ def _fields() -> list[dict]:
         # build_schema 的返回既可能是 {"fields": [...]} 也可能直接是列表，
         # 两种都兼容，别赌形状。
         fields = schema() if isinstance(schema(), list) else []
+    fields = [field for field in fields if field["key"] not in _DEDICATED_FIELDS]
     known = {f["key"] for f in fields}
     return [*fields, *[e for e in _EXTRA_FIELDS if e["key"] not in known]]
 

@@ -1164,6 +1164,16 @@ Only OneBot V11 is enabled by default. Install each additional adapter package y
 
 The current event heartbeat and `get_status()` probe apply only to OneBot V11. The status API keeps other adapters' connection state and marks their health as unknown, so they are not reported as disconnected. Each OneBot V11 connection is monitored separately, and aggregate health requires every connection to be healthy.
 
+## Conversation Policy and Multi-Platform Connection Settings
+
+`STELLA_TRANSPORT_SETTINGS_JSON` is an optional version 1 JSON bundle; an empty value means an empty bundle. The limit is 256 KiB. It can contain connections, policy profiles, scene bindings, and defaults. Unknown fields, duplicate JSON keys or connection slots, and dangling bindings are rejected. Connections remain disabled unless `enabled` is explicitly set.
+
+Read and save it through the authenticated `GET/PUT /api/v1/platform/conversation-settings` endpoints. PUT requires the `If-Match` value returned by GET. Managed mode uses the desired revision for CAS and supports safe retries with `Idempotency-Key`; legacy mode uses a digest of the entire `.env` file for CAS and requires a restart using the existing legacy deployment flow. Legacy responses show the base `.env` value, the effective value/source after external-environment or `.env.dev`/`.env.prod` overrides, and the current process value. A managed PUT updates only the desired revision; it does not apply it. Use the existing `/api/v1/system/apply` operation once, and inspect desired/applied revisions and configuration sources in the response. Invalid JSON returns 400, a missing `If-Match` returns 428, and a revision conflict returns 409.
+
+Store credential references such as `env:TELEGRAM_BOT_TOKEN` or a managed UUID reference; never store token, password, or API-key values. This stage provides validation, storage, and readback only. The new bundle is not yet wired into runtime message ingress or adapter connections, so it does not enable or certify a new platform.
+
+`STELLA_SHARED_INGRESS_ENABLED` defaults to `true`. Existing QQ and WebChat handlers then share policy evaluation, the capture gate, message persistence, and RuntimeFacade coordination while retaining their event parsing, command/plugin priority, conversation relations, and delivery logic. Set it to `false` and restart the Bot/WebUI processes to select the direct rollback callbacks retained by the coordinator. Each event uses one path.
+
 ## OneBot Connection
 
 The Bot communicates with NapCat through a OneBot V11 WebSocket. **NapCat must be logged in first**: install [NapCatQQ Desktop](https://github.com/NapNeko/NapCatQQ-Desktop) and complete QQ login. The Bot no longer manages the NapCat process; automatic login falls back to QR-code scanning, so a person must be present for login

@@ -139,8 +139,11 @@ def _stable_dump(node: ast.AST) -> str:
         return "(" + ",".join(parts) + ")"
     if isinstance(node, list):
         return "[" + ",".join(_stable_dump(v) for v in node) + "]"
-    # ascii() 而非 repr()：字符串常量的转义不随解释器内置 Unicode 版本变化
-    # （U+9FFF 在 Unicode 14 才分配，3.10 的 repr 转义、3.14 的 repr 直出）
+    # JSON string escaping fixes both Unicode escaping and quote selection.
+    # ``ascii()``/``repr()`` can choose different quote styles between patch
+    # releases, even for the same AST string constant.
+    if isinstance(node, str):
+        return "str:" + json.dumps(node, ensure_ascii=True)
     return f"{type(node).__name__}:{node!a}"
 
 
@@ -251,12 +254,13 @@ def closure_of(func_node: ast.AST, ctx: _ModuleContext,
     for sub in ast.walk(func_node):
         if isinstance(sub, ast.Call):
             try:
-                target = _ascii_safe(ast.unparse(sub.func))
+                resolve_target = _ascii_safe(ast.unparse(sub.func))
+                target = _stable_call_target(sub.func)
             except Exception:
-                target = "<complex>"
-            resolved = (index.resolve_target(ctx, target, class_name_holder)
+                resolve_target = target = "<complex>"
+            resolved = (index.resolve_target(ctx, resolve_target, class_name_holder)
                         if index is not None
-                        else _resolve_call(target, ctx, class_name_holder))
+                        else _resolve_call(resolve_target, ctx, class_name_holder))
             add("call", getattr(sub, "lineno", 0),
                 {"target": target[:80], "resolved": resolved})
         elif isinstance(sub, (ast.If, ast.IfExp)):
@@ -311,6 +315,21 @@ def _ascii_safe(text: str) -> str:
     r"""非 ASCII 统一 \uXXXX 转义：ast.unparse 的字符串转义随内置 Unicode
     版本变化（同 _stable_dump 叶子的 repr 问题），哈希前先归一。"""
     return text.encode("ascii", "backslashreplace").decode("ascii")
+
+
+def _stable_call_target(node: ast.AST) -> str:
+    """Render a callable chain without version-sensitive argument formatting."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return f"{_stable_call_target(node.value)}.{node.attr}"
+    if isinstance(node, ast.Call):
+        return f"{_stable_call_target(node.func)}(...)"
+    if isinstance(node, ast.Subscript):
+        return f"{_stable_call_target(node.value)}[...]"
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return json.dumps(node.value, ensure_ascii=True)
+    return f"<{type(node).__name__}>"
 
 
 def _safe_unparse(node: ast.AST | None) -> str:

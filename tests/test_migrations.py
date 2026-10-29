@@ -1063,7 +1063,7 @@ def test_v20_to_v21_preserves_legacy_ids_and_adds_transport_identity(tmp_path):
     preview = schema.migrate_to_latest(path, ctx=ctx, dry_run=True)
     assert preview.ok
     assert preview.from_version == 20
-    assert preview.to_version == 22
+    assert preview.to_version == 23
     conn = sqlite3.connect(path)
     assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (20,)
     assert "platform_message_id" not in {
@@ -1073,11 +1073,11 @@ def test_v20_to_v21_preserves_legacy_ids_and_adds_transport_identity(tmp_path):
 
     report = schema.migrate_to_latest(path, ctx=ctx)
     assert report.ok, report.to_markdown()
-    assert [step.version for step in report.steps] == [21, 22]
+    assert [step.version for step in report.steps] == [21, 22, 23]
 
     conn = sqlite3.connect(path)
     try:
-        assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (22,)
+        assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (23,)
         rows = conn.execute(
             "SELECT id, msg_id, platform_message_id, subject_key "
             "FROM group_messages ORDER BY id"
@@ -1164,7 +1164,7 @@ def test_v21_to_v22_preserves_legacy_grants_and_scopes_new_identity(tmp_path, mo
     ctx = _isolated_migration_context()
     report = schema.migrate_to_latest(path, ctx=ctx)
     assert report.ok, report.to_markdown()
-    assert report.to_version == 22
+    assert report.to_version == 23
 
     conn = sqlite3.connect(path)
     try:

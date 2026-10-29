@@ -19,6 +19,7 @@ from core.transport import (
     OutboundMessage,
     OutboundSegment,
     OutboundService,
+    RateLimitBucket,
     SceneRef,
     TransportRegistry,
     split_outbound_message,
@@ -113,8 +114,12 @@ def test_capability_narrowing_cannot_widen_text_or_scene_support():
     assert narrowed.group is False
     assert narrowed.private is True
     assert narrowed.max_text_length == 40
-    assert narrowed.requests_per_window == 2
-    assert narrowed.rate_window_seconds == 30
+    assert narrowed.requests_per_window == 10
+    assert narrowed.rate_window_seconds == 60
+    assert narrowed.quota_buckets() == (
+        RateLimitBucket("legacy", "adapter", "api", 10, 60),
+        RateLimitBucket("legacy", "connection", "api", 2, 30),
+    )
 
 
 class _FakeCodec:

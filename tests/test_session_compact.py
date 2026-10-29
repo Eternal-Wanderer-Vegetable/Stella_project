@@ -9,9 +9,11 @@
 import asyncio
 import json
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
+import gravitas.controller as gravitas_controller
 from memory import session_compact as compact
 from memory import session_context as sc
 from memory.summary_packet import (
@@ -599,6 +601,34 @@ def test_compact_batches_include_old_packet_without_rewriting(db, monkeypatch):
     assert asyncio.run(compact.compact_once(1, 62)) is True
     assert sum(old.ref_id in p for p in backend.prompts) == 1
     assert old.messages[0].content in sc.get_summary(1)
+
+
+def test_compact_clamps_future_timestamp_age_before_pressure_admission(
+    db, monkeypatch
+):
+    backend = _BatchBackend()
+    _large_session(db, monkeypatch, backend)
+    admitted_ages = []
+
+    class _PressureController:
+        def integrity_is_trusted(self, resource_id):
+            return True
+
+        def admit_background(
+            self, resource_id, *, oldest_age_seconds, integrity_ok
+        ):
+            admitted_ages.append(oldest_age_seconds)
+            return SimpleNamespace(allowed=True)
+
+    monkeypatch.setattr(compact, "seconds_since", lambda _timestamp: -1.0)
+    monkeypatch.setattr(
+        gravitas_controller,
+        "active_controller",
+        lambda: _PressureController(),
+    )
+
+    assert asyncio.run(compact.compact_once(1, 62)) is True
+    assert admitted_ages == [0.0]
 
 
 def test_compact_batch_failure_never_advances_watermark(db, monkeypatch):

@@ -9,6 +9,9 @@
 
 from __future__ import annotations
 
+import time
+
+import jwt
 from fastapi.testclient import TestClient
 
 import config.settings as settings
@@ -88,6 +91,23 @@ def test_expired_token_is_401(client: TestClient, isolated_home):
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
     )
     assert resp.status_code == 401
+
+
+def test_signed_token_with_future_iat_is_accepted(client: TestClient):
+    _setup(client)
+    record = security.load_record()
+    assert record is not None
+    now = int(time.time())
+    token = jwt.encode(
+        {"sub": record["username"], "iat": now + 30, "exp": now + 3600},
+        record["jwt_secret"],
+        algorithm="HS256",
+    )
+
+    resp = client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert resp.status_code == 200
 
 
 def test_account_update_rotates_tokens(client: TestClient):

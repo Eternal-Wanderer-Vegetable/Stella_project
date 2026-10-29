@@ -134,7 +134,7 @@ class ChatContext:
     """一次聊天处理会话的完整状态。
 
     属性分组：
-    输入标识（user_id/group_id/msg_id/message/source_kind）来自 OneBot 事件；
+    输入标识（user_id/group_id/msg_id/message/source_kind）来自可信入口；
     处理产物（raw_output/thought/action/reply/lines）由 pipeline 与解析钩子写入；
     诊断信息（trigger/intent/llm_* 系列）用于 thought 日志记录调试；
     结构化上下文（short_term/user_profile/memories_for_prompt）供 prompt 构建使用；
@@ -142,7 +142,9 @@ class ChatContext:
     """
 
     # ---- 输入标识 ----
-    user_id: int
+    # Transport entry points keep the platform ID opaque; legacy OneBot paths
+    # continue to provide integers until a downstream API explicitly needs it.
+    user_id: int | str
     group_id: int
     msg_id: int
     message: str
@@ -160,10 +162,10 @@ class ChatContext:
     # 在下面四个字段里。storage_session_id 是注册表分配的存储键：群=正整数
     # 群号、WebChat=-1、私聊=负整数；存储/摘要/checkpoint 一律用它
     # （storage_key()），绝不能用负号反推种类。
-    conversation_kind: str = ""  # group / private / webchat；空 = 旧入口未升级
+    conversation_kind: str = ""  # group / private / webchat / channel / thread；空 = 旧入口未升级
     conversation_key: str = ""  # 规范键 qq:<bot>:group:<gid> 等；空 = 旧入口
     bot_id: str = ""  # 接入 Bot 的 self_id（个人 owner 键 person:qq:<bot>:<uid> 用）
-    peer_id: str = ""  # 群=群号；私聊=sender QQ 号；WebChat=主体
+    peer_id: str = ""  # 群/频道/线程=平台场景 ID；私聊/WebChat=场景主体
     storage_session_id: int = 0  # 0 = 未升级入口，按 group_id 兼容
     # Transport DTO 仅携带可信身份字段；旧扁平字段继续服务现有消费者。
     # WebChat 的合成 user_id 不自动成为账户主体，接入层需显式提供 UserRef。
@@ -194,8 +196,9 @@ class ChatContext:
     recorded_row_id: int = 0  # record_message 写入后的行 id（0=未入库）
     # 采集结果码（记忆采集就绪门，memory.capture_gate）："" = 调用方未给采集
     # 决策（遗留/显式调用）；"captured" = 已落库；"not_captured_unavailable" =
-    # 可用性门关闭；"not_captured_pressure" = backlog pressure cap 在写入前拒采。
-    # 两种拒绝都不排队不回放。消费方据此区分「拒绝」与「写失败」。
+    # 可用性门关闭；"not_captured_pressure" = backlog pressure cap 在写入前拒采；
+    # "not_captured_storage_error" = 存储/事务失败，row id 归零且不报 captured。
+    # 拒绝与失败都不排队不回放。消费方据此区分拒采与落库失败。
     capture_result: str = ""
     relation_version: int = 0  # 信封写入时的关系 schema 版本（0=无关系）
     identity_revision: int = 0  # 会话身份版本快照（M3 写入；缓存/CAS 用）

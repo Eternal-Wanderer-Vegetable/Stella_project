@@ -56,9 +56,11 @@ def test_route_matrix_matches_plan_and_nucleus_business_assembly(
         (row["method"], row["path"], row["proposed_owner"])
         for row in inventory["webui_routes"]
     }
-    # The initial route inventory is a frozen planning snapshot. This endpoint
-    # was added afterward and is owned by Nucleus like the other business APIs.
+    # The initial route inventory is a frozen planning snapshot. These endpoints
+    # were added afterward and are owned by Nucleus like the other business APIs.
     expected.add(("GET", "/api/v1/gravitas/status", "nucleus"))
+    expected.add(("GET", "/api/v1/conversations/scenes", "nucleus"))
+    expected.add(("GET", "/api/v1/conversations/messages", "nucleus"))
     assert set(ROUTE_OWNERSHIP) == expected
     assert (
         len(CONTROL_ROUTE_KEYS),
@@ -66,7 +68,7 @@ def test_route_matrix_matches_plan_and_nucleus_business_assembly(
         len(MIXED_ROUTE_KEYS),
     ) == (
         21,
-        112,
+        114,
         1,
     )
 
@@ -320,6 +322,16 @@ def test_corona_control_routes_stay_online_and_business_is_explicit_503(
         business = client.get("/api/v1/usage/today", headers=headers)
         assert business.status_code == 503
         assert business.json()["data"]["code"] == "core_unavailable"
+        scenes = client.get("/api/v1/conversations/scenes", headers=headers)
+        assert scenes.status_code == 503
+        assert scenes.json()["data"]["code"] == "core_unavailable"
+        history = client.get(
+            "/api/v1/conversations/messages",
+            params={"conversation_key": "c2.example"},
+            headers=headers,
+        )
+        assert history.status_code == 503
+        assert history.json()["data"]["code"] == "core_unavailable"
         mixed = client.put(
             "/api/v1/groups/bindings",
             headers=headers,

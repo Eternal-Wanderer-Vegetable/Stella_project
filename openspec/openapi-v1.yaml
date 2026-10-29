@@ -331,6 +331,57 @@ paths:
         "200":
           description: OK
 
+  /api/v1/conversations/scenes:
+    get:
+      tags: [conversations]
+      summary: 已注册的跨平台会话场景（只返回规范身份与计数）
+      description: 只读已存在的 V2 注册表；不创建 schema，不把不透明 ID 转成数字。
+      x-stella-milestone: P07
+      parameters:
+        - name: adapter
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: connection_id
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 36 }
+        - name: kind
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 32 }
+      responses:
+        "200":
+          description: OK（envelope.data = {scenes[]}；每项含 connection/scene、conversation_key、memory_space、有效消息计数）
+        "401":
+          description: 未认证
+  /api/v1/conversations/messages:
+    get:
+      tags: [conversations]
+      summary: 单个已注册 V2 会话的有效消息分页
+      description: 使用完整规范 conversation_key 和 connection_id 过滤，并隐藏已被编辑替换或删除的来源行。
+      x-stella-milestone: P07
+      parameters:
+        - name: conversation_key
+          in: query
+          required: true
+          schema: { type: string, minLength: 4, maxLength: 8192 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          description: 前一页最后一条内部行 ID；必须和首次响应的 snapshot_id 一起传入。
+          schema: { type: integer, minimum: 1 }
+        - name: snapshot_id
+          in: query
+          description: 首次响应返回的高水位行 ID，后续页固定使用以避免新消息移动页边界。
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: OK（envelope.data = {conversation_key, total, items[], snapshot_id, next_cursor}）
+        "401":
+          description: 未认证
+        "404":
+          description: 会话未注册
+
   /api/v1/trace/memory:
     get:
       tags: [trace]
@@ -453,6 +504,50 @@ paths:
         "200":
           description: OK
 
+  /api/v1/platform/conversation-settings:
+    get:
+      tags: [config]
+      summary: 读取版本化会话策略与连接设置
+      description: 返回安全 DTO、managed desired/applied bundle 与来源或 legacy effective/applied 来源及用于后续 CAS 的 ETag；不回显凭据值。
+      x-stella-milestone: M2
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag:
+              schema: { type: string }
+    put:
+      tags: [config]
+      summary: CAS 保存会话策略与连接设置
+      description: 托管模式的 If-Match 是 desired revision；旧版模式是 .env 内容摘要。两者均拒绝缺失 If-Match，并保留重启/Apply 恢复边界。
+      x-stella-milestone: M2
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransportSettingsV1' }
+      responses:
+        "200":
+          description: 已保存 desired 配置，包含读回结果及当前 applied 修订
+          headers:
+            ETag:
+              schema: { type: string }
+        "400":
+          description: JSON bundle/引用无效，或非空历史会话尝试更改 memory_space
+        "409":
+          description: If-Match 冲突或幂等键复用冲突
+        "428":
+          description: If-Match 缺失
+
   /api/v1/config:
     get:
       tags: [config]
@@ -478,6 +573,97 @@ components:
       bearerFormat: JWT
       description: Authorization: Bearer <token>；登录响应同时写 HttpOnly Cookie 作为补充通道。
   schemas:
+    TransportSettingsV1:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version:
+          type: integer
+          const: 1
+        connections:
+          type: array
+          maxItems: 256
+          items:
+            type: object
+            additionalProperties: false
+            required: [connection_id, adapter, platform_scope, self_id]
+            properties:
+              connection_id: { type: string, format: uuid }
+              adapter: { type: string }
+              platform_scope: { type: string }
+              self_id: { type: string }
+              credential_ref: { type: [string, "null"] }
+              enabled: { type: boolean, default: false }
+              display_name: { type: [string, "null"] }
+              policy: { $ref: '#/components/schemas/TransportPolicyV1' }
+        profiles:
+          type: array
+          maxItems: 1024
+          items:
+            type: object
+            additionalProperties: false
+            required: [policy_profile_id]
+            properties:
+              policy_profile_id: { type: string }
+              policy: { $ref: '#/components/schemas/TransportPolicyV1' }
+        bindings:
+          type: array
+          maxItems: 10000
+          items:
+            type: object
+            additionalProperties: false
+            required: [connection_id, scene, policy_profile_id]
+            properties:
+              connection_id: { type: string, format: uuid }
+              scene:
+                type: object
+                additionalProperties: false
+                required: [kind, scene_id]
+                properties:
+                  kind: { type: string, enum: [private, group, channel, thread, webchat] }
+                  scene_id: { type: string }
+                  parent_path: { type: array, maxItems: 16, items: { type: string } }
+                  thread_id: { type: [string, "null"] }
+              policy_profile_id: { type: string }
+              persona_ref: { type: [string, "null"] }
+              memory_space: { type: [string, "null"] }
+              context_mode: { type: string, const: scene, default: scene }
+              policy: { $ref: '#/components/schemas/TransportPolicyV1' }
+        defaults: { $ref: '#/components/schemas/TransportPolicyV1' }
+        platform_templates:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/TransportPolicyV1'
+    TransportPolicyV1:
+      type: object
+      additionalProperties: false
+      properties:
+        capture_enabled: { type: boolean }
+        llm_enabled: { type: boolean }
+        wake_mode:
+          type: string
+          enum: [mention, reply, prefix, all, private_direct]
+        wake_prefixes:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items: { type: string, maxLength: 128 }
+        reply_mention: { type: boolean }
+        reply_quote: { type: boolean }
+        format_mode: { type: string, enum: [native, plain, markdown] }
+        segmentation: { type: string, enum: [auto, none, safe] }
+        proactive_enabled: { type: boolean }
+        quiet_hours:
+          type: object
+          additionalProperties: false
+          required: [start, end, timezone]
+          properties:
+            start: { type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }
+            end: { type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$' }
+            timezone: { type: string, maxLength: 64 }
+        requests_per_window: { type: integer, minimum: 1 }
+        rate_window_seconds: { type: number, exclusiveMinimum: 0 }
     Envelope:
       type: object
       required: [status, message]

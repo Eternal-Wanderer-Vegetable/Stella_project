@@ -156,7 +156,12 @@ def test_vision_none_endpoint_saves_lowercase(client: TestClient, auth_header: d
 
 # ---------- spaces ----------
 
-def test_spaces_crud(client: TestClient, auth_header: dict, isolated_home: Path):
+def test_spaces_crud(
+    client: TestClient,
+    auth_header: dict,
+    isolated_home: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
     resp = client.post("/api/v1/spaces", json={"name": "gaming", "system_prompt": "你是游戏搭子"})
     assert resp.status_code == 200
     resp = client.get("/api/v1/spaces", headers=auth_header)
@@ -172,6 +177,37 @@ def test_spaces_crud(client: TestClient, auth_header: dict, isolated_home: Path)
     resp = client.delete("/api/v1/spaces/gaming", headers=auth_header)
     assert resp.status_code == 409
     client.put("/api/v1/spaces/gaming/bindings", json={"qq_groups": []})
+    import json
+
+    import config.settings as settings
+
+    monkeypatch.setattr(
+        settings,
+        "STELLA_TRANSPORT_SETTINGS_JSON",
+        json.dumps(
+            {
+                "version": 1,
+                "connections": [{
+                    "connection_id": "11111111-1111-4111-8111-111111111111",
+                    "adapter": "telegram",
+                    "platform_scope": "telegram",
+                    "self_id": "bot-1",
+                }],
+                "profiles": [{"policy_profile_id": "default"}],
+                "bindings": [{
+                    "connection_id": "11111111-1111-4111-8111-111111111111",
+                    "scene": {"kind": "group", "scene_id": "opaque:007"},
+                    "policy_profile_id": "default",
+                    "persona_ref": "gaming",
+                }],
+            }
+        ),
+        raising=False,
+    )
+    blocked = client.delete("/api/v1/spaces/gaming", headers=auth_header)
+    assert blocked.status_code == 409
+    assert blocked.json()["data"]["code"] == "space_has_transport_bindings"
+    monkeypatch.setattr(settings, "STELLA_TRANSPORT_SETTINGS_JSON", "", raising=False)
     assert client.delete("/api/v1/spaces/gaming", headers=auth_header).status_code == 200
     # 非法名拒绝
     assert client.post("/api/v1/spaces", json={"name": "../evil"}).status_code == 400

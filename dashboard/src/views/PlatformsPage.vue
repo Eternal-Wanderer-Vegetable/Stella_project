@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { api, unwrap } from '@/api/http';
+import ConversationPolicyEditor from '@/components/ConversationPolicyEditor.vue';
 import { idempotencyKey, revisionWriteOptions } from '@/api/system';
 import { toastApiError, useToast } from '@/stores/toast';
 import { useSystemStore } from '@/stores/system';
@@ -856,6 +857,8 @@ onBeforeUnmount(() => {
         names: unavailableSelected.map((adapter) => adapter.name).join('、'),
       }) }}
     </v-alert>
+
+    <ConversationPolicyEditor />
 
     <v-card class="pa-4 mb-4" :loading="loadingAdapters">
       <div class="d-flex flex-wrap align-center ga-2 mb-1">

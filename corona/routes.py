@@ -70,6 +70,8 @@ ROUTE_OWNERSHIP: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/v1/conversations/groups", "nucleus"),
     ("GET", "/api/v1/conversations", "nucleus"),
     ("GET", "/api/v1/conversations/context", "nucleus"),
+    ("GET", "/api/v1/conversations/scenes", "nucleus"),
+    ("GET", "/api/v1/conversations/messages", "nucleus"),
     ("POST", "/api/v1/evaluation/runs", "nucleus"),
     ("GET", "/api/v1/evaluation/runs", "nucleus"),
     ("GET", "/api/v1/evaluation/runs/{run_id}", "nucleus"),

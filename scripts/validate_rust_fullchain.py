@@ -46,8 +46,14 @@ def _prepare(db: Path) -> None:
 def _seed_candidate(db: Path, source_id: int, *, content: str, importance: float,
                     confidence: float) -> str:
     """Create a candidate through the production accepted-evidence writer."""
+    from core.transport.keys import conversation_key_v2
+    from core.transport.models import BotRef, SceneRef, UserRef
     from memory.consolidator import MemoryConsolidator
 
+    connection_id = "native-fullchain-test"
+    bot_ref = BotRef(connection_id, "generic", "service:test", "test-bot")
+    user_ref = UserRef("service:test", "100")
+    conversation_key = conversation_key_v2(bot_ref, SceneRef("group", "1"))
     conn = sqlite3.connect(db)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS group_messages ("
@@ -55,13 +61,16 @@ def _seed_candidate(db: Path, source_id: int, *, content: str, importance: float
         "source_kind TEXT, timestamp TEXT, msg_id TEXT, conversation_key TEXT, "
         "bot_id TEXT, reply_to_msg_id TEXT, reply_target_user_id TEXT, "
         "mentioned_user_ids_json TEXT, logical_message_id TEXT, part_index INTEGER, "
-        "origin_msg_id TEXT, reply_recipient_user_id TEXT)"
+        "origin_msg_id TEXT, reply_recipient_user_id TEXT, subject_key TEXT, "
+        "connection_id TEXT)"
     )
     conn.execute(
         "INSERT INTO group_messages "
-        "(id, group_id, user_id, content, source_kind, msg_id, conversation_key, bot_id) "
-        "VALUES (?, '1', '100', ?, 'AT_MENTION', ?, 'test-conversation', 'test-bot')",
-        (source_id, content, str(source_id)),
+        "(id, group_id, user_id, content, source_kind, msg_id, conversation_key, "
+        "bot_id, subject_key, connection_id) "
+        "VALUES (?, '1', '100', ?, 'AT_MENTION', ?, ?, 'test-bot', ?, ?)",
+        (source_id, content, str(source_id), conversation_key,
+         user_ref.subject_key, connection_id),
     )
     conn.commit()
     conn.close()
@@ -93,6 +102,11 @@ def _seed_candidate(db: Path, source_id: int, *, content: str, importance: float
         sender_ids=["100"],
         at_senders=["100"],
         origin_group_id=1,
+        conversation=SimpleNamespace(
+            conversation_key=conversation_key,
+            bot_id="test-bot",
+            is_private=False,
+        ),
         source_rows=[(source_id, "100", content, "AT_MENTION")],
     )
     conn = sqlite3.connect(db)

@@ -70,6 +70,16 @@ def _resolve_pipeline():
     return ai_gateway.pipeline
 
 
+async def _submit_webchat_legacy(session_key, pipeline, ctx, turn_deadline):
+    """Direct-facade rollback path retained for the shared ingress switch."""
+    from core.runtime.facade import ensure_shared_facade_started
+
+    facade = await ensure_shared_facade_started()
+    return await facade.submit_turn(
+        session_key, pipeline, ctx, turn_deadline=turn_deadline
+    )
+
+
 def _flow_span(flow_ctx, node_id: str, **kw):
     try:
         from core.observability import message_flow
@@ -107,10 +117,10 @@ async def run_turn(
         utc_now_iso,
     )
     from core.transport import (
-        AdmissionPolicy,
         UnsupportedEvent,
         normalize_trusted_webchat,
     )
+    from core.transport.legacy_ingress import shared_legacy_ingress
     from memory import capture_gate, conversation_registry, social_store
     from memory.pre_processors import record_message
 
@@ -127,7 +137,7 @@ async def run_turn(
     )
     if isinstance(normalized, UnsupportedEvent):
         raise ValueError(f"WebChat message rejected: {normalized.reason_code}")
-    admission = AdmissionPolicy().decide(normalized, purpose="webchat")
+    admission = shared_legacy_ingress.decide(normalized, purpose="webchat")
     if not admission.allowed:
         raise ValueError(f"WebChat message rejected: {admission.reason_code}")
 
@@ -184,8 +194,8 @@ async def run_turn(
     # 采集就绪门（计划 §6.3）：用户输入、BOT_SELF 回复与 social 投递回执
     # 都是内容派生持久化，门关闭时全部跳过；SSE 回复照常返回（这是记忆
     # 采集变更，不是停服）。门未安装（独立 dev server / 单测）保持旧语义。
-    capture = capture_gate.ingress_decision()
-    capture_open = capture is None or capture.allowed
+    capture = shared_legacy_ingress.capture_decision(capture_gate)
+    capture_open = shared_legacy_ingress.capture_allowed(capture)
     if not capture_open:
         logger.debug(
             "🚪 [CaptureGate] 采集门关闭，本轮 WebChat 消息与回复不落库"
@@ -194,7 +204,9 @@ async def run_turn(
     with _flow_span(flow_ctx, "web.space_context"):
         if capture_open:
             raise_if_expired(turn_deadline, phase="web.input_capture")
-            await record_message(ctx, capture=capture)
+            await shared_legacy_ingress.record_message(
+                record_message, ctx, capture=capture
+            )
 
     outcome = "delivered"
     pipeline = _resolve_pipeline()
@@ -204,15 +216,15 @@ async def run_turn(
         ):  # 同群串行（等价群级锁语义）
             # 轮次经 facade（prepare/finalize 留 Python，生成是进程内 provider
             # 调用）；锁语义由 facade per-key owner 接管
-            from core.runtime.facade import ensure_shared_facade_started
-
-            facade = await ensure_shared_facade_started()
             try:
-                ctx = await facade.submit_turn(
+                ctx = await shared_legacy_ingress.submit_turn(
                     WEBCHAT_CONV_KEY,
                     pipeline,
                     ctx,
                     turn_deadline=turn_deadline,
+                    legacy_submit=lambda: _submit_webchat_legacy(
+                        WEBCHAT_CONV_KEY, pipeline, ctx, turn_deadline
+                    ),
                 )
             except Exception as e:
                 # reset 取消不是失败（计划 §6.9）：root 终态照实区分后原样上抛
@@ -231,7 +243,8 @@ async def run_turn(
             if not capture_open:
                 break
             raise_if_expired(turn_deadline, phase="web.output_capture")
-            await record_message(
+            await shared_legacy_ingress.record_message(
+                record_message,
                 ChatContext(
                     user_id=WEBCHAT_USER_ID,
                     group_id=WEBCHAT_GROUP_ID,

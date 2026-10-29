@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "assessment_date": "2026-10-21",
+  "assessment_date": "2026-10-25",
   "environment": {
     "venv": ".venv",
     "python_version": "3.12.14",
@@ -14,6 +14,38 @@
   },
   "denominator": 32,
   "interpretation": "An observed installed distribution is not a compatibility certification. Not-run and partial results never count as certified.",
+  "p00_baseline": {
+    "date": "2026-10-25",
+    "source_commit": "ef8c9b89231c490e0955941143428dddf08231d4",
+    "python_version": "3.12.14",
+    "stella_home": "isolated temporary directory; no production data copied or opened",
+    "regression_suites": [
+      {
+        "scope": "OneBot/WebChat transport, identity, memory and ingress regressions",
+        "command": "STELLA_HOME=<isolated-temp> .venv/bin/python -m pytest tests/test_private_chat_ingress.py tests/test_transport_normalizers.py tests/test_conversation_registry.py tests/test_transport_outbound.py tests/test_context_projection_identity.py tests/test_message_relations.py tests/test_migrations.py tests/test_personal_memory_scope.py tests/test_personal_memory_sharing.py tests/runtime/test_session_ownership.py -q",
+        "result": "142 passed; 1 warning; 12.61s"
+      },
+      {
+        "scope": "managed/legacy config, Corona bindings, WebUI/platform routes, scheduling, observability and adapter matrix",
+        "command": "STELLA_HOME=<isolated-temp> .venv/bin/python -m pytest tests/corona/test_config_api.py tests/corona/test_group_bindings.py tests/webui/test_platform_adapters.py tests/nucleus/test_internal_api.py tests/nucleus/test_route_catalog.py tests/scheduling/test_scheduling_delivery.py tests/observability/test_background_flow_roots.py tests/platforms -q",
+        "result": "51 passed; 2 warnings; 16.25s"
+      }
+    ],
+    "harness_adjustment": "The first transport/memory invocation without tests/test_private_chat_ingress.py had 120 passed and 7 failures because tests/test_message_relations.py imports bot_main inside tests before NoneBot initialization. Re-running with the existing ingress test included initialized the driver during collection and passed all 142 tests.",
+    "ci_contract": "Repository CI test matrix is Python 3.10, 3.11 and 3.12; this P00 local evidence covers only the installed Python version.",
+    "adapter_status": {
+      "denominator": 32,
+      "certified": 0,
+      "not_certified": 32
+    },
+    "not_run": [
+      "live platform exchange",
+      "real model",
+      "Rust/native build",
+      "clean VM/installer"
+    ],
+    "matrix_guard": "STELLA_HOME=<same-isolated-temp> .venv/bin/python -m pytest tests/platforms -q; 2 passed in 0.33s after metadata update."
+  },
   "adapters": [
     {
       "platform": "OneBot V11",
@@ -306,24 +338,35 @@
       "package_name": "nonebot-adapter-telegram",
       "priority": "P1",
       "package_observation": {
-        "status": "not_installed",
-        "version": null,
-        "requires_python": null,
-        "source": "isolated execution environment importlib.metadata"
+        "status": "observed_installed",
+        "version": "0.1.0b20",
+        "requires_python": ">=3.9,<4.0",
+        "source": "temporary /tmp target install of the requirements-platform.lock wheel; repository .venv remains unmodified"
       },
       "driver_requirements": {
-        "status": "not_assessed",
-        "observed": null,
-        "evidence": []
+        "status": "partial",
+        "observed": "Locked adapter source selects polling with get_updates or webhook via the configured NoneBot driver HTTP server; no runtime driver lifecycle or live connection was exercised.",
+        "evidence": [
+          "tests/platforms/test_telegram_adapter.py"
+        ]
       },
-      "normalizer": null,
-      "exporter": null,
-      "target_codec": null,
-      "capability_provider": null,
+      "normalizer": "core.transport.adapters.telegram.TelegramNormalizer",
+      "exporter": "core.transport.adapters.telegram.TelegramExporter",
+      "target_codec": "core.transport.adapters.telegram.TelegramTargetCodec",
+      "capability_provider": "core.transport.adapters.telegram.TELEGRAM_CAPABILITIES via StaticCapabilityProvider",
       "scenarios": {
-        "status": "not_assessed",
-        "covered": [],
-        "evidence": []
+        "status": "partial",
+        "covered": [
+          "PrivateMessageEvent with opaque Telegram user/chat/message identities",
+          "GroupMessageEvent and ForumTopicMessageEvent preserving chat and message_thread_id",
+          "reply relation scoped to the same configured connection and canonical conversation",
+          "image metadata placeholder without persisting Telegram file_id",
+          "enabled telegram settings connection routed through TransportIngress",
+          "fake send_to preserving exact Bot/chat/topic and opaque API receipt ID"
+        ],
+        "evidence": [
+          "tests/platforms/test_telegram_adapter.py"
+        ]
       },
       "permissions": {
         "status": "not_assessed",
@@ -345,48 +388,61 @@
       },
       "levels": {
         "L0": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_telegram_adapter.py"
+          ],
+          "reason": "The exact lock-pinned wheel imports in an isolated temporary target and fixture codecs run; runtime driver startup and live account setup remain untested."
         },
         "L1": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_telegram_adapter.py"
+          ],
+          "reason": "Private, group, and forum-topic event models normalize to the configured connection and fake target; no live Telegram exchange occurred."
         },
         "L2": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_telegram_adapter.py"
+          ],
+          "reason": "Reply identity and safe image metadata pass fixture checks; persisted relationship/media retrieval and live media exchange are not certified."
         },
         "L3": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_telegram_adapter.py"
+          ],
+          "reason": "Fake send_to covers text/reply route and receipt; endpoint acceptance, permissions, media send, send windows, rate limits, and direct-messages topics remain unverified."
         }
       },
       "final_status": "not_certified",
       "status_evidence": [
         {
           "kind": "execution_scope",
-          "result": "No live platform endpoint or account was used in this isolated local work package."
+          "result": "No live Telegram account, endpoint, credential, model, or production data was used."
         },
         {
           "kind": "package_probe",
-          "result": "Package observation status: not_installed."
+          "result": "Exact locked wheel nonebot-adapter-telegram==0.1.0b20 was installed under /tmp only for fixtures; .venv remains unchanged."
+        },
+        {
+          "kind": "local_fixture_scope",
+          "result": "L0 local/fixture passed; L1 private/group/forum-topic fixtures passed; L2 and L3 are partial fixture evidence; all live levels remain not_run."
         }
       ],
       "blockers": [
-        "L0-L3 platform-specific certification is incomplete.",
-        "No live exchange, account recovery, or clean-VM installation was executed."
+        "Direct-messages topics use a separate direct_messages_topic_id field that the locked adapter does not expose.",
+        "No live account exchange, permission validation, or runtime driver lifecycle was executed.",
+        "Reply persistence/retrieval, media upload/download, send windows, rate limits, and clean-VM installation remain unverified."
       ]
     },
     {
@@ -401,35 +457,52 @@
         "source": "isolated execution environment importlib.metadata"
       },
       "driver_requirements": {
-        "status": "not_assessed",
-        "observed": null,
-        "evidence": []
+        "status": "partial",
+        "observed": "The 1.7.3 adapter requires an HTTP client; WebSocket client for websocket bots and ASGI server for webhook bots. No QQ driver lifecycle was run.",
+        "evidence": [
+          "https://github.com/nonebot/adapter-qq/blob/v1.7.3/nonebot/adapters/qq/adapter.py"
+        ]
       },
-      "normalizer": null,
-      "exporter": null,
-      "target_codec": null,
-      "capability_provider": null,
+      "normalizer": "core.transport.adapters.qq.QQNormalizer",
+      "exporter": "core.transport.adapters.qq.QQExporter",
+      "target_codec": "core.transport.adapters.qq.QQTargetCodec",
+      "capability_provider": "core.transport.adapters.qq.QQ_CAPABILITIES via StaticCapabilityProvider",
       "scenarios": {
-        "status": "not_assessed",
-        "covered": [],
-        "evidence": []
+        "status": "partial",
+        "covered": [
+          "C2C private, GROUP_AT_MESSAGE_CREATE, AT_MESSAGE_CREATE, and DIRECT_MESSAGE_CREATE source fixtures",
+          "opaque message IDs, intent requirements, exact event-bound target, and expiration windows",
+          "plain-text send method/recipient/msg_id mapping through a fake SDK Bot"
+        ],
+        "evidence": [
+          "tests/platforms/test_qq_adapter.py::test_qq_official_events_normalize_opaque_identities_and_reply_windows",
+          "tests/platforms/test_qq_adapter.py::test_qq_exporter_uses_exact_bot_route_and_original_msg_id"
+        ]
       },
       "permissions": {
         "status": "not_assessed",
-        "evidence": []
+        "evidence": [
+          "tests/platforms/test_qq_adapter.py::test_qq_normalizer_requires_the_specific_configured_intent"
+        ]
       },
       "send_windows": {
-        "status": "not_assessed",
-        "evidence": []
+        "status": "partial",
+        "evidence": [
+          "tests/platforms/test_qq_adapter.py::test_qq_official_events_normalize_opaque_identities_and_reply_windows",
+          "https://github.com/tencent-connect/bot-docs/blob/main/docs/develop/api-v2/server-inter/message/send-receive/send.md"
+        ]
       },
       "rate_limits": {
         "status": "not_assessed",
-        "evidence": []
+        "evidence": [
+          "Official docs note text-channel rate guidance; runtime quota enforcement is deferred to P09."
+        ]
       },
       "maintenance": {
-        "status": "official_snapshot_only",
+        "status": "pinned_official_release",
         "evidence": [
-          "docs/plans/2026-10-20-cross-platform-inventory.md#6e9d36324a4a2f209a569cbb9c9bb7ab1b3696ae392446af807e7787f0e0119a"
+          "https://github.com/nonebot/adapter-qq/releases/tag/v1.7.3",
+          "https://github.com/nonebot/adapter-qq/tree/v1.7.3"
         ]
       },
       "levels": {
@@ -438,45 +511,65 @@
           "fixture": "not_run",
           "live": "not_run",
           "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "reason": "No SDK distribution is installed in the current .venv and no QQ driver was started; explicit registry registration alone is not a driver acceptance."
         },
         "L1": {
           "local": "not_run",
-          "fixture": "not_run",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_qq_adapter.py::test_qq_official_events_normalize_opaque_identities_and_reply_windows"
+          ],
+          "reason": "Fixtures use real event models from the exact 1.7.3 wheel source; no QQ endpoint or real account was used."
         },
         "L2": {
           "local": "not_run",
-          "fixture": "not_run",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_qq_adapter.py::test_qq_normalizer_rejects_unmentioned_group_and_guild_events",
+            "tests/platforms/test_qq_adapter.py::test_qq_target_codec_rejects_retargeting_expiry_extension_and_serialized_targets"
+          ],
+          "reason": "Intent, exact scene, source message, and expiry boundaries are fixture-checked; live permissions and platform account state are unverified."
         },
         "L3": {
           "local": "not_run",
-          "fixture": "not_run",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_qq_adapter.py::test_qq_exporter_uses_exact_bot_route_and_original_msg_id"
+          ],
+          "reason": "Fake Bot verifies SDK method, exact recipient, original msg_id, and returned ID handling; endpoint acceptance, rate limits, and driver lifecycle remain untested."
         }
       },
       "final_status": "not_certified",
       "status_evidence": [
         {
           "kind": "execution_scope",
-          "result": "No live platform endpoint or account was used in this isolated local work package."
+          "result": "No QQ live endpoint, account, production data, or driver was used."
         },
         {
-          "kind": "package_probe",
-          "result": "Package observation status: not_installed."
+          "kind": "package_contract",
+          "result": "nonebot-adapter-qq==1.7.3 is pinned in project manifests; the distribution is not installed in the current .venv."
+        },
+        {
+          "kind": "fixture_scope",
+          "result": "L1 and L2 fixture checks passed; L3 send mapping is partial; L0 and all live levels were not_run."
         }
       ],
       "blockers": [
-        "L0-L3 platform-specific certification is incomplete.",
-        "No live exchange, account recovery, or clean-VM installation was executed."
-      ]
+        "No QQ SDK distribution or driver lifecycle was exercised in the current .venv.",
+        "Live QQ account, gateway, send permissions, and channel WebSocket acceptance are not available.",
+        "Runtime rate-limit enforcement and real API receipt behavior remain unverified."
+      ],
+      "contract_pin": {
+        "version": "1.7.3",
+        "manifest_sources": [
+          "pyproject.toml",
+          "requirements.txt"
+        ],
+        "fixture_source": "official nonebot-adapter-qq 1.7.3 wheel extracted under /tmp; repository .venv unchanged"
+      }
     },
     {
       "platform": "开黑啦",
@@ -1463,28 +1556,41 @@
       "package_name": "nonebot-adapter-discord",
       "priority": "P1",
       "package_observation": {
-        "status": "not_installed",
-        "version": null,
-        "requires_python": null,
-        "source": "isolated execution environment importlib.metadata"
+        "status": "observed_installed",
+        "version": "1.1.10",
+        "requires_python": ">=3.10,<4.0",
+        "source": "Exact requirements-platform.lock wheel installed under /tmp only for fixtures; repository .venv remains unchanged."
       },
       "driver_requirements": {
-        "status": "not_assessed",
-        "observed": null,
-        "evidence": []
+        "status": "partial",
+        "observed": "Locked wheel documentation describes ForwardDriver with httpx and websockets; no runtime driver lifecycle or live connection was exercised.",
+        "evidence": [
+          "tests/platforms/test_discord_adapter.py"
+        ]
       },
-      "normalizer": null,
-      "exporter": null,
-      "target_codec": null,
-      "capability_provider": null,
+      "normalizer": "core.transport.adapters.discord.DiscordNormalizer",
+      "exporter": "core.transport.adapters.discord.DiscordExporter",
+      "target_codec": "core.transport.adapters.discord.DiscordTargetCodec",
+      "capability_provider": "core.transport.adapters.discord.DISCORD_CAPABILITIES via StaticCapabilityProvider",
       "scenarios": {
-        "status": "not_assessed",
-        "covered": [],
-        "evidence": []
+        "status": "partial",
+        "covered": [
+          "Guild text channel, one-to-one DM, and announcement/public/private thread event identities using locked adapter models plus an injected channel resolver",
+          "Different threads under one parent remain distinct and outbound targets preserve each exact thread channel ID",
+          "Missing guild/DM/message-content intents and missing channel metadata are rejected; group DMs remain unsupported",
+          "Unresolved same-channel reply relation, safe attachment type/MIME/size hints, and platform edit revision IDs",
+          "Exact send_to channel, literal markdown, empty allowed_mentions, fail-if-missing reply reference, and opaque response message ID",
+          "Permission rejection is FAILED with one attempt and no parent-channel fallback; long text is split at 1900 characters"
+        ],
+        "evidence": [
+          "tests/platforms/test_discord_adapter.py"
+        ]
       },
       "permissions": {
-        "status": "not_assessed",
-        "evidence": []
+        "status": "partial",
+        "evidence": [
+          "tests/platforms/test_discord_adapter.py::test_discord_exporter_permission_failure_is_definite_and_long_text_is_split"
+        ]
       },
       "send_windows": {
         "status": "not_assessed",
@@ -1502,48 +1608,61 @@
       },
       "levels": {
         "L0": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_discord_adapter.py"
+          ],
+          "reason": "The exact locked wheel imports from an isolated temporary target and its actual models pass fixtures; no driver startup was performed."
         },
         "L1": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "pass",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_discord_adapter.py"
+          ],
+          "reason": "DM, guild channel, and distinct thread IDs normalize through trusted metadata, and text/reply target fixtures preserve the exact channel; no live Discord exchange occurred."
         },
         "L2": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_discord_adapter.py"
+          ],
+          "reason": "Same-channel unresolved reply identity and safe attachment hints pass; message persistence, local relation resolution, and media retrieval are not exercised."
         },
         "L3": {
-          "local": "not_run",
-          "fixture": "not_run",
+          "local": "pass",
+          "fixture": "partial",
           "live": "not_run",
-          "evidence": [],
-          "reason": "No adapter-specific stage evidence was executed in WP11."
+          "evidence": [
+            "tests/platforms/test_discord_adapter.py"
+          ],
+          "reason": "Fake send_to covers exact text/reply target, mention suppression, message IDs, permission failure, and text splitting; live permissions, SEND_MESSAGES_IN_THREADS, send windows, and rate limits remain unverified."
         }
       },
       "final_status": "not_certified",
       "status_evidence": [
         {
           "kind": "execution_scope",
-          "result": "No live platform endpoint or account was used in this isolated local work package."
+          "result": "No live Discord account, credential, endpoint, production data, or runtime driver was used."
         },
         {
           "kind": "package_probe",
-          "result": "Package observation status: not_installed."
+          "result": "Exact locked wheel nonebot-adapter-discord==1.1.10 was installed under /tmp for fixtures only; repository .venv was not modified."
+        },
+        {
+          "kind": "local_fixture_scope",
+          "result": "L0 and L1 local/fixture pass; L2 and L3 fixture evidence is partial; all live levels remain not_run."
         }
       ],
       "blockers": [
-        "L0-L3 platform-specific certification is incomplete.",
-        "No live exchange, account recovery, or clean-VM installation was executed."
+        "The connection owner must provide a trusted channel resolver; production adapter/event wiring is not installed by this package.",
+        "No live exchange or runtime driver lifecycle was executed.",
+        "Actual bot permissions, private-thread visibility, SEND_MESSAGES_IN_THREADS, send windows, rate limits, and clean-VM installation remain unverified."
       ]
     },
     {

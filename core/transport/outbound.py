@@ -10,6 +10,7 @@ explicit Bot handle from the current trusted event or an exact BotRef binding.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -26,6 +27,7 @@ from core.transport.capabilities import (
 )
 from core.transport.media import MediaSource
 from core.transport.models import BotRef, SceneRef
+from core.transport.scheduler import OutboundSendScheduler, SchedulerAdmissionError
 
 
 class OutboundKind(str, Enum):
@@ -269,10 +271,13 @@ class OutboundPartResult:
     status: DeliveryStatus
     message_ids: tuple[str, ...] = ()
     error_code: str = ""
+    attempts: int = 1
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "status", DeliveryStatus(self.status))
         object.__setattr__(self, "message_ids", _opaque_ids(self.message_ids))
+        if isinstance(self.attempts, bool) or not isinstance(self.attempts, int) or self.attempts <= 0:
+            raise ValueError("outbound part attempts must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,10 +299,23 @@ class AdapterSendResult:
     status: DeliveryStatus
     message_ids: tuple[str, ...] = ()
     error_code: str = ""
+    retry_after_seconds: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "status", DeliveryStatus(self.status))
         object.__setattr__(self, "message_ids", _opaque_ids(self.message_ids))
+        retry_after = self.retry_after_seconds
+        if retry_after is not None:
+            if (
+                isinstance(retry_after, bool)
+                or not isinstance(retry_after, (int, float))
+                or not math.isfinite(retry_after)
+                or retry_after < 0
+            ):
+                raise ValueError("retry_after_seconds must be finite and non-negative")
+            if self.status is not DeliveryStatus.FAILED:
+                raise ValueError("retry_after_seconds is valid only for a definite failed send")
+            object.__setattr__(self, "retry_after_seconds", float(retry_after))
 
 
 def _opaque_ids(values: Any) -> tuple[str, ...]:
@@ -349,6 +367,7 @@ class TransportRegistry:
         self._exporters: dict[str, ExporterBinding] = {}
         self._bots: dict[str, tuple[BotRef, Any]] = {}
         self._connection_slots: dict[tuple[str, str], str] = {}
+        self._bot_generations: dict[str, int] = {}
 
     def register_exporter(
         self,
@@ -382,14 +401,38 @@ class TransportRegistry:
         existing = self._bots.get(bot_ref.connection_id)
         if existing is not None and existing[0] != bot_ref:
             raise ValueError("connection_id is already bound to a different BotRef")
+        if existing is not None and existing[1] is bot_handle:
+            return
         self._connection_slots[slot] = bot_ref.connection_id
         self._bots[bot_ref.connection_id] = (bot_ref, bot_handle)
+        self._bot_generations[bot_ref.connection_id] = (
+            self._bot_generations.get(bot_ref.connection_id, 0) + 1
+        )
 
     def resolve_bot(self, bot_ref: BotRef) -> Any | None:
         item = self._bots.get(bot_ref.connection_id)
         if item is None or item[0] != bot_ref:
             return None
         return item[1]
+
+    def resolve_bot_binding(self, bot_ref: BotRef) -> tuple[Any, int] | None:
+        """Return the exact current handle and its monotonically increasing generation."""
+        item = self._bots.get(bot_ref.connection_id)
+        if item is None or item[0] != bot_ref:
+            return None
+        return item[1], self._bot_generations[bot_ref.connection_id]
+
+    def unbind_bot(self, bot_ref: BotRef) -> bool:
+        """Remove only the matching binding and invalidate any queued generation."""
+        item = self._bots.get(bot_ref.connection_id)
+        if item is None or item[0] != bot_ref:
+            return False
+        del self._bots[bot_ref.connection_id]
+        self._connection_slots.pop((bot_ref.adapter, bot_ref.self_id), None)
+        self._bot_generations[bot_ref.connection_id] = (
+            self._bot_generations.get(bot_ref.connection_id, 0) + 1
+        )
+        return True
 
     def capabilities_for(self, target: DeliveryTarget) -> AdapterCapabilities | None:
         binding = self._exporters.get(target.bot.adapter)
@@ -435,8 +478,23 @@ def split_outbound_message(message: OutboundMessage, max_text_length: int | None
 
 
 class OutboundService:
-    def __init__(self, registry: TransportRegistry | None = None) -> None:
+    def __init__(
+        self,
+        registry: TransportRegistry | None = None,
+        *,
+        scheduler: OutboundSendScheduler | None = None,
+        max_rate_limit_retries: int = 2,
+    ) -> None:
         self.registry = registry or TransportRegistry()
+        if (
+            isinstance(max_rate_limit_retries, bool)
+            or not isinstance(max_rate_limit_retries, int)
+            or max_rate_limit_retries < 0
+            or max_rate_limit_retries > 5
+        ):
+            raise ValueError("max_rate_limit_retries must be between 0 and 5")
+        self.scheduler = scheduler or OutboundSendScheduler()
+        self.max_rate_limit_retries = max_rate_limit_retries
         if self.registry.binding_for("onebot-v11") is None:
             from core.transport.adapters.onebot_v11 import (
                 OneBotV11Exporter,
@@ -473,17 +531,12 @@ class OutboundService:
                 capabilities = capabilities.narrowed_by(instance_capabilities)
             except ValueError:
                 return DeliveryResult(target, DeliveryStatus.UNSUPPORTED, error_code="capability_identity_mismatch")
-        bot = bot_handle or self.registry.resolve_bot(target.bot)
-        if bot is None:
+
+        bot_binding = self.registry.resolve_bot_binding(target.bot)
+        if bot_handle is None and bot_binding is None:
             return DeliveryResult(target, DeliveryStatus.FAILED, error_code="exact_bot_binding_missing")
-        if str(getattr(bot, "self_id", "")) != target.bot.self_id:
+        if bot_handle is not None and str(getattr(bot_handle, "self_id", "")) != target.bot.self_id:
             return DeliveryResult(target, DeliveryStatus.UNSUPPORTED, error_code="bot_identity_mismatch")
-        adapter_getter = getattr(getattr(bot, "adapter", None), "get_name", None)
-        runtime_adapter = adapter_getter() if callable(adapter_getter) else ""
-        if isinstance(runtime_adapter, str) and runtime_adapter and (
-            _adapter_key(runtime_adapter) != _adapter_key(target.bot.adapter)
-        ):
-            return DeliveryResult(target, DeliveryStatus.UNSUPPORTED, error_code="adapter_identity_mismatch")
         allowed_scene = {
             "private": capabilities.private,
             "group": capabilities.group,
@@ -496,11 +549,6 @@ class OutboundService:
         elif not allowed_scene:
             return DeliveryResult(target, DeliveryStatus.UNSUPPORTED, error_code="scene_capability_missing")
 
-        try:
-            encoded_target = binding.target_codec.encode(target, bot_handle=bot)
-        except Exception:
-            return DeliveryResult(target, DeliveryStatus.UNSUPPORTED, error_code="target_codec_rejected")
-
         projected, error = _apply_capabilities(message, capabilities, target.bot.adapter)
         if error:
             return DeliveryResult(target, DeliveryStatus.UNSUPPORTED, error_code=error)
@@ -508,54 +556,166 @@ class OutboundService:
         parts: list[OutboundPartResult] = []
         message_ids: list[str] = []
         deadline_error = ""
-        for index, part in enumerate(physical_messages):
-            if deadline is not None:
-                from gravitas.deadlines import raise_if_expired
-                from gravitas.errors import DeadlineExceeded
 
-                try:
-                    raise_if_expired(deadline, phase="send.physical")
-                except DeadlineExceeded:
-                    if not parts:
-                        return DeliveryResult(
-                            target, DeliveryStatus.EXPIRED,
-                            error_code="turn_deadline",
-                        )
-                    deadline_error = "turn_deadline"
-                    break
+        def current_bot() -> tuple[Any | None, str]:
+            latest = self.registry.resolve_bot_binding(target.bot)
+            if bot_binding is None:
+                return bot_handle, ""
+            if latest is None or latest[1] != bot_binding[1]:
+                return None, "exact_bot_binding_stale"
+            if bot_handle is not None and latest[0] is not bot_handle:
+                return None, "exact_bot_binding_stale"
+            return (bot_handle if bot_handle is not None else latest[0]), ""
+
+        async def deliver(reserve_part, effective_deadline) -> DeliveryResult:
+            nonlocal deadline_error
+            bot, bot_error = current_bot()
+            if bot_error:
+                return DeliveryResult(target, DeliveryStatus.FAILED, error_code=bot_error)
+            if bot is None:
+                return DeliveryResult(target, DeliveryStatus.FAILED, error_code="exact_bot_binding_missing")
+            adapter_getter = getattr(getattr(bot, "adapter", None), "get_name", None)
+            runtime_adapter = adapter_getter() if callable(adapter_getter) else ""
+            if isinstance(runtime_adapter, str) and runtime_adapter and (
+                _adapter_key(runtime_adapter) != _adapter_key(target.bot.adapter)
+            ):
+                return DeliveryResult(target, DeliveryStatus.UNSUPPORTED, error_code="adapter_identity_mismatch")
             try:
-                result = await binding.exporter.send(
-                    target, part, bot_handle=bot, capabilities=capabilities,
-                    encoded_target=encoded_target,
-                )
-            except TimeoutError:
-                result = AdapterSendResult(DeliveryStatus.UNKNOWN, error_code="send_timeout")
+                encoded_target = binding.target_codec.encode(target, bot_handle=bot)
             except Exception:
-                # Unless the adapter says it rejected the request, a failure after
-                # entering send is ambiguous and must never trigger an automatic retry.
-                result = AdapterSendResult(DeliveryStatus.UNKNOWN, error_code="send_result_unknown")
-            part_result = OutboundPartResult(index, result.status, result.message_ids, result.error_code)
-            parts.append(part_result)
-            for message_id in result.message_ids:
-                if message_id not in message_ids:
-                    message_ids.append(message_id)
-            if result.status is not DeliveryStatus.ACCEPTED:
-                break
-        statuses = [part.status for part in parts]
-        if (
-            statuses
-            and len(parts) == len(physical_messages)
-            and all(status is DeliveryStatus.ACCEPTED for status in statuses)
-        ):
-            status = DeliveryStatus.ACCEPTED
-        elif any(status is DeliveryStatus.ACCEPTED for status in statuses):
-            status = DeliveryStatus.PARTIAL
-        else:
-            status = statuses[-1] if statuses else DeliveryStatus.FAILED
-        error_code = deadline_error or next(
-            (part.error_code for part in reversed(parts) if part.error_code), ""
-        )
-        return DeliveryResult(target, status, tuple(message_ids), tuple(parts), error_code)
+                return DeliveryResult(target, DeliveryStatus.UNSUPPORTED, error_code="target_codec_rejected")
+
+            for index, part in enumerate(physical_messages):
+                attempts = 0
+                part_ids: list[str] = []
+                retry_after = 0.0
+                last_result: AdapterSendResult | None = None
+                while True:
+                    try:
+                        await reserve_part(wait_before_seconds=retry_after)
+                    except SchedulerAdmissionError as exc:
+                        if last_result is not None:
+                            parts.append(OutboundPartResult(
+                                index,
+                                DeliveryStatus.FAILED,
+                                tuple(part_ids),
+                                f"{last_result.error_code or 'rate_limited'}_retry_not_sent",
+                                attempts,
+                            ))
+                        elif not parts:
+                            status = (
+                                DeliveryStatus.EXPIRED
+                                if exc.error_code in {"turn_deadline", "send_window_expired"}
+                                else DeliveryStatus.FAILED
+                            )
+                            return DeliveryResult(target, status, error_code=exc.error_code)
+                        deadline_error = exc.error_code
+                        break
+
+                    bot, bot_error = current_bot()
+                    if bot_error or bot is None:
+                        code = bot_error or "exact_bot_binding_missing"
+                        parts.append(OutboundPartResult(
+                            index, DeliveryStatus.FAILED, error_code=code, attempts=max(1, attempts)
+                        ))
+                        break
+                    attempts += 1
+                    response: list[AdapterSendResult] = []
+                    try:
+                        async def send_call(
+                            current_part=part,
+                            current_bot_handle=bot,
+                            response_holder=response,
+                        ):
+                            result = await binding.exporter.send(
+                                target,
+                                current_part,
+                                bot_handle=current_bot_handle,
+                                capabilities=capabilities,
+                                encoded_target=encoded_target,
+                            )
+                            response_holder.append(result)
+                            return result
+                        if effective_deadline is None:
+                            result = await send_call()
+                        else:
+                            from gravitas.deadlines import run_with_deadline
+
+                            result = await run_with_deadline(
+                                send_call, effective_deadline, phase="send.physical"
+                            )
+                    except TimeoutError:
+                        result = AdapterSendResult(DeliveryStatus.UNKNOWN, error_code="send_timeout")
+                    except Exception as exc:
+                        from gravitas.errors import DeadlineExceeded
+
+                        if isinstance(exc, DeadlineExceeded) and response:
+                            result = response[-1]
+                        else:
+                            result = AdapterSendResult(
+                                DeliveryStatus.UNKNOWN,
+                                error_code=("send_deadline_unknown" if isinstance(exc, DeadlineExceeded)
+                                            else "send_result_unknown"),
+                            )
+                    for message_id in result.message_ids:
+                        if message_id not in part_ids:
+                            part_ids.append(message_id)
+                        if message_id not in message_ids:
+                            message_ids.append(message_id)
+                    retryable = (
+                        result.status is DeliveryStatus.FAILED
+                        and not result.message_ids
+                        and result.retry_after_seconds is not None
+                        and result.error_code.lower() in {
+                            "429", "http_429", "rate_limited", "rate_limit_exceeded"
+                        }
+                    )
+                    if retryable and attempts <= self.max_rate_limit_retries:
+                        last_result = result
+                        retry_after = result.retry_after_seconds or 0.0
+                        continue
+                    parts.append(OutboundPartResult(
+                        index, result.status, tuple(part_ids), result.error_code, attempts
+                    ))
+                    break
+                if not parts or parts[-1].part_index != index:
+                    break
+                if parts[-1].status is not DeliveryStatus.ACCEPTED:
+                    break
+
+            statuses = [part.status for part in parts]
+            if (
+                statuses
+                and len(parts) == len(physical_messages)
+                and all(status is DeliveryStatus.ACCEPTED for status in statuses)
+            ):
+                status = DeliveryStatus.ACCEPTED
+            elif any(status is DeliveryStatus.ACCEPTED for status in statuses):
+                status = DeliveryStatus.PARTIAL
+            elif statuses:
+                status = statuses[-1]
+            else:
+                status = DeliveryStatus.FAILED
+            error_code = deadline_error or next(
+                (part.error_code for part in reversed(parts) if part.error_code), ""
+            )
+            return DeliveryResult(target, status, tuple(message_ids), tuple(parts), error_code)
+
+        try:
+            return await self.scheduler.run(
+                target,
+                capabilities.quota_buckets(),
+                deadline=deadline,
+                send_window_seconds=capabilities.send_window_seconds,
+                operation=deliver,
+            )
+        except SchedulerAdmissionError as exc:
+            status = (
+                DeliveryStatus.EXPIRED
+                if exc.error_code in {"turn_deadline", "send_window_expired"}
+                else DeliveryStatus.FAILED
+            )
+            return DeliveryResult(target, status, error_code=exc.error_code)
 
 
 def _adapter_key(value: str) -> str:

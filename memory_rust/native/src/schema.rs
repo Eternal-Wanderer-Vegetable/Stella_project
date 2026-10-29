@@ -8,7 +8,8 @@ pub const BACKEND_API_VERSION: u32 = 4;
 // 抬本合同号并重编译（见 memory_rust/backend.py MEMORY_SCHEMA_VERSION）。
 // v21 增加 opaque platform_message_id / subject_key；旧扩展不得读新库。
 // v22 增加可信连接与身份作用域；合同继续严格相等，旧扩展拒载新库。
-pub const MEMORY_SCHEMA_VERSION: i64 = 22;
+// v23 增加追加式 transport message events/parts/relations；旧扩展拒载新库。
+pub const MEMORY_SCHEMA_VERSION: i64 = 23;
 
 pub fn ensure_supported(conn: &Connection) -> Result<(), String> {
     let table_exists = conn
@@ -52,10 +53,10 @@ mod tests {
         let conn = Connection::open_in_memory().expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 22);",
+             INSERT INTO schema_meta (k, version) VALUES ('version', 23);",
         )
         .expect("schema");
-        assert_eq!(MEMORY_SCHEMA_VERSION, 22);
+        assert_eq!(MEMORY_SCHEMA_VERSION, 23);
         assert!(ensure_supported(&conn).is_ok());
     }
 
@@ -64,11 +65,11 @@ mod tests {
         let conn = Connection::open_in_memory().expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 21);",
+             INSERT INTO schema_meta (k, version) VALUES ('version', 22);",
         )
         .expect("schema");
         assert!(ensure_supported(&conn)
             .unwrap_err()
-            .contains("expected 22, got 21"));
+            .contains("expected 23, got 22"));
     }
 }
