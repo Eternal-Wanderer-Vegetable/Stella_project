@@ -30,6 +30,10 @@
 检查函数的判据与 ai_gateway 的实际行为保持一致（例如人格文件缺失在代码里只是 warning，
 doctor 也就报 warn），避免「明明能跑却提示 error」。
 
+Corona 托管模式下，设置页 doctor 会把 ready 核心正在使用的同一 `HOST/PORT` 识别为托管监听，
+不再误报为外部端口冲突；目标配置或端口与当前实例不一致时仍保留检查结果。独立模式的
+`python -m deploy doctor` 继续检查启动前的端口可用性。
+
 当 `STELLA_ADAPTER_MODULES` 未启用 `nonebot.adapters.onebot.v11` 时，Doctor 会将
 OneBot 模式、端点、反向端口、正向连接和 token 检查标为不适用并跳过；因此
 `deploy start` 不会因 NapCat 未配置而阻止非 QQ Bot 启动。未设置该项时仍按默认

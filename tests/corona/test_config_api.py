@@ -148,6 +148,125 @@ def _app(
     )
 
 
+def _doctor_port_report(port: int) -> dict:
+    return {
+        "version": 1,
+        # The CLI summary includes all 38 checks, while its items list only
+        # includes findings. Keep passing entries implicit as in production.
+        "summary": {"ok": 36, "warn": 1, "error": 1, "blocking": True, "total": 38},
+        "items": [
+            {
+                "id": "onebot_port",
+                "level": "error",
+                "title": "反向 WS 端口被其他程序占用",
+                "detail": f"端口 {port} 无法 bind，且 Stella 的状态接口不可达。",
+                "fix_hint": "检查端口占用者",
+            }
+        ],
+    }
+
+
+def _doctor_headers(client: TestClient) -> dict[str, str]:
+    setup = client.post(
+        "/api/v1/auth/setup",
+        json={"username": "admin", "password": "cn05-doctor-test-password"},
+    )
+    assert setup.status_code == 200
+    return {"Authorization": f"Bearer {setup.json()['data']['token']}"}
+
+
+def test_managed_doctor_reframes_corona_owned_reverse_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, _store, _supervisor = _app(tmp_path)
+
+    async def fake_doctor(*, reframe_embedded_bot_port: bool = True) -> dict:
+        assert reframe_embedded_bot_port is False
+        report = _doctor_port_report(18765)
+        return {"ok": False, "report": report, "summary": report["summary"], "exit_code": 1}
+
+    monkeypatch.setattr("webui.services.system.run_doctor", fake_doctor)
+    with TestClient(app) as client:
+        headers = _doctor_headers(client)
+        response = client.get("/api/v1/system/doctor", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    port_item = next(item for item in data["report"]["items"] if item["id"] == "onebot_port")
+    assert port_item["level"] == "ok"
+    assert "由 Stella 托管" in port_item["title"]
+    assert "fix_hint" not in port_item
+    assert data["summary"] == {
+        "ok": 41,
+        "warn": 1,
+        "error": 0,
+        "blocking": False,
+        "total": 42,
+    }
+    assert data["ok"] is True
+
+
+def test_managed_doctor_keeps_error_when_desired_port_differs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, store, _supervisor = _app(tmp_path)
+    store.save(
+        {"PORT": "18766"},
+        expected_revision=store.state().desired_revision,
+        idempotency_key="doctor-pending-port-change",
+    )
+
+    async def fake_doctor(*, reframe_embedded_bot_port: bool = True) -> dict:
+        assert reframe_embedded_bot_port is False
+        report = _doctor_port_report(18766)
+        return {"ok": False, "report": report, "summary": report["summary"], "exit_code": 1}
+
+    monkeypatch.setattr("webui.services.system.run_doctor", fake_doctor)
+    with TestClient(app) as client:
+        headers = _doctor_headers(client)
+        response = client.get("/api/v1/system/doctor", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    port_item = next(item for item in data["report"]["items"] if item["id"] == "onebot_port")
+    assert port_item["level"] == "error"
+    assert data["summary"]["error"] == 1
+    assert data["summary"]["blocking"] is True
+    assert data["ok"] is False
+
+
+def test_managed_doctor_keeps_error_when_core_health_probe_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, _store, supervisor = _app(tmp_path)
+
+    async def core_unreachable() -> bool:
+        return False
+
+    supervisor.core_reachable = core_unreachable
+
+    async def fake_doctor(*, reframe_embedded_bot_port: bool = True) -> dict:
+        assert reframe_embedded_bot_port is False
+        report = _doctor_port_report(18765)
+        return {"ok": False, "report": report, "summary": report["summary"], "exit_code": 1}
+
+    monkeypatch.setattr("webui.services.system.run_doctor", fake_doctor)
+    with TestClient(app) as client:
+        headers = _doctor_headers(client)
+        response = client.get("/api/v1/system/doctor", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    port_item = next(item for item in data["report"]["items"] if item["id"] == "onebot_port")
+    core_item = next(item for item in data["report"]["items"] if item["id"] == "corona_core")
+    assert port_item["level"] == "error"
+    assert core_item["level"] == "error"
+    assert data["summary"]["error"] == 2
+    assert data["ok"] is False
+
+
 def test_corona_config_api_auth_revision_redaction_and_sse(tmp_path: Path) -> None:
     app, _store, supervisor = _app(tmp_path)
     with TestClient(app) as client:
