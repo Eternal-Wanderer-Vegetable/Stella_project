@@ -28,6 +28,8 @@
 Layers: `probe` collects data (with side effects) -> `checks` makes decisions (pure functions, the testing focus) -> `report` renders the result.
 The criteria used by check functions stay consistent with the actual behavior of ai_gateway (for example, a missing persona file is only a warning in the code, so doctor also reports a warning), avoiding "it runs fine but reports an error" situations.
 
+In Corona-managed mode, Settings doctor recognizes the same `HOST/PORT` as the managed listener when the core is ready, so it does not report that listener as an external port conflict. It keeps the finding when the target configuration or port differs from the running instance. Standalone `python -m deploy doctor` continues to check port availability before startup.
+
 When `STELLA_ADAPTER_MODULES` does not enable `nonebot.adapters.onebot.v11`, Doctor
 marks the OneBot mode, endpoint, reverse-port, forward-connection, and token checks
 as not applicable and skips them. `deploy start` can therefore start a non-QQ Bot

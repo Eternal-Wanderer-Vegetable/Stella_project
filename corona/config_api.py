@@ -13,12 +13,14 @@ import ipaddress
 import json
 import math
 import os
+import re
 import time
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 from io import StringIO
 from typing import Annotated, Any
 
+from dotenv import dotenv_values
 from dotenv.parser import parse_stream
 from fastapi import APIRouter, Body, Depends, Request, Response
 from fastapi.responses import StreamingResponse
@@ -691,16 +693,24 @@ async def control_status(
 @router.get("/api/v1/system/doctor")
 async def system_doctor(request: Request) -> Any:
     store = _store(request)
-    snapshot = request.app.state.supervisor.snapshot
+    supervisor = request.app.state.supervisor
+    snapshot = supervisor.snapshot
     state = store.state()
     core_phase = getattr(snapshot, "phase", "unknown")
+    core_ready = core_phase == "ready"
+    checker = getattr(supervisor, "core_reachable", None)
+    if core_ready and checker is not None:
+        try:
+            core_ready = bool(await checker())
+        except Exception:
+            core_ready = False
     checks = [
         {"name": "control_store", "ok": True, "fix_hint": None},
         {
             "name": "core",
-            "ok": core_phase == "ready",
+            "ok": core_ready,
             "fix_hint": None
-            if core_phase == "ready"
+            if core_ready
             else "检查核心状态或重新应用当前配置",
         },
         {
@@ -720,7 +730,12 @@ async def system_doctor(request: Request) -> Any:
     ]
     labels = {
         "control_store": ("控制面配置存储", "控制面配置存储可读取。"),
-        "core": ("Stella 核心状态", f"核心当前阶段：{core_phase}。"),
+        "core": (
+            "Stella 核心状态",
+            f"核心当前阶段：{core_phase}。"
+            if core_ready
+            else f"核心当前阶段：{core_phase}，健康探测未通过。",
+        ),
         "desired_applied_revision": (
             "配置应用状态",
             "目标配置已应用。"
@@ -756,6 +771,14 @@ async def system_doctor(request: Request) -> Any:
     report = result.get("report")
     if not isinstance(report, dict):
         report = {"version": 1, "items": [], "summary": {}}
+    _reframe_managed_onebot_port(
+        report,
+        store=store,
+        state=state,
+        snapshot=snapshot,
+        supervisor=supervisor,
+        core_ready=core_ready,
+    )
     items = report.get("items")
     if not isinstance(items, list):
         items = []
@@ -797,6 +820,108 @@ async def system_doctor(request: Request) -> Any:
     result["checks"] = checks
     result["ok"] = not summary["blocking"] and summary["error"] == 0
     return ok(result)
+
+
+def _reframe_managed_onebot_port(
+    report: dict[str, Any],
+    *,
+    store: ConfigStore,
+    state: Any,
+    snapshot: Any,
+    supervisor: Any,
+    core_ready: bool,
+) -> None:
+    """Treat Corona's own ready listener as expected in the managed doctor.
+
+    The CLI bind check is meant for a pre-start standalone Bot. In a managed
+    launch Corona owns the public listener and proxies the OneBot websocket to
+    the ready Nucleus core. Only reframe the finding when the applied core and
+    the current desired/.env listener settings all identify that exact host and
+    port; a pending port change or a different process must remain visible.
+    """
+    if not core_ready or getattr(snapshot, "phase", None) != "ready":
+        return
+    applied_revision = str(getattr(state, "applied_revision", "") or "")
+    if not applied_revision or getattr(snapshot, "revision_id", None) != applied_revision:
+        return
+
+    bootstrap = getattr(supervisor, "bootstrap", None)
+    bootstrap_revision = getattr(bootstrap, "revision", None)
+    if getattr(bootstrap_revision, "revision_id", None) != applied_revision:
+        return
+
+    try:
+        desired, _ = store.get_revision(str(state.desired_revision))
+        applied, _ = store.get_revision(applied_revision)
+        env_values = dotenv_values(store.env_path)
+        actual_host = ipaddress.ip_address(str(bootstrap.public_host)).compressed
+        actual_port = int(bootstrap.public_port)
+        if not 1 <= actual_port <= 65535:
+            return
+
+        configured_listeners = (
+            env_values,
+            desired.values,
+            applied.values,
+        )
+        for values in configured_listeners:
+            host = str(values.get("HOST") or "127.0.0.1").strip() or "127.0.0.1"
+            port = int(str(values.get("PORT") or "8080").strip() or "8080")
+            if (
+                ipaddress.ip_address(host).compressed != actual_host
+                or port != actual_port
+            ):
+                return
+    except (OSError, TypeError, ValueError, ConfigStoreError):
+        return
+
+    items = report.get("items")
+    if not isinstance(items, list):
+        return
+    changed = False
+    level_deltas = {"ok": 0, "warn": 0, "error": 0}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if item.get("id") != "onebot_port" or item.get("level") not in {"error", "warn"}:
+            continue
+        match = re.search(r"端口\s*(\d+)", str(item.get("detail") or ""))
+        if match is None or int(match.group(1)) != actual_port:
+            continue
+        level_deltas[item["level"]] -= 1
+        level_deltas["ok"] += 1
+        item["level"] = "ok"
+        item["title"] = "反向 WS 端口由 Stella 托管（正常）"
+        item["detail"] = (
+            "当前 Corona 控制面监听该端口并代理至 ready 的 Stella 核心；"
+            "运行中的托管监听不属于外部端口冲突。"
+        )
+        item.pop("fix_hint", None)
+        changed = True
+
+    if changed:
+        _adjust_doctor_summary(report, level_deltas)
+
+
+def _adjust_doctor_summary(
+    report: dict[str, Any], level_deltas: dict[str, int]
+) -> None:
+    """Apply visible item changes while preserving doctor.checks.total_checks().
+
+    The deploy doctor summary counts every registered check, but its ``items``
+    list contains only non-passing findings. Recounting from that sparse list
+    would silently drop the passing checks from the GUI total.
+    """
+    summary = report.get("summary")
+    summary = dict(summary) if isinstance(summary, dict) else {}
+    for level, delta in level_deltas.items():
+        try:
+            current = int(summary.get(level, 0))
+        except (TypeError, ValueError):
+            current = 0
+        summary[level] = max(0, current + delta)
+    summary["blocking"] = summary["error"] > 0
+    report["summary"] = summary
 
 
 async def _core_operation(request: Request, kind: str, auth: AuthContext) -> Any:
