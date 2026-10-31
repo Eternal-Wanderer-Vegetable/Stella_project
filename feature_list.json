@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-26",
+  "updated_at": "2026-10-31",
   "active_feature": "XPLAT-PIPELINE-IMPLEMENTATION",
   "features": [
     {
@@ -2105,6 +2105,32 @@
           "report": "docs/reports/2026-10-26-xplat-p10-validation.md"
         }
       ]
+    },
+    {
+      "id": "MBENCH-002",
+      "name": "公开数据集记忆系统基准评测（LoCoMo 端到端 + PersonaMem 全量对照）",
+      "description": "按 SMB 讨论结论建立 memory_eval 评测包：隔离回放真实摄入/检索/作答/judge 全链路；LoCoMo 10 段 196 QA 上界测量、PersonaMem-v2 全量 5000 例四模式对照、live 整合漏斗与三组分解实验。",
+      "status": "done",
+      "dependencies": [
+        "MBENCH-001"
+      ],
+      "scope": [
+        "memory_eval/ 评测包（isolation/oracle/inject/answer/judge/metrics/report/runner/CLI）",
+        "scripts/fetch_locomo.py + scripts/adapt_locomo.py（pin+sha256，数据不入库）",
+        "tests/test_memory_eval.py（12 用例，假后端零网络）",
+        "docs/reports/2026-10-31-locomo-memory-benchmark.md(.en) + evidence manifest"
+      ],
+      "done_criteria": [
+        "memory_eval 单测全绿且 ruff/check_docs 门禁通过",
+        "LoCoMo 上界配置全量 10 段运行完成并产出带运行指纹的报告",
+        "PersonaMem-v2 全量 5000 例四模式 matrix 完成并归档",
+        "live 整合漏斗（真实 Strata 写侧）完成并给出 accepted/晋升计数",
+        "分解实验（pack-mode/阈值/排序定位）完成且结论可复现",
+        "端点缺失或未做的维度在报告中明确 NOT READY"
+      ],
+      "acceptance": "LoCoMo 上界 J-accuracy 18.9%（196 QA，judge=answer=qwen3.8-flash@8081）；PersonaMem 全量四模式 5000/5000、forbidden 0；live 漏斗 188 候选/0 accepted/0 晋升（合同句型覆盖 17/5882=0.29% 为瓶颈）；分解实验证明排序（非阈值/limit）是检索主约束。",
+      "evidence": "docs/reports/evidence/memory-benchmark-locomo/",
+      "branch": "codex/memory-benchmark"
     }
   ]
 }

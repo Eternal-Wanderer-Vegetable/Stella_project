@@ -1,4 +1,13 @@
-## Current Handoff — outbound logging and PR #124 review (2026-10-29)
+## Current Handoff — memory benchmark MBENCH-002 (2026-10-31)
+
+- Status: **done（基线测量）** on `codex/memory-benchmark`（基于 cf63061，含 outbound-send-logging 的 4 个未合并提交；outbound 合并 main 后如需可 rebase，纯增量改动冲突风险极低）。报告：`docs/reports/2026-10-31-locomo-memory-benchmark.md`（.en 同）；证据：`docs/reports/evidence/memory-benchmark-locomo/`。
+- 交付物：`memory_eval/` 包（隔离回放/oracle/inject/answer/judge/metrics/report/CLI，checkpoint 续跑）、`scripts/fetch_locomo.py` + `adapt_locomo.py`、`tests/test_memory_eval.py`（12 passed）。feature MBENCH-002 已登记 done。
+- 关键数字：LoCoMo 上界（oracle+gold 注入）196 QA J-accuracy 18.9%（adversarial 70%）；live 漏斗 188 候选/0 accepted/0 晋升（合同句型覆盖 0.29% 为写侧瓶颈）；PersonaMem-v2 全量四模式 5000/5000、forbidden 0；分解实验证明检索排序（非阈值/limit）是主约束。
+- Restartable（下一会话可续）：① 全量 1986 QA 复跑——命令：`python -m memory_eval --data-dir memory/benchmark/_public/locomo/adapted --workdir E:/stella/runs/memory-eval/locomo-full-qa --stage all --mode hybrid --qa-sample 0 --consolidation oracle --inject-gold --llm-base-url http://127.0.0.1:8081/v1 --llm-model qwen3.8-flash-next-iq2_xs --embedding-model text-embedding-qwen3-embedding-0.6b --resume`（实测 ~40min/196 题）；② 检索排序校准实验（QA 感知 sem 权重）；③ 中文翻译对照集。模型前置条件：Strata 8081 在线（qwen3.8-flash-next-iq2_xs）+ LM Studio 1234 的 text-embedding-qwen3-embedding-0.6b（TTL 60m 会自动卸载，按需 JIT 重载）。
+- 数据位置：`memory/benchmark/_public/{locomo,personamem}/`（gitignored，fetch 脚本可重建）；运行目录 `E:/stella/runs/memory-eval/`（repo 外）。评测不触生产库；评测进程 STELLA_HOME 指向 workdir 隔离目录。
+- Gates 本轮：`tests/test_memory_eval.py` 12 passed；`ruff check .` 全清；`check_docs.py` 通过；`detect-changes --scope all` 的 CRITICAL 来自出站会话既有未提交改动（非本轮文件），不豁免。
+
+## Previous Handoff — outbound logging and PR #124 review (2026-10-29)
 
 - Status: payload-free outbound logging is committed as `838819c` on `codex/outbound-send-logging`; PR #125 is open at [Eternal-Wanderer-Vegetable/Stella_project#125](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/125), head `00cc9c0`. PR #124 is merged at `871671c3a4c636aac9e310029d969bb1f6817c02`. Its runtime acceptance gap is **SKIPPED / NOT VERIFIED** per user instruction because no objective validation conditions are currently available. Keep `XPLAT-PIPELINE-IMPLEMENTATION` blocked / NOT READY.
 - Files/evidence: `core/transport/outbound.py`, `tests/test_transport_outbound.py`, and bilingual troubleshooting docs are in commit `838819c`. Targeted outbound tests: 14 passed; repository Ruff, docs (121 / 1,327 / 577 / 0), and message-flow check passed. Available Windows full suite: 4,245 passed / 23 skipped / 5 failed; four failures are existing Starlette `TestClient(client=...)` compatibility issues and one is Windows symlink behavior, outside this patch.
