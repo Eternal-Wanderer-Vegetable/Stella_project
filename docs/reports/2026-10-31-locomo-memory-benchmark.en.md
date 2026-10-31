@@ -133,3 +133,46 @@ Conclusions (quantified answer to Result 4):
 2. **Recency is a net harm for QA retrieval**: zeroing rec alone yields the best of all hypotheses (top3 38.4%, +21.5pp).
 3. **ctx carries real signal** (removing it drops to 26.5%); no_recency and sem_only being identical shows that on this corpus ctx/usg/conf/imp contribute nothing to *ordering* (injected rows share conf/imp; ctx behaves as a query-level constant) — the effective dimensions are sem and rec only.
 4. **Rank-only ceiling**: even the best re-weighting reaches 66.2% at top10, and the production pack (threshold+limit) stays 44/302 (14.6%) because the pack is effectively top-3. Converting top5/top10 recall into usable packs requires **both** a QA-aware mode (sem-dominant, rec→0) **and** a larger limit / lower threshold — the productionization direction for a "QA retrieval mode", to be validated end-to-end.
+
+---
+
+## Addendum (late same day): full 1,986-QA run complete + Chinese contrast set milestone 1
+
+This section **supersedes** the "Next-1 / Next-2 not done" statements above (the original 196-question sampled record is kept as process evidence).
+
+### Full 1,986 QA (oracle write side + gold injection upper bound)
+
+Three parallel workers (`--conversations-from` range split, shared workdir, per-scenario isolation) finished in ~3.5 hours with zero errors:
+
+| Category | n | J-accuracy |
+| --- | --- | --- |
+| adversarial (should abstain) | 446 | **80.9%** |
+| open_domain_knowledge | 841 | 12.7% |
+| multi_hop | 321 | 0.9% |
+| single_hop | 282 | 2.1% |
+| temporal_reasoning | 96 | 0.0% |
+| **overall** | **1,986** | **24.0%** |
+
+- 15 unparseable / 0 errors; per-conversation accuracy 19.4%–30.6%; pack averages 2.28 memories / 440 chars.
+- The full-population number is 5.1pp above the 196-question sample (18.9%), mainly from open_domain (12.7%) and adversarial (80.9%) regressing with larger samples.
+- The judging protocol was uniform throughout (thinking judge, temperature 0); the `/no_think` soft switch proved ineffective on this model (latency unchanged) but verdict agreement was 18/18 — kept as a future speedup option.
+
+### Chinese contrast set milestone 1 (`scripts/adapt_locomo_zh.py`, protocol locomo-zh-v1)
+
+conv-26 + conv-30 session-by-session translation (788 messages, cache resumable per dia_id), live consolidation funnel:
+
+| | English (same conversations) | Chinese |
+| --- | --- | --- |
+| messages | 788 | 788 |
+| candidates | same order of magnitude (188+161) | **350** (extraction rate 44%, matching English) |
+| accepted evidence | 0 | 0 (1 CONFIRMED by status) |
+| **promoted memories** | **0** | **1** ("我喜欢古典音乐", a genuine preference) |
+| contract pattern coverage | 17/5,882 (0.29%) | **15/788 (1.9%)** |
+
+Conclusion: **the evidence contract's narrow-pattern bottleneck is language-independent** — natural Chinese likewise almost never produces complete stereotyped "我住在X / 我喜欢X" forms. Two noteworthy details: ① Chinese coverage (1.9%) is ~6x the English rate (0.29%) but the samples include **semantic false positives** (e.g., "我喜欢**你**用艺术讲述自己的故事" praises the other person, mechanically matched by the pattern); ② the single promoted Chinese memory is a genuine preference. This is direct evidence that pattern expansion must introduce semantic constraints at the same time.
+
+### Implications for the next phase
+
+- Retrieval side: ranking calibration (previous section) + a QA mode (sem-dominant, rec→0, larger limit) is the shortest path from the 24% upper bound upward.
+- Write side: the pattern-expansion assessment (Next-4) now has a **bilingual baseline**: EN 0.29% / ZH 1.9%, with the comparison protocol ready.
+- Chinese end-to-end (milestone 2: QA translation + full chain) data is ready (`adapted-zh` scenarios + conv-30 funnel); the next session can continue directly.

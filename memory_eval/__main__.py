@@ -41,6 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
                         default="auto",
                         help="检索用法模式：auto=生产自动分类；conflict=limit10 检索友好对照")
     parser.add_argument("--conversations", type=int, default=0, help="只跑前 N 段（0=全部）")
+    parser.add_argument("--conversations-from", type=int, default=1,
+                        help="从第 N 段开始跑（1-based，含）；与 --conversations 组合可拆"
+                             "多个不相交区间并行 worker（共享同一 workdir，按场景子目录隔离）")
     parser.add_argument("--qa-sample", type=int, default=0, help="每类别抽样 N 题（0=全量）")
     parser.add_argument("--seed", type=int, default=20261031, help="抽样种子")
     parser.add_argument("--resume", action="store_true", help="复用 workdir 内已完成的进度")

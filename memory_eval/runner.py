@@ -128,6 +128,8 @@ async def run(args: Any) -> int:
     from memory_eval.report import build_run_meta, write_report
 
     scenarios = load_scenarios(Path(args.data_dir), limit=args.conversations)
+    start_from = max(1, int(getattr(args, "conversations_from", 1) or 1))
+    scenarios = scenarios[start_from - 1 :]
     if not scenarios:
         print("❌ 没有可用的场景（检查 --data-dir / --conversations）")
         return 1
