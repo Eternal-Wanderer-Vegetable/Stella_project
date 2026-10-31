@@ -112,3 +112,24 @@ Single-variable contrasts on the smoke set (2 conversations / 18 QA / gold injec
 3. Retrieval ranking calibration for QA-style queries (direct follow-up to Result 4).
 4. Evidence-contract pattern coverage expansion assessment (the P1 direction from the Hy-Memory discussion; separate topic).
 5. PersonaMem Chinese contrast set and the 32k/128k chat-history rows (deferred from MBENCH-001).
+
+---
+
+## Addendum (same day): Next-3 ranking calibration study completed
+
+New `memory_eval/ranking_study.py` reconstructs unweighted features from the weighted score parts in `trace.ranked_all` (`sem_parts / 0.35` etc.) and re-ranks the same candidate pools under five weight hypotheses **without touching production code**. Scope: all 302 answerable questions of conv-26+30 (gold-injected DBs); the embedding channel was live throughout (10,700/10,700 rows carried sem parts, no fallback). Evidence: `ranking-study-302q.json`.
+
+| Weight hypothesis | top3 | top5 | top10 | mean best-evidence rank |
+| --- | --- | --- | --- | --- |
+| production (ctx.25/usg.20/sem.35/rec.10) | 16.9% | 24.5% | 40.1% | 11.68 |
+| qa_sem_heavy (sem .70) | 33.1% | 44.4% | 61.9% | 6.40 |
+| **no_recency (rec→0, sem .45)** | **38.4%** | **48.0%** | **66.2%** | **5.61** |
+| no_ctx (ctx→0) | 26.5% | 34.4% | 53.3% | 8.22 |
+| sem_only | 38.4% | 48.0% | 66.2% | 5.61 |
+
+Conclusions (quantified answer to Result 4):
+
+1. **The semantic channel carries signal that the weight mix buries**: sem-dominant weights (qa_sem_heavy) double top3 from 16.9% to 33.1% and halve the mean best-evidence rank (11.68 → 6.40).
+2. **Recency is a net harm for QA retrieval**: zeroing rec alone yields the best of all hypotheses (top3 38.4%, +21.5pp).
+3. **ctx carries real signal** (removing it drops to 26.5%); no_recency and sem_only being identical shows that on this corpus ctx/usg/conf/imp contribute nothing to *ordering* (injected rows share conf/imp; ctx behaves as a query-level constant) — the effective dimensions are sem and rec only.
+4. **Rank-only ceiling**: even the best re-weighting reaches 66.2% at top10, and the production pack (threshold+limit) stays 44/302 (14.6%) because the pack is effectively top-3. Converting top5/top10 recall into usable packs requires **both** a QA-aware mode (sem-dominant, rec→0) **and** a larger limit / lower threshold — the productionization direction for a "QA retrieval mode", to be validated end-to-end.
