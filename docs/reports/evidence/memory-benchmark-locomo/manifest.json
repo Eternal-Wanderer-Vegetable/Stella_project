@@ -1,0 +1,98 @@
+{
+  "schema": "memory-eval-evidence-manifest/1",
+  "task": "MBENCH-002 记忆系统公开数据集基准评测",
+  "date": "2026-10-31",
+  "branch": "codex/memory-benchmark",
+  "base_commit": "cf630612c05f8ff9f7c8c61192b060c77b676856",
+  "datasets": [
+    {
+      "name": "snap-research/locomo",
+      "revision": "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376",
+      "license": "CC-BY-NC-4.0",
+      "sha256_source": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+      "data_location": "memory/benchmark/_public/locomo/（gitignored，不入库）",
+      "fetch_script": "scripts/fetch_locomo.py"
+    },
+    {
+      "name": "bowen-upenn/PersonaMem-v2",
+      "revision": "ed956dea41521fc4499acbc63f966e0fd3c053ba",
+      "license": "CC-BY-4.0",
+      "data_location": "memory/benchmark/_public/personamem/（gitignored，不入库）",
+      "fetch_script": "scripts/fetch_personamem.py"
+    }
+  ],
+  "models": {
+    "answer_judge": {
+      "endpoint": "http://127.0.0.1:8081/v1",
+      "model": "qwen3.8-flash-next-iq2_xs",
+      "temperature": 0.0,
+      "note": "reasoning 模型；max_tokens 2048 覆盖隐藏思考"
+    },
+    "consolidation_live": {
+      "endpoint": "http://127.0.0.1:8081",
+      "model": "qwen3.8-flash-next-iq2_xs",
+      "env_overrides": {
+        "CONSOLIDATION_LOCAL_MAX_TOKENS": "4096",
+        "MEMORY_EXTRACT_MAX_TOKENS": "4096"
+      }
+    },
+    "embedding": {
+      "endpoint": "http://127.0.0.1:1234",
+      "model": "text-embedding-qwen3-embedding-0.6b",
+      "dim": 1024
+    },
+    "prompt_versions": {
+      "answer": "memory-eval-answer-v1",
+      "judge": "locomo-judge-v1"
+    }
+  },
+  "runs": [
+    {
+      "id": "personamem-full-matrix",
+      "command": "python -m memory.benchmark --dir memory/benchmark/_public/personamem/adapted-full --matrix --embedding-fixture <fullset-fixture>",
+      "result": "四模式全部 5000/5000 (100%)，recall 100%，forbidden 0，precision 33.4%",
+      "artifacts": ["personamem-full-matrix-20261031.txt"]
+    },
+    {
+      "id": "locomo-live-ingest",
+      "command": "python -m memory_eval --workdir runs/.../locomo-live-ingest --stage ingest --consolidation live --conversations 1 --memory-base-url http://127.0.0.1:8081 --memory-model qwen3.8-flash-next-iq2_xs",
+      "result": "conv-26: 419 消息 → 188 候选（A103/B85）→ 0 accepted 证据 → 0 晋升",
+      "artifacts": ["locomo-live-ingest-report.json"]
+    },
+    {
+      "id": "locomo-full-gold",
+      "command": "python -m memory_eval --stage all --mode hybrid --qa-sample 4 --seed 20261031 --consolidation oracle --inject-gold --llm-base-url http://127.0.0.1:8081/v1 --llm-model qwen3.8-flash-next-iq2_xs",
+      "result": "196 QA J-accuracy 18.9%（adversarial 70%，single_hop 2.5%，temporal 0%）；上界配置",
+      "artifacts": ["locomo-full-gold-report.json"],
+      "known_artifact": "oracle 候选受当时未修复的 TTL 回填工件影响（13 REJECTED），干净漏斗以 live-ingest 为准"
+    },
+    {
+      "id": "locomo-smoke",
+      "command": "同 full-gold 但 --conversations 2 --qa-sample 2",
+      "result": "18 QA：证据入包 2/14，可回答题 0/14，adversarial 3/4",
+      "artifacts": ["locomo-smoke-report.json"]
+    },
+    {
+      "id": "locomo-conflict-cmp",
+      "command": "同 smoke 加 --pack-mode conflict",
+      "result": "与 auto 完全一致（2/14）——limit 不是约束",
+      "artifacts": ["locomo-conflict-cmp-report.json"]
+    },
+    {
+      "id": "locomo-threshold-diag",
+      "command": "同 smoke 加 env MEMORY_SCORE_MIN=0.15",
+      "result": "与 auto 完全一致（2/14）——排序是约束，阈值不是单独约束",
+      "artifacts": ["locomo-threshold-diag-report.json"]
+    }
+  ],
+  "retrieval_decomposition": {
+    "contract_coverage_corpus": "17/5882 (0.29%) 消息命中证据合同刻板句",
+    "probe": "q040 检索探针：目标证据行在 39 行候选池内（FTS OR 正常），score 0.2607 被 MEMORY_SCORE_MIN=0.40 阈值切；降低阈值后仍因排序（recency+ctx 权重）不进 top-3"
+  },
+  "gates": {
+    "pytest": "tests/test_memory_eval.py 12 passed",
+    "ruff": "ruff check . 全清",
+    "check_docs": "python scripts/check_docs.py 通过",
+    "detect_changes": "scope=all 7 files / 1 symbol / 800 flows / CRITICAL——全部来自出站会话既有未提交改动，非本轮基准文件；不豁免"
+  }
+}

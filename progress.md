@@ -1,3 +1,13 @@
+## 2026-10-31 — MBENCH-002 记忆系统公开数据集基准评测
+
+- Scope: 新建 `memory_eval/` 评测包（隔离回放真实摄入→检索→作答→judge 全链路）+ `scripts/fetch_locomo.py`/`adapt_locomo.py`（pin+sha256，数据不入库）+ 12 个单测；分支 `codex/memory-benchmark`（基于 cf63061）。按 ChatGPT「研究Hy记忆」讨论的 SMB 结论执行。
+- 结果（LoCoMo @ 3eb6f2c5，judge/answer=qwen3.8-flash-next-iq2_xs@8081 温度 0）：① 上界配置（oracle 写侧+gold 注入 1425 条）196 QA **J-accuracy 18.9%**（adversarial 70% / single_hop 2.5% / temporal 0%）；② live 整合漏斗 conv-26：419 消息 → **188 候选 / 0 accepted / 0 晋升**（全语料合同句型覆盖 17/5882=0.29% 是写侧瓶颈）；③ 分解实验：`--pack-mode conflict` 与 `MEMORY_SCORE_MIN=0.15` 均不改变证据入包率（2/14）——**排序（recency+ctx 压过 sem）是检索主约束**，探针实证目标行在 39 行池内被阈值 0.40 切。
+- PersonaMem-v2 全量对照：5000 例四模式（rule/embedding/fts/hybrid）全部 **5000/5000 (100%)**、recall 100%、forbidden 0、precision 33.4%（高召回低精度工作点；补上 MBENCH-001 延后的全量跑）。
+- 验证：`tests/test_memory_eval.py` 12 passed；`ruff check .` 全清；`check_docs.py` 通过；`detect-changes --scope all` 7 files/1 symbol/800 flows/**CRITICAL**——全部来自出站会话既有未提交改动的共享 fanout（与既往记录一致），本轮基准文件均为新增未跟踪文件不在图差异内，不豁免。运行中修复两个回放工件：候选 `first_seen_at` 必须保持墙钟（TTL 用 julianday('now') 比较，回填会全量误杀）；gold 注入按证据会话回填时间戳（同刻会让 freshness 池退化成抽签）。
+- NOT READY / 未做：live 写侧端到端全量 QA（写侧瓶颈使其信息量低于上界配置）；LoCoMo 中文翻译对照集；全量 1986 QA 复跑（实测 ~40min/196 题，可过夜）。
+- Next：检索排序校准实验（QA 查询感知 sem 权重）；证据合同句型覆盖扩展评估（对应 Hy-Memory 讨论 P1）；中文对照集。
+- 报告与证据：`docs/reports/2026-10-31-locomo-memory-benchmark.md`（.en 同）+ `docs/reports/evidence/memory-benchmark-locomo/`。
+
 ## Current State — 2026-10-29
 
 - Active feature: `XPLAT-PIPELINE-IMPLEMENTATION` remains `blocked` / NOT READY. PR #124 merged as `871671c3a4c636aac9e310029d969bb1f6817c02`; its PR-head Python CI, Dashboard CI, and Docker Publish workflows all succeeded. The adapter matrix remains 0/32 certified; live platform/model and clean Windows VM/release checks are still open.

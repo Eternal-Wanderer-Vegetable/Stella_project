@@ -1,0 +1,620 @@
+{
+  "report_schema": "memory-eval-report/1",
+  "generated_at": "2026-10-31T17:18:04Z",
+  "git_head": "aa3df800949b5b76c8feca5f5ded43fff09fc2ff",
+  "memory_schema_version": 23,
+  "dataset": {
+    "name": "snap-research/locomo",
+    "revision": "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376",
+    "index_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+    "license": "CC-BY-NC-4.0"
+  },
+  "channel": "hybrid",
+  "write_mode": "oracle",
+  "gold_injection": true,
+  "qa_sample_per_category": null,
+  "seed": 20261031,
+  "answer_model": {
+    "base_url": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "calls": 0,
+    "errors": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "latency_p50": null,
+    "latency_p95": null
+  },
+  "judge_model": {
+    "base_url": "http://127.0.0.1:8081/v1",
+    "model": "qwen3.8-flash-next-iq2_xs",
+    "calls": 0,
+    "errors": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "latency_p50": null,
+    "latency_p95": null
+  },
+  "consolidation": {
+    "role": "ROLE_CONSOLIDATION（生产 backend_for 装配）",
+    "extract_role": "ROLE_EXTRACT（按配置可用则启用）"
+  },
+  "prompts": {
+    "answer": "memory-eval-answer-v1",
+    "judge": "locomo-judge-v1"
+  },
+  "summary": {
+    "total": 1986,
+    "accuracy": 24.0,
+    "unparseable": 15,
+    "errors": 0,
+    "by_category": {
+      "adversarial": {
+        "total": 446,
+        "accuracy": 80.9,
+        "unparseable": 3
+      },
+      "multi_hop": {
+        "total": 321,
+        "accuracy": 0.9,
+        "unparseable": 11
+      },
+      "open_domain_knowledge": {
+        "total": 841,
+        "accuracy": 12.7,
+        "unparseable": 1
+      },
+      "single_hop": {
+        "total": 282,
+        "accuracy": 2.1,
+        "unparseable": 0
+      },
+      "temporal_reasoning": {
+        "total": 96,
+        "accuracy": 0.0,
+        "unparseable": 0
+      }
+    },
+    "adversarial_abstention_accuracy": 80.9,
+    "write_coverage_memories": 1.413,
+    "write_coverage_candidates": 0.776,
+    "retrieval_evidence_coverage": 1.199,
+    "pack_memory_count_avg": 2.282,
+    "pack_chars_avg": 439.785,
+    "scenarios": 10,
+    "funnel_totals": {
+      "candidates_total": 17,
+      "memories_total": 1425,
+      "memories_active": 1425
+    }
+  },
+  "scenarios": [
+    {
+      "scenario_id": "locomo-conv-26",
+      "funnel": {
+        "candidates_total": 0,
+        "candidates_by_status": {},
+        "candidates_by_user": {},
+        "memories_total": 133,
+        "memories_active": 133
+      },
+      "consolidation_calls": 19,
+      "qa_total": 199,
+      "aggregate": {
+        "total": 199,
+        "accuracy": 22.1,
+        "unparseable": 4,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 47,
+            "accuracy": 80.9,
+            "unparseable": 1
+          },
+          "multi_hop": {
+            "total": 37,
+            "accuracy": 0.0,
+            "unparseable": 2
+          },
+          "open_domain_knowledge": {
+            "total": 70,
+            "accuracy": 8.6,
+            "unparseable": 1
+          },
+          "single_hop": {
+            "total": 32,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 13,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 80.9,
+        "write_coverage_memories": 1.251,
+        "write_coverage_candidates": 0.0,
+        "retrieval_evidence_coverage": 1.226,
+        "pack_memory_count_avg": 2.814,
+        "pack_chars_avg": 493.085
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-30",
+      "funnel": {
+        "candidates_total": 0,
+        "candidates_by_status": {},
+        "candidates_by_user": {},
+        "memories_total": 75,
+        "memories_active": 75
+      },
+      "consolidation_calls": 19,
+      "qa_total": 105,
+      "aggregate": {
+        "total": 105,
+        "accuracy": 27.6,
+        "unparseable": 0,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 24,
+            "accuracy": 91.7,
+            "unparseable": 0
+          },
+          "multi_hop": {
+            "total": 26,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "open_domain_knowledge": {
+            "total": 44,
+            "accuracy": 15.9,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 11,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 91.7,
+        "write_coverage_memories": 1.248,
+        "write_coverage_candidates": 0.0,
+        "retrieval_evidence_coverage": 1.086,
+        "pack_memory_count_avg": 2.343,
+        "pack_chars_avg": 467.01
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-41",
+      "funnel": {
+        "candidates_total": 2,
+        "candidates_by_status": {
+          "OBSERVING": 2
+        },
+        "candidates_by_user": {
+          "9100301": 2
+        },
+        "memories_total": 128,
+        "memories_active": 128
+      },
+      "consolidation_calls": 32,
+      "qa_total": 193,
+      "aggregate": {
+        "total": 193,
+        "accuracy": 26.9,
+        "unparseable": 3,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 41,
+            "accuracy": 85.4,
+            "unparseable": 0
+          },
+          "multi_hop": {
+            "total": 27,
+            "accuracy": 3.7,
+            "unparseable": 3
+          },
+          "open_domain_knowledge": {
+            "total": 86,
+            "accuracy": 17.4,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 31,
+            "accuracy": 3.2,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 8,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 85.4,
+        "write_coverage_memories": 1.301,
+        "write_coverage_candidates": 1.29,
+        "retrieval_evidence_coverage": 1.269,
+        "pack_memory_count_avg": 2.762,
+        "pack_chars_avg": 568.627
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-42",
+      "funnel": {
+        "candidates_total": 3,
+        "candidates_by_status": {
+          "OBSERVING": 3
+        },
+        "candidates_by_user": {
+          "9100402": 3
+        },
+        "memories_total": 180,
+        "memories_active": 180
+      },
+      "consolidation_calls": 29,
+      "qa_total": 260,
+      "aggregate": {
+        "total": 260,
+        "accuracy": 23.8,
+        "unparseable": 1,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 61,
+            "accuracy": 73.8,
+            "unparseable": 1
+          },
+          "multi_hop": {
+            "total": 40,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "open_domain_knowledge": {
+            "total": 111,
+            "accuracy": 12.6,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 37,
+            "accuracy": 8.1,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 11,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 73.8,
+        "write_coverage_memories": 1.435,
+        "write_coverage_candidates": 1.415,
+        "retrieval_evidence_coverage": 1.435,
+        "pack_memory_count_avg": 2.935,
+        "pack_chars_avg": 517.685
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-43",
+      "funnel": {
+        "candidates_total": 3,
+        "candidates_by_status": {
+          "OBSERVING": 3
+        },
+        "candidates_by_user": {
+          "9100501": 2,
+          "9100502": 1
+        },
+        "memories_total": 168,
+        "memories_active": 168
+      },
+      "consolidation_calls": 29,
+      "qa_total": 242,
+      "aggregate": {
+        "total": 242,
+        "accuracy": 30.6,
+        "unparseable": 4,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 64,
+            "accuracy": 70.3,
+            "unparseable": 1
+          },
+          "multi_hop": {
+            "total": 26,
+            "accuracy": 3.8,
+            "unparseable": 3
+          },
+          "open_domain_knowledge": {
+            "total": 107,
+            "accuracy": 26.2,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 31,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 14,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 70.3,
+        "write_coverage_memories": 1.413,
+        "write_coverage_candidates": 1.401,
+        "retrieval_evidence_coverage": 0.921,
+        "pack_memory_count_avg": 1.227,
+        "pack_chars_avg": 204.388
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-44",
+      "funnel": {
+        "candidates_total": 0,
+        "candidates_by_status": {},
+        "candidates_by_user": {},
+        "memories_total": 126,
+        "memories_active": 126
+      },
+      "consolidation_calls": 28,
+      "qa_total": 158,
+      "aggregate": {
+        "total": 158,
+        "accuracy": 26.6,
+        "unparseable": 1,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 35,
+            "accuracy": 85.7,
+            "unparseable": 0
+          },
+          "multi_hop": {
+            "total": 24,
+            "accuracy": 0.0,
+            "unparseable": 1
+          },
+          "open_domain_knowledge": {
+            "total": 62,
+            "accuracy": 16.1,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 30,
+            "accuracy": 6.7,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 7,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 85.7,
+        "write_coverage_memories": 1.506,
+        "write_coverage_candidates": 0.0,
+        "retrieval_evidence_coverage": 1.222,
+        "pack_memory_count_avg": 2.12,
+        "pack_chars_avg": 472.443
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-47",
+      "funnel": {
+        "candidates_total": 6,
+        "candidates_by_status": {
+          "OBSERVING": 6
+        },
+        "candidates_by_user": {
+          "9100701": 3,
+          "9100702": 3
+        },
+        "memories_total": 132,
+        "memories_active": 132
+      },
+      "consolidation_calls": 31,
+      "qa_total": 190,
+      "aggregate": {
+        "total": 190,
+        "accuracy": 22.1,
+        "unparseable": 1,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 40,
+            "accuracy": 80.0,
+            "unparseable": 0
+          },
+          "multi_hop": {
+            "total": 34,
+            "accuracy": 2.9,
+            "unparseable": 1
+          },
+          "open_domain_knowledge": {
+            "total": 83,
+            "accuracy": 10.8,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 20,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 13,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 80.0,
+        "write_coverage_memories": 1.289,
+        "write_coverage_candidates": 1.279,
+        "retrieval_evidence_coverage": 1.253,
+        "pack_memory_count_avg": 2.626,
+        "pack_chars_avg": 481.032
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-48",
+      "funnel": {
+        "candidates_total": 3,
+        "candidates_by_status": {
+          "OBSERVING": 3
+        },
+        "candidates_by_user": {
+          "9100801": 2,
+          "9100802": 1
+        },
+        "memories_total": 168,
+        "memories_active": 168
+      },
+      "consolidation_calls": 30,
+      "qa_total": 239,
+      "aggregate": {
+        "total": 239,
+        "accuracy": 20.5,
+        "unparseable": 1,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 48,
+            "accuracy": 100.0,
+            "unparseable": 0
+          },
+          "multi_hop": {
+            "total": 42,
+            "accuracy": 0.0,
+            "unparseable": 1
+          },
+          "open_domain_knowledge": {
+            "total": 118,
+            "accuracy": 0.8,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 21,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 10,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 100.0,
+        "write_coverage_memories": 1.439,
+        "write_coverage_candidates": 1.435,
+        "retrieval_evidence_coverage": 0.515,
+        "pack_memory_count_avg": 0.586,
+        "pack_chars_avg": 129.084
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-49",
+      "funnel": {
+        "candidates_total": 0,
+        "candidates_by_status": {},
+        "candidates_by_user": {},
+        "memories_total": 182,
+        "memories_active": 182
+      },
+      "consolidation_calls": 25,
+      "qa_total": 196,
+      "aggregate": {
+        "total": 196,
+        "accuracy": 19.4,
+        "unparseable": 0,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 40,
+            "accuracy": 72.5,
+            "unparseable": 0
+          },
+          "multi_hop": {
+            "total": 33,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "open_domain_knowledge": {
+            "total": 73,
+            "accuracy": 12.3,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 37,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 13,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 72.5,
+        "write_coverage_memories": 1.862,
+        "write_coverage_candidates": 0.0,
+        "retrieval_evidence_coverage": 1.857,
+        "pack_memory_count_avg": 2.929,
+        "pack_chars_avg": 573.046
+      }
+    },
+    {
+      "scenario_id": "locomo-conv-50",
+      "funnel": {
+        "candidates_total": 0,
+        "candidates_by_status": {},
+        "candidates_by_user": {},
+        "memories_total": 133,
+        "memories_active": 133
+      },
+      "consolidation_calls": 30,
+      "qa_total": 204,
+      "aggregate": {
+        "total": 204,
+        "accuracy": 22.1,
+        "unparseable": 0,
+        "errors": 0,
+        "by_category": {
+          "adversarial": {
+            "total": 46,
+            "accuracy": 80.4,
+            "unparseable": 0
+          },
+          "multi_hop": {
+            "total": 32,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "open_domain_knowledge": {
+            "total": 87,
+            "accuracy": 9.2,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 32,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 7,
+            "accuracy": 0.0,
+            "unparseable": 0
+          }
+        },
+        "adversarial_abstention_accuracy": 80.4,
+        "write_coverage_memories": 1.314,
+        "write_coverage_candidates": 0.0,
+        "retrieval_evidence_coverage": 1.299,
+        "pack_memory_count_avg": 2.868,
+        "pack_chars_avg": 604.108
+      }
+    }
+  ]
+}
