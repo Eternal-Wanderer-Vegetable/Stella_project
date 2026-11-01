@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -114,3 +115,24 @@ def test_adapted_dataset_contract():
             total += 1
     assert total == PINNED_TOTAL_QA, f"题目总数漂移：{total} ≠ {PINNED_TOTAL_QA}"
     assert counts == PINNED_CATEGORY_COUNTS, f"类别分布漂移：{counts}"
+
+
+def test_contract_gold_contract():
+    """MBENCH-004 P1-1 标注集冻结契约：数量/标签/协议版本/字段完整。"""
+    gold_path = Path("memory_eval/annotation/locomo-contract-gold.jsonl")
+    assert gold_path.exists(), "标注集缺失（memory_eval/annotation/locomo-contract-gold.jsonl）"
+    rows = [json.loads(ln) for ln in gold_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(rows) == 202
+    labels: dict[str, int] = {}
+    for r in rows:
+        labels[r["label"]] = labels.get(r["label"], 0) + 1
+        assert r["label"] in ("MUST_CAPTURE", "MAY_CAPTURE", "MUST_NOT_CAPTURE")
+        assert r["category"] in ("identity_state", "preference_habit", "plan_intent",
+                                 "ability_experience", "other")
+        assert r["audience"] == "CURRENT_SPACE"
+        assert r["fact_time"] in ("current", "past", "future", "unspecified")
+        assert r["evidence_binding"] in ("exact", "paraphrase", "none")
+        assert r["label_version"] == "locomo-contract-gold-v1"
+        assert r["content_sha1"] and r["sample_key"]
+    assert labels == {"MUST_CAPTURE": 143, "MAY_CAPTURE": 40, "MUST_NOT_CAPTURE": 19}, (
+        f"标签分布漂移：{labels}")
