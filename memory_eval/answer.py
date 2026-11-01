@@ -113,6 +113,12 @@ async def answer_question(
         "retrieved_ids": [m.get("id") for m in result.conversation_memories],
         "retrieved_contents": [m.get("content") or "" for m in result.conversation_memories],
         "behavior_ids": [m.get("id") for m in result.behavior_constraints],
+        # 生产排序次序（阈值/limit 前）：真 MRR@K 与 any/all@K 的数据基础
+        "ranked_ids": [
+            str(row.get("id"))
+            for row in (result.trace or {}).get("ranked_all") or []
+            if row.get("id")
+        ][:20],
         "retrieval_result_mode": result.mode,
         "pack_chars": pack_chars,
         "pack_memory_count": len(result.conversation_memories),

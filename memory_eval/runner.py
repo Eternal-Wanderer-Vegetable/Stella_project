@@ -274,5 +274,5 @@ def _print_summary(summary: dict[str, Any]) -> None:
     print(f"  总体 J-accuracy : {summary.get('accuracy')}%  (n={summary.get('total')})")
     for name, row in (summary.get("by_category") or {}).items():
         print(f"    {name:<22} {row.get('accuracy')}%  (n={row.get('total')})")
-    print(f"  adversarial 弃答 : {summary.get('adversarial_abstention_accuracy')}%")
+    print(f"  adversarial 弃答 : {summary.get('abstention_accuracy')}%")
     print(f"  漏斗             : {summary.get('funnel_totals')}")

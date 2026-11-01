@@ -36,12 +36,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SRC = PROJECT_ROOT / "memory" / "benchmark" / "_public" / "locomo" / "data" / "locomo10.json"
 DEFAULT_OUT = PROJECT_ROOT / "memory" / "benchmark" / "_public" / "locomo" / "adapted"
 
-ADAPTER_VERSION = "locomo-adapter/1"
+ADAPTER_VERSION = "locomo-adapter/2"
+# 类别编号→名称，已对照上游 task_eval/evaluation.py 与数据内容核实
+# （cat2 全为 "When..." 时间题、cat4 为最大单事实类；此前 1=single_hop 的
+# 假设是错的——见 snap-research/locomo#29 与本仓库报告勘误 2026-11-01）。
 CATEGORY_NAMES = {
-    1: "single_hop",
-    2: "multi_hop",
-    3: "temporal_reasoning",
-    4: "open_domain_knowledge",
+    1: "multi_hop",
+    2: "temporal_reasoning",
+    3: "open_domain_knowledge",
+    4: "single_hop",
     5: "adversarial",
 }
 GROUP_ID_BASE = 880000

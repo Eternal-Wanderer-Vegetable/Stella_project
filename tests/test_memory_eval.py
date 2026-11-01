@@ -343,21 +343,29 @@ def test_select_qa_sampling_deterministic():
 
 def test_aggregate_qa_math():
     results = [
-        {"category_name": "single_hop", "verdict": "correct", "pack_memory_count": 2,
-         "pack_chars": 100, "write_coverage_memories": 1, "write_coverage_candidates": 1,
-         "retrieval_evidence_coverage": 1},
-        {"category_name": "single_hop", "verdict": "incorrect", "pack_memory_count": 1,
-         "pack_chars": 50, "write_coverage_memories": 0, "write_coverage_candidates": 1,
-         "retrieval_evidence_coverage": 0},
-        {"category_name": "adversarial", "verdict": "correct", "pack_memory_count": 0,
-         "pack_chars": 0, "write_coverage_memories": None, "write_coverage_candidates": None,
-         "retrieval_evidence_coverage": None},
+        {"category_name": "single_hop", "category": 4, "verdict": "correct",
+         "gold_answer": "Springfield",
+         "pack_memory_count": 2, "pack_chars": 100, "write_coverage_memories": 1,
+         "write_coverage_candidates": 1, "retrieval_evidence_coverage": 1,
+         "evidence_dia_ids": ["D1:1"], "retrieved_ids": ["gold-D1:1"]},
+        {"category_name": "single_hop", "category": 4, "verdict": "incorrect",
+         "gold_answer": "Springfield",
+         "pack_memory_count": 1, "pack_chars": 50, "write_coverage_memories": 0,
+         "write_coverage_candidates": 1, "retrieval_evidence_coverage": 0,
+         "evidence_dia_ids": [], "retrieved_ids": ["m9"]},
+        {"category_name": "adversarial", "category": 5, "verdict": "correct",
+         "pack_memory_count": 0, "pack_chars": 0, "write_coverage_memories": None,
+         "write_coverage_candidates": None, "retrieval_evidence_coverage": None,
+         "evidence_dia_ids": [], "retrieved_ids": []},
     ]
     agg = aggregate_qa(results)
     assert agg["total"] == 3
     assert agg["accuracy"] == round(2 / 3 * 100, 1)
+    assert agg["answerable_accuracy"] == 50.0
+    assert agg["evidence_recall"]["any@K"]["@1"] == 100.0
+    assert agg["evidence_recall"]["all@K"]["@1"] == 100.0
     assert agg["by_category"]["single_hop"]["accuracy"] == 50.0
-    assert agg["adversarial_abstention_accuracy"] == 100.0
+    assert agg["abstention_accuracy"] == 100.0
     assert agg["write_coverage_memories"] == 0.5
     assert agg["pack_memory_count_avg"] == 1.0
 

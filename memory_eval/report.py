@@ -111,7 +111,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         f"- QA 总数：{s.get('total')} ｜ J-accuracy：**{s.get('accuracy')}%**"
         f" ｜ unparseable：{s.get('unparseable')} ｜ errors：{s.get('errors')}",
-        f"- adversarial 弃答正确率：{s.get('adversarial_abstention_accuracy')}%",
+        f"- adversarial 弃答正确率：{s.get('abstention_accuracy')}%",
         f"- 写侧覆盖（memories / candidates）：{s.get('write_coverage_memories')} / "
         f"{s.get('write_coverage_candidates')}",
         f"- 检索证据覆盖（n-gram 代理）：{s.get('retrieval_evidence_coverage')}",

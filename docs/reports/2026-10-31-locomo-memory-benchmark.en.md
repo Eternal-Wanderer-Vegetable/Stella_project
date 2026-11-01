@@ -8,7 +8,7 @@
 
 ## Status
 
-**DONE (baseline)**: the `memory_eval` harness + LoCoMo end-to-end upper bound (10 conversations / 196 QA) + PersonaMem-v2 full retrieval-layer contrast (5000 cases × 4 modes) + live consolidation funnel + three decomposition experiments. Unit tests 12 passed; `ruff check .` clean; `check_docs.py` passed; the `detect-changes --scope all` CRITICAL originates from the outbound session's pre-existing uncommitted changes (retained without waiver, see GitNexus section). **NOT READY / not done**: full-QA run on the live write side (the write-side bottleneck makes it less informative than the upper-bound configuration and it costs hours), and a Chinese translated contrast set.
+**DONE (baseline + full run + Chinese contrast + corrections)**: `memory_eval` harness + LoCoMo end-to-end (full 1,986 QA, gold-injection-conditioned retrieval-and-answer baseline 24.0%, answerable questions 7.5%) + PersonaMem-v2 full retrieval-layer contrast (5000 cases × 4 modes) + live consolidation funnel + decomposition experiments + paired QA-mode experiment + Chinese end-to-end (23.0%) + ranking calibration study. **2026-11-01 corrections (category mapping mislabel fixed, P0 complete): see `2026-11-01-memory-benchmark-corrections-and-next-experiments.md`**. Unit tests 17 passed; `ruff check .` clean; `check_docs.py` passed.
 
 ## Design (summary)
 
@@ -35,17 +35,17 @@ Scoring: LoCoMo five QA categories via LLM-as-judge (LoCoMo protocol, prompt ver
 
 Reading: on this corpus (3 expected memories per case out of 9 candidates) the retrieval layer operates at **high recall / low precision** (all expected memories recalled, ~2x noise carried along); the forbidden hard-zero holds. The four modes are nearly identical — at a 20-candidate pool the embedding channel does not change membership (Separation Margin slightly worse in embedding/hybrid: −0.1011).
 
-## Result 2: LoCoMo end-to-end upper bound (oracle write side + gold injection)
+## Result 2: LoCoMo end-to-end (oracle write side + gold injection; retrieval-and-answer baseline under gold injection)
 
 10 conversations, 5,882 messages, 1,425 injected gold memories, 4 sampled questions per category (seed 20261031), 196 QA total:
 
 | Category | n | J-accuracy |
 | --- | --- | --- |
 | adversarial (should abstain) | 40 | **70.0%** |
-| single_hop | 40 | 2.5% |
-| multi_hop | 40 | 2.5% |
-| temporal_reasoning | 36 | 0.0% |
-| open_domain_knowledge | 40 | 17.5% |
+| single_hop (single-hop) | 40 | 17.5% |
+| multi_hop (multi-hop) | 40 | 2.5% |
+| temporal_reasoning (temporal) | 40 | 2.5% |
+| open_domain_knowledge (open-domain) | 36 | 0.0% |
 | **overall** | **196** | **18.9%** |
 
 - Pack averages 2.37 memories / 466 chars; retrieval evidence coverage (n-gram proxy) 1.495.
@@ -103,7 +103,7 @@ Single-variable contrasts on the smoke set (2 conversations / 18 QA / gold injec
 - LoCoMo gold carries ~6% known noise (independent Penfield Labs audit, 2026); judge and answer share the same model (self-judging bias); 196 QA are sampled per category, not the full 1,986.
 - English-domain evaluation: the contract's Chinese patterns are untested here; a Chinese translated contrast set is listed under Next.
 - Replay compresses months into hours; TTL/recency differ structurally from production (mitigated as described above).
-- The upper-bound configuration injects 1,425 memories (75–182 per space), 3–7x the production quota (MEMORY_USER_QUOTA=25); pool pressure exceeds real production, making 18.9% conservative.
+- The gold-injection configuration writes 1,425 memories (75–182 per space), 3–7x the production quota (MEMORY_USER_QUOTA=25); pool pressure exceeds real production, making the baseline conservative.
 
 ## Next
 
@@ -140,21 +140,22 @@ Conclusions (quantified answer to Result 4):
 
 This section **supersedes** the "Next-1 / Next-2 not done" statements above (the original 196-question sampled record is kept as process evidence).
 
-### Full 1,986 QA (oracle write side + gold injection upper bound)
+### Full 1,986 QA (oracle write side + gold injection)
 
 Three parallel workers (`--conversations-from` range split, shared workdir, per-scenario isolation) finished in ~3.5 hours with zero errors:
 
 | Category | n | J-accuracy |
 | --- | --- | --- |
 | adversarial (should abstain) | 446 | **80.9%** |
-| open_domain_knowledge | 841 | 12.7% |
-| multi_hop | 321 | 0.9% |
-| single_hop | 282 | 2.1% |
-| temporal_reasoning | 96 | 0.0% |
+| single_hop (single-hop) | 841 | 12.7% |
+| multi_hop (multi-hop) | 282 | 2.1% |
+| temporal_reasoning (temporal) | 321 | 0.9% |
+| open_domain_knowledge (open-domain) | 96 | 0.0% |
 | **overall** | **1,986** | **24.0%** |
+| **answerable questions (1,540, excl. adversarial)** | **1,540** | **7.5%** |
 
 - 15 unparseable / 0 errors; per-conversation accuracy 19.4%–30.6%; pack averages 2.28 memories / 440 chars.
-- The full-population number is 5.1pp above the 196-question sample (18.9%), mainly from open_domain (12.7%) and adversarial (80.9%) regressing with larger samples.
+- The full-population number is 5.1pp above the 196-question sample (18.9%), mainly from single_hop (12.7%) and adversarial (80.9%) regressing with larger samples.
 - The judging protocol was uniform throughout (thinking judge, temperature 0); the `/no_think` soft switch proved ineffective on this model (latency unchanged) but verdict agreement was 18/18 — kept as a future speedup option.
 
 ### Chinese contrast set milestone 1 (`scripts/adapt_locomo_zh.py`, protocol locomo-zh-v1)
@@ -169,7 +170,7 @@ conv-26 + conv-30 session-by-session translation (788 messages, cache resumable 
 | **promoted memories** | **0** | **1** ("我喜欢古典音乐", a genuine preference) |
 | contract pattern coverage | 17/5,882 (0.29%) | **15/788 (1.9%)** |
 
-Conclusion: **the evidence contract's narrow-pattern bottleneck is language-independent** — natural Chinese likewise almost never produces complete stereotyped "我住在X / 我喜欢X" forms. Two noteworthy details: ① Chinese coverage (1.9%) is ~6x the English rate (0.29%) but the samples include **semantic false positives** (e.g., "我喜欢**你**用艺术讲述自己的故事" praises the other person, mechanically matched by the pattern); ② the single promoted Chinese memory is a genuine preference. This is direct evidence that pattern expansion must introduce semantic constraints at the same time.
+Conclusion: **the evidence contract's narrow-pattern bottleneck is language-independent** — natural Chinese likewise almost never produces complete stereotyped "我住在X / 我喜欢X" forms. Two noteworthy details: ① Chinese coverage (1.9%) is ~6x the English rate (0.29%) but the samples include **semantic false positives** (e.g., "我喜欢**你**用艺术讲述自己的故事" praises the other person, mechanically matched by the pattern); ② the single promoted Chinese memory is a genuine preference. This is direct evidence that pattern expansion must introduce semantic constraints at the same time. (Category labels in this section follow the 2026-11-01 corrections.)
 
 ### Implications for the next phase
 
@@ -193,16 +194,17 @@ Three Next items completed the same day (Next-2 milestone 2 / Next-3 end-to-end 
 | pack average | 2.65 | 10.0 |
 | **overall J-accuracy** | 24.0% | 25.3% (+1.3pp) |
 | adversarial abstention | 84.5% | **32.4% (collapsed)** |
-| open_domain | 11.4% | **43.9% (+32.5pp)** |
-| temporal | 0.0% | 15.4% |
-| multi_hop / single_hop | 0% / 0% | 3.2% / 0% |
+| single_hop (single-hop) | 11.4% | **43.9% (+32.5pp)** |
+| open_domain (open-domain) | 0.0% | 15.4% |
+| multi_hop (multi-hop) | 0.0% | 3.2% |
+| temporal (temporal) | 0.0% | 0.0% |
 | per-question flips | — | +46 up / −42 down |
 
 **Three conclusions**:
 
 1. **Retrieval recall is unlocked**: evidence-in-pack 4.4x; the offline ranking prediction (top10 ≈ 66%) held end-to-end.
 2. **But the gain is offset by abstention collapse**: adversarial fell 84.5% → 32.4% — near-related content in the big pack tempts the model to answer "no-info" questions concretely. Net gain only +1.3pp (46 up vs 42 down). **Abstention protection is a precondition for productionizing a QA mode** (e.g., enable QA mode only for answerable query classes, or force an abstention channel when no direct hit exists).
-3. **Anatomy of single_hop 0/43** (zero in both configs): sampling shows three causes — **incomplete pack coverage of multi-fact answers** (gold lists two facts, only one entered the pack), **reasoning burn producing empty answers**, and **LoCoMo gold demanding enumeration completeness while evidence turns merely justify**. This exposes the benchmark's deep structure: "evidence in pack" overstates readiness; the correct metric is **all required evidence covered** (already counted in metrics).
+3. **Anatomy of multi_hop 0/43** (zero in both configs): sampling shows three causes — **incomplete pack coverage of multi-fact answers** (gold lists two facts, only one entered the pack), **reasoning burn producing empty answers**, and **LoCoMo gold demanding enumeration completeness while evidence turns merely justify**. This exposes the benchmark's deep structure: "evidence in pack" overstates readiness; the correct metric is **all required evidence covered** (already counted in metrics).
 
 ### B. Chinese end-to-end (milestone 2 complete)
 

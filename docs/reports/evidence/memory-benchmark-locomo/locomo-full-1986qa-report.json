@@ -1,7 +1,7 @@
 {
   "report_schema": "memory-eval-report/1",
-  "generated_at": "2026-10-31T17:18:04Z",
-  "git_head": "aa3df800949b5b76c8feca5f5ded43fff09fc2ff",
+  "generated_at": "2026-11-01T02:41:57Z",
+  "git_head": "19a5b61d2708a5c58b330199fbf3aa542a8453bb",
   "memory_schema_version": 23,
   "dataset": {
     "name": "snap-research/locomo",
@@ -10,6 +10,8 @@
     "license": "CC-BY-NC-4.0"
   },
   "channel": "hybrid",
+  "pack_mode": "auto",
+  "score_env_overrides": {},
   "write_mode": "oracle",
   "gold_injection": true,
   "qa_sample_per_category": null,
@@ -47,6 +49,24 @@
     "accuracy": 24.0,
     "unparseable": 15,
     "errors": 0,
+    "answerable_total": 1540,
+    "answerable_accuracy": 7.5,
+    "abstention_accuracy": 80.9,
+    "evidence_recall": {
+      "any@K": {
+        "@1": 8.5,
+        "@3": 15.1,
+        "@5": 15.1,
+        "@10": 15.1
+      },
+      "all@K": {
+        "@1": 6.1,
+        "@3": 11.7,
+        "@5": 11.7,
+        "@10": 11.7
+      },
+      "mrr": 0.113
+    },
     "by_category": {
       "adversarial": {
         "total": 446,
@@ -54,27 +74,26 @@
         "unparseable": 3
       },
       "multi_hop": {
-        "total": 321,
-        "accuracy": 0.9,
-        "unparseable": 11
-      },
-      "open_domain_knowledge": {
-        "total": 841,
-        "accuracy": 12.7,
-        "unparseable": 1
-      },
-      "single_hop": {
         "total": 282,
         "accuracy": 2.1,
         "unparseable": 0
       },
-      "temporal_reasoning": {
+      "open_domain_knowledge": {
         "total": 96,
         "accuracy": 0.0,
         "unparseable": 0
+      },
+      "single_hop": {
+        "total": 841,
+        "accuracy": 12.7,
+        "unparseable": 1
+      },
+      "temporal_reasoning": {
+        "total": 321,
+        "accuracy": 0.9,
+        "unparseable": 11
       }
     },
-    "adversarial_abstention_accuracy": 80.9,
     "write_coverage_memories": 1.413,
     "write_coverage_candidates": 0.776,
     "retrieval_evidence_coverage": 1.199,
@@ -104,6 +123,24 @@
         "accuracy": 22.1,
         "unparseable": 4,
         "errors": 0,
+        "answerable_total": 152,
+        "answerable_accuracy": 3.9,
+        "abstention_accuracy": 80.9,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 5.3,
+            "@3": 13.3,
+            "@5": 13.3,
+            "@10": 13.3
+          },
+          "all@K": {
+            "@1": 4.0,
+            "@3": 10.0,
+            "@5": 10.0,
+            "@10": 10.0
+          },
+          "mrr": 0.087
+        },
         "by_category": {
           "adversarial": {
             "total": 47,
@@ -111,27 +148,26 @@
             "unparseable": 1
           },
           "multi_hop": {
-            "total": 37,
-            "accuracy": 0.0,
-            "unparseable": 2
-          },
-          "open_domain_knowledge": {
-            "total": 70,
-            "accuracy": 8.6,
-            "unparseable": 1
-          },
-          "single_hop": {
             "total": 32,
             "accuracy": 0.0,
             "unparseable": 0
           },
-          "temporal_reasoning": {
+          "open_domain_knowledge": {
             "total": 13,
             "accuracy": 0.0,
             "unparseable": 0
+          },
+          "single_hop": {
+            "total": 70,
+            "accuracy": 8.6,
+            "unparseable": 1
+          },
+          "temporal_reasoning": {
+            "total": 37,
+            "accuracy": 0.0,
+            "unparseable": 2
           }
         },
-        "adversarial_abstention_accuracy": 80.9,
         "write_coverage_memories": 1.251,
         "write_coverage_candidates": 0.0,
         "retrieval_evidence_coverage": 1.226,
@@ -155,6 +191,24 @@
         "accuracy": 27.6,
         "unparseable": 0,
         "errors": 0,
+        "answerable_total": 81,
+        "answerable_accuracy": 8.6,
+        "abstention_accuracy": 91.7,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 12.3,
+            "@3": 14.8,
+            "@5": 14.8,
+            "@10": 14.8
+          },
+          "all@K": {
+            "@1": 11.1,
+            "@3": 14.8,
+            "@5": 14.8,
+            "@10": 14.8
+          },
+          "mrr": 0.134
+        },
         "by_category": {
           "adversarial": {
             "total": 24,
@@ -162,22 +216,21 @@
             "unparseable": 0
           },
           "multi_hop": {
-            "total": 26,
+            "total": 11,
             "accuracy": 0.0,
             "unparseable": 0
           },
-          "open_domain_knowledge": {
+          "single_hop": {
             "total": 44,
             "accuracy": 15.9,
             "unparseable": 0
           },
-          "single_hop": {
-            "total": 11,
+          "temporal_reasoning": {
+            "total": 26,
             "accuracy": 0.0,
             "unparseable": 0
           }
         },
-        "adversarial_abstention_accuracy": 91.7,
         "write_coverage_memories": 1.248,
         "write_coverage_candidates": 0.0,
         "retrieval_evidence_coverage": 1.086,
@@ -205,6 +258,24 @@
         "accuracy": 26.9,
         "unparseable": 3,
         "errors": 0,
+        "answerable_total": 152,
+        "answerable_accuracy": 11.2,
+        "abstention_accuracy": 85.4,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 11.2,
+            "@3": 17.8,
+            "@5": 17.8,
+            "@10": 17.8
+          },
+          "all@K": {
+            "@1": 8.6,
+            "@3": 15.8,
+            "@5": 15.8,
+            "@10": 15.8
+          },
+          "mrr": 0.144
+        },
         "by_category": {
           "adversarial": {
             "total": 41,
@@ -212,27 +283,26 @@
             "unparseable": 0
           },
           "multi_hop": {
-            "total": 27,
-            "accuracy": 3.7,
-            "unparseable": 3
-          },
-          "open_domain_knowledge": {
-            "total": 86,
-            "accuracy": 17.4,
-            "unparseable": 0
-          },
-          "single_hop": {
             "total": 31,
             "accuracy": 3.2,
             "unparseable": 0
           },
-          "temporal_reasoning": {
+          "open_domain_knowledge": {
             "total": 8,
             "accuracy": 0.0,
             "unparseable": 0
+          },
+          "single_hop": {
+            "total": 86,
+            "accuracy": 17.4,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 27,
+            "accuracy": 3.7,
+            "unparseable": 3
           }
         },
-        "adversarial_abstention_accuracy": 85.4,
         "write_coverage_memories": 1.301,
         "write_coverage_candidates": 1.29,
         "retrieval_evidence_coverage": 1.269,
@@ -260,6 +330,24 @@
         "accuracy": 23.8,
         "unparseable": 1,
         "errors": 0,
+        "answerable_total": 199,
+        "answerable_accuracy": 8.5,
+        "abstention_accuracy": 73.8,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 7.0,
+            "@3": 11.6,
+            "@5": 11.6,
+            "@10": 11.6
+          },
+          "all@K": {
+            "@1": 5.5,
+            "@3": 9.0,
+            "@5": 9.0,
+            "@10": 9.0
+          },
+          "mrr": 0.089
+        },
         "by_category": {
           "adversarial": {
             "total": 61,
@@ -267,27 +355,26 @@
             "unparseable": 1
           },
           "multi_hop": {
-            "total": 40,
-            "accuracy": 0.0,
-            "unparseable": 0
-          },
-          "open_domain_knowledge": {
-            "total": 111,
-            "accuracy": 12.6,
-            "unparseable": 0
-          },
-          "single_hop": {
             "total": 37,
             "accuracy": 8.1,
             "unparseable": 0
           },
-          "temporal_reasoning": {
+          "open_domain_knowledge": {
             "total": 11,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 111,
+            "accuracy": 12.6,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 40,
             "accuracy": 0.0,
             "unparseable": 0
           }
         },
-        "adversarial_abstention_accuracy": 73.8,
         "write_coverage_memories": 1.435,
         "write_coverage_candidates": 1.415,
         "retrieval_evidence_coverage": 1.435,
@@ -316,6 +403,24 @@
         "accuracy": 30.6,
         "unparseable": 4,
         "errors": 0,
+        "answerable_total": 178,
+        "answerable_accuracy": 16.3,
+        "abstention_accuracy": 70.3,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 15.2,
+            "@3": 25.8,
+            "@5": 25.8,
+            "@10": 25.8
+          },
+          "all@K": {
+            "@1": 11.8,
+            "@3": 21.3,
+            "@5": 21.3,
+            "@10": 21.3
+          },
+          "mrr": 0.202
+        },
         "by_category": {
           "adversarial": {
             "total": 64,
@@ -323,27 +428,26 @@
             "unparseable": 1
           },
           "multi_hop": {
-            "total": 26,
-            "accuracy": 3.8,
-            "unparseable": 3
-          },
-          "open_domain_knowledge": {
-            "total": 107,
-            "accuracy": 26.2,
-            "unparseable": 0
-          },
-          "single_hop": {
             "total": 31,
             "accuracy": 0.0,
             "unparseable": 0
           },
-          "temporal_reasoning": {
+          "open_domain_knowledge": {
             "total": 14,
             "accuracy": 0.0,
             "unparseable": 0
+          },
+          "single_hop": {
+            "total": 107,
+            "accuracy": 26.2,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 26,
+            "accuracy": 3.8,
+            "unparseable": 3
           }
         },
-        "adversarial_abstention_accuracy": 70.3,
         "write_coverage_memories": 1.413,
         "write_coverage_candidates": 1.401,
         "retrieval_evidence_coverage": 0.921,
@@ -367,6 +471,24 @@
         "accuracy": 26.6,
         "unparseable": 1,
         "errors": 0,
+        "answerable_total": 123,
+        "answerable_accuracy": 9.8,
+        "abstention_accuracy": 85.7,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 10.6,
+            "@3": 17.1,
+            "@5": 17.1,
+            "@10": 17.1
+          },
+          "all@K": {
+            "@1": 8.9,
+            "@3": 13.0,
+            "@5": 13.0,
+            "@10": 13.0
+          },
+          "mrr": 0.134
+        },
         "by_category": {
           "adversarial": {
             "total": 35,
@@ -374,27 +496,26 @@
             "unparseable": 0
           },
           "multi_hop": {
-            "total": 24,
-            "accuracy": 0.0,
-            "unparseable": 1
-          },
-          "open_domain_knowledge": {
-            "total": 62,
-            "accuracy": 16.1,
-            "unparseable": 0
-          },
-          "single_hop": {
             "total": 30,
             "accuracy": 6.7,
             "unparseable": 0
           },
-          "temporal_reasoning": {
+          "open_domain_knowledge": {
             "total": 7,
             "accuracy": 0.0,
             "unparseable": 0
+          },
+          "single_hop": {
+            "total": 62,
+            "accuracy": 16.1,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 24,
+            "accuracy": 0.0,
+            "unparseable": 1
           }
         },
-        "adversarial_abstention_accuracy": 85.7,
         "write_coverage_memories": 1.506,
         "write_coverage_candidates": 0.0,
         "retrieval_evidence_coverage": 1.222,
@@ -423,6 +544,24 @@
         "accuracy": 22.1,
         "unparseable": 1,
         "errors": 0,
+        "answerable_total": 150,
+        "answerable_accuracy": 6.7,
+        "abstention_accuracy": 80.0,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 11.3,
+            "@3": 18.7,
+            "@5": 18.7,
+            "@10": 18.7
+          },
+          "all@K": {
+            "@1": 5.3,
+            "@3": 11.3,
+            "@5": 11.3,
+            "@10": 11.3
+          },
+          "mrr": 0.143
+        },
         "by_category": {
           "adversarial": {
             "total": 40,
@@ -430,27 +569,26 @@
             "unparseable": 0
           },
           "multi_hop": {
-            "total": 34,
-            "accuracy": 2.9,
-            "unparseable": 1
-          },
-          "open_domain_knowledge": {
-            "total": 83,
-            "accuracy": 10.8,
-            "unparseable": 0
-          },
-          "single_hop": {
             "total": 20,
             "accuracy": 0.0,
             "unparseable": 0
           },
-          "temporal_reasoning": {
+          "open_domain_knowledge": {
             "total": 13,
             "accuracy": 0.0,
             "unparseable": 0
+          },
+          "single_hop": {
+            "total": 83,
+            "accuracy": 10.8,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 34,
+            "accuracy": 2.9,
+            "unparseable": 1
           }
         },
-        "adversarial_abstention_accuracy": 80.0,
         "write_coverage_memories": 1.289,
         "write_coverage_candidates": 1.279,
         "retrieval_evidence_coverage": 1.253,
@@ -479,6 +617,24 @@
         "accuracy": 20.5,
         "unparseable": 1,
         "errors": 0,
+        "answerable_total": 191,
+        "answerable_accuracy": 0.5,
+        "abstention_accuracy": 100.0,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 5.8,
+            "@3": 9.4,
+            "@5": 9.4,
+            "@10": 9.4
+          },
+          "all@K": {
+            "@1": 3.1,
+            "@3": 5.2,
+            "@5": 5.2,
+            "@10": 5.2
+          },
+          "mrr": 0.075
+        },
         "by_category": {
           "adversarial": {
             "total": 48,
@@ -486,27 +642,26 @@
             "unparseable": 0
           },
           "multi_hop": {
-            "total": 42,
-            "accuracy": 0.0,
-            "unparseable": 1
-          },
-          "open_domain_knowledge": {
-            "total": 118,
-            "accuracy": 0.8,
-            "unparseable": 0
-          },
-          "single_hop": {
             "total": 21,
             "accuracy": 0.0,
             "unparseable": 0
           },
-          "temporal_reasoning": {
+          "open_domain_knowledge": {
             "total": 10,
             "accuracy": 0.0,
             "unparseable": 0
+          },
+          "single_hop": {
+            "total": 118,
+            "accuracy": 0.8,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 42,
+            "accuracy": 0.0,
+            "unparseable": 1
           }
         },
-        "adversarial_abstention_accuracy": 100.0,
         "write_coverage_memories": 1.439,
         "write_coverage_candidates": 1.435,
         "retrieval_evidence_coverage": 0.515,
@@ -530,6 +685,24 @@
         "accuracy": 19.4,
         "unparseable": 0,
         "errors": 0,
+        "answerable_total": 156,
+        "answerable_accuracy": 5.8,
+        "abstention_accuracy": 72.5,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 3.8,
+            "@3": 13.5,
+            "@5": 13.5,
+            "@10": 13.5
+          },
+          "all@K": {
+            "@1": 2.6,
+            "@3": 9.6,
+            "@5": 9.6,
+            "@10": 9.6
+          },
+          "mrr": 0.073
+        },
         "by_category": {
           "adversarial": {
             "total": 40,
@@ -537,27 +710,26 @@
             "unparseable": 0
           },
           "multi_hop": {
-            "total": 33,
-            "accuracy": 0.0,
-            "unparseable": 0
-          },
-          "open_domain_knowledge": {
-            "total": 73,
-            "accuracy": 12.3,
-            "unparseable": 0
-          },
-          "single_hop": {
             "total": 37,
             "accuracy": 0.0,
             "unparseable": 0
           },
-          "temporal_reasoning": {
+          "open_domain_knowledge": {
             "total": 13,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "single_hop": {
+            "total": 73,
+            "accuracy": 12.3,
+            "unparseable": 0
+          },
+          "temporal_reasoning": {
+            "total": 33,
             "accuracy": 0.0,
             "unparseable": 0
           }
         },
-        "adversarial_abstention_accuracy": 72.5,
         "write_coverage_memories": 1.862,
         "write_coverage_candidates": 0.0,
         "retrieval_evidence_coverage": 1.857,
@@ -581,6 +753,24 @@
         "accuracy": 22.1,
         "unparseable": 0,
         "errors": 0,
+        "answerable_total": 158,
+        "answerable_accuracy": 5.1,
+        "abstention_accuracy": 80.4,
+        "evidence_recall": {
+          "any@K": {
+            "@1": 4.5,
+            "@3": 10.3,
+            "@5": 10.3,
+            "@10": 10.3
+          },
+          "all@K": {
+            "@1": 3.2,
+            "@3": 9.0,
+            "@5": 9.0,
+            "@10": 9.0
+          },
+          "mrr": 0.067
+        },
         "by_category": {
           "adversarial": {
             "total": 46,
@@ -593,22 +783,21 @@
             "unparseable": 0
           },
           "open_domain_knowledge": {
+            "total": 7,
+            "accuracy": 0.0,
+            "unparseable": 0
+          },
+          "single_hop": {
             "total": 87,
             "accuracy": 9.2,
             "unparseable": 0
           },
-          "single_hop": {
-            "total": 32,
-            "accuracy": 0.0,
-            "unparseable": 0
-          },
           "temporal_reasoning": {
-            "total": 7,
+            "total": 32,
             "accuracy": 0.0,
             "unparseable": 0
           }
         },
-        "adversarial_abstention_accuracy": 80.4,
         "write_coverage_memories": 1.314,
         "write_coverage_candidates": 0.0,
         "retrieval_evidence_coverage": 1.299,

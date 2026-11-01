@@ -97,9 +97,12 @@ def study_one_query(rows: list[dict[str, Any]], gold_ids: set[str]) -> dict[str,
         scored = rerank_ids(rows, preset)
         order = [mid for mid, _ in scored]
         best = best_gold_rank(order, gold_ids)
+        all_covered = {f"top{k}": bool(gold_ids <= set(order[:k])) for k in TOPK}
         out[name] = {
             "best_gold_rank": best,
             "ev_in_topk": {f"top{k}": bool(best is not None and best <= k) for k in TOPK},
+            "all_ev_in_topk": all_covered,
+            "mrr": round(1.0 / best, 4) if best else 0.0,
             "ev_in_pack_production_thresh": bool(gold_ids & in_pack),
         }
     return out
@@ -129,8 +132,9 @@ async def run_study(
 
     agg: dict[str, dict[str, Any]] = {
         name: {"queries": 0, "ev_in_topk": {f"top{k}": 0 for k in TOPK},
+               "all_ev_in_topk": {f"top{k}": 0 for k in TOPK},
                "ev_in_pack_production_thresh": 0, "best_gold_rank_sum": 0,
-               "best_gold_rank_n": 0}
+               "best_gold_rank_n": 0, "mrr_sum": 0.0}
         for name in WEIGHT_PRESETS
     }
     per_query: list[dict[str, Any]] = []
@@ -168,11 +172,14 @@ async def run_study(
                     for k in TOPK:
                         if slot["ev_in_topk"][f"top{k}"]:
                             agg[name]["ev_in_topk"][f"top{k}"] += 1
+                        if slot["all_ev_in_topk"][f"top{k}"]:
+                            agg[name]["all_ev_in_topk"][f"top{k}"] += 1
                     if slot["ev_in_pack_production_thresh"]:
                         agg[name]["ev_in_pack_production_thresh"] += 1
                     if slot["best_gold_rank"] is not None:
                         agg[name]["best_gold_rank_sum"] += slot["best_gold_rank"]
                         agg[name]["best_gold_rank_n"] += 1
+                    agg[name]["mrr_sum"] += slot["mrr"]
                 done += 1
                 if done % 50 == 0:
                     print(f"  {sid}: {done} queries studied")
@@ -188,11 +195,14 @@ async def run_study(
             "queries": slot["queries"],
             "ev_in_topk": {k: f"{v}/{slot['queries']} ({round(v / n * 100, 1)}%)"
                            for k, v in slot["ev_in_topk"].items()},
+            "all_ev_in_topk": {k: f"{v}/{slot['queries']} ({round(v / n * 100, 1)}%)"
+                               for k, v in slot["all_ev_in_topk"].items()},
             "ev_in_pack_production_thresh": slot["ev_in_pack_production_thresh"],
             "mean_best_gold_rank": (
                 round(slot["best_gold_rank_sum"] / slot["best_gold_rank_n"], 2)
                 if slot["best_gold_rank_n"] else None
             ),
+            "mrr": round(slot["mrr_sum"] / n, 3) if n else None,
         }
     return {"queries": len(per_query), "summary": summary, "per_query": per_query}
 
