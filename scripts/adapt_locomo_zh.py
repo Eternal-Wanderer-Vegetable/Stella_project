@@ -150,6 +150,101 @@ def translate_scenario(scenario: dict, llm: Any, cache_dir: Path) -> tuple[dict,
     return zh, calls
 
 
+TRANSLATION_PROTOCOL = "locomo-zh-v1"
+QA_PROTOCOL = "locomo-zh-qa-v1"
+
+_QA_SYSTEM_PROMPT = (
+    "你是专业评测数据翻译。把英文记忆问答对的\"问题/标准答案/诱答\"翻译成简体中文。规则："
+    "1) 问题译成自然的中文疑问句；"
+    "2) 标准答案忠实、简短，日期写成「2023年5月7日」形态，数字保留阿拉伯数字；"
+    "3) 诱答（如有）同样译成自然的中文错误答案；"
+    "4) 人名保留英文；"
+    "5) 只输出 JSONL，每行一个 JSON 对象："
+    "{\"qid\":\"...\",\"question\":\"...\",\"gold_answer\":\"...\",\"adversarial_answer\":\"...\"}，"
+    "无诱答时 adversarial_answer 填空字符串。"
+)
+
+
+def translate_qa(scenario: dict, llm: Any, cache_dir: Path) -> tuple[dict, int]:
+    """翻译场景的 QA（question/gold/adversarial）；返回 (新场景, 调用数)。
+
+    原文保留在每项的 ``original_en``；缓存按 qid 断点续跑。
+    """
+    sample_id = scenario["sample_id"]
+    cache = load_cache(cache_dir, f"qa-{sample_id}")
+    calls = 0
+    qa_out = []
+    items = scenario.get("qa") or []
+    missing = [q for q in items if q["qid"] not in cache]
+    for chunk_start in range(0, len(missing), 6):
+        chunk = missing[chunk_start : chunk_start + 6]
+        payload = "\n".join(
+            json.dumps({
+                "qid": q["qid"],
+                "question": q["question"],
+                "gold_answer": q.get("gold_answer") or "",
+                "adversarial_answer": q.get("adversarial_answer") or "",
+            }, ensure_ascii=False)
+            for q in chunk
+        )
+        completion = llm.chat(
+            f"{payload}\n\n请按系统规则输出上述 {len(chunk)} 组问答的中文 JSONL。",
+            system=_QA_SYSTEM_PROMPT,
+            max_tokens=8192,
+            temperature=0.0,
+        )
+        calls += 1
+        new = {}
+        for line in completion["text"].splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                continue
+            qid = str(obj.get("qid") or "")
+            if qid in {q["qid"] for q in chunk} and obj.get("question"):
+                new[qid] = obj
+        if new:
+            append_cache(cache_dir, f"qa-{sample_id}",
+                         {k: json.dumps(v, ensure_ascii=False) for k, v in new.items()})
+            cache.update({k: json.dumps(v, ensure_ascii=False) for k, v in new.items()})
+    for q in items:
+        zh = cache.get(q["qid"])
+        if zh:
+            try:
+                obj = json.loads(zh)
+            except ValueError:
+                obj = {}
+            qa_out.append({
+                **q,
+                "question": str(obj.get("question") or q["question"]),
+                "gold_answer": (str(obj.get("gold_answer")) if obj.get("gold_answer") else q.get("gold_answer")),
+                "adversarial_answer": (str(obj.get("adversarial_answer")) if obj.get("adversarial_answer") else q.get("adversarial_answer")),
+                "original_en": {
+                    "question": q["question"],
+                    "gold_answer": q.get("gold_answer"),
+                    "adversarial_answer": q.get("adversarial_answer"),
+                },
+            })
+        else:
+            qa_out.append(q)
+    translated = sum(1 for q in qa_out if "original_en" in q)
+    zh = {
+        **scenario,
+        "qa": qa_out,
+        "qa_translation": {
+            "protocol": QA_PROTOCOL,
+            "model": llm.model,
+            "translated": translated,
+            "total": len(qa_out),
+            "note": "里程碑 2：问答已译；gold 与问题同语言，judge 按中文比对",
+        },
+    }
+    return zh, calls
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="LoCoMo 场景中文翻译（会话，逐条对齐）")
     parser.add_argument("--scenarios", type=Path,
@@ -159,6 +254,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache", type=Path, default=None,
                         help="翻译缓存目录（缺省 <out>/.translation-cache）")
     parser.add_argument("--conversations", type=int, default=0, help="只翻译前 N 段（0=全部）")
+    parser.add_argument("--qa-only", action="store_true",
+                        help="里程碑 2：只翻译 QA（场景从 --out 读，跳过会话翻译与 index 重写）")
     parser.add_argument("--llm-base-url", default="http://127.0.0.1:8081/v1")
     parser.add_argument("--llm-model", default=None)
     args = parser.parse_args(argv)
@@ -172,13 +269,26 @@ def main(argv: list[str] | None = None) -> int:
     from memory_eval.scenarios import load_scenarios
 
     llm = EvalLLM(args.llm_base_url, args.llm_model)
-    scenarios = load_scenarios(args.scenarios, limit=args.conversations or None)
+    if args.qa_only:
+        scenarios = load_scenarios(args.out, limit=args.conversations or None)
+    else:
+        scenarios = load_scenarios(args.scenarios, limit=args.conversations or None)
     cache_dir = args.cache or (args.out / ".translation-cache")
     args.out.mkdir(parents=True, exist_ok=True)
 
     total_calls = 0
     for scenario in scenarios:
         print(f"── {scenario['scenario_id']} ──")
+        if args.qa_only:
+            zh, calls = translate_qa(scenario, llm, cache_dir)
+            total_calls += calls
+            dest = args.out / f"{zh['sample_id']}.json"
+            dest.write_text(json.dumps(zh, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            t = zh["qa_translation"]
+            print(f"  {dest.name}: QA {t['translated']}/{t['total']} 已译（调用 {calls} 次）")
+            if t["translated"] < t["total"]:
+                print(f"  ⚠️ {t['total'] - t['translated']} 组缺失（缓存续跑可补）", file=sys.stderr)
+            continue
         zh, calls = translate_scenario(scenario, llm, cache_dir)
         total_calls += calls
         dest = args.out / f"{zh['sample_id']}.json"

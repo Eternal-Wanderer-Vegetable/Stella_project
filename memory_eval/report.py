@@ -23,6 +23,18 @@ def git_head() -> str | None:
         return None
 
 
+def score_env_overrides() -> dict[str, str]:
+    """捕获排序相关的环境覆盖（QA 模式实验的指纹：权重/阈值改动必须进报告）。"""
+    import os
+
+    keys = [
+        "MEMORY_SCORE_W_CONTEXT", "MEMORY_SCORE_W_USAGE", "MEMORY_SCORE_W_SEMANTIC",
+        "MEMORY_SCORE_W_RECENCY", "MEMORY_SCORE_W_CONFIDENCE", "MEMORY_SCORE_W_IMPORTANCE",
+        "MEMORY_SCORE_MIN",
+    ]
+    return {k: os.environ[k] for k in keys if k in os.environ}
+
+
 def build_run_meta(args: Any, index: dict[str, Any], llm: Any | None, judge: Any | None) -> dict[str, Any]:
     from memory.schema import SCHEMA_VERSION
 
@@ -38,6 +50,8 @@ def build_run_meta(args: Any, index: dict[str, Any], llm: Any | None, judge: Any
             "license": "CC-BY-NC-4.0",
         },
         "channel": getattr(args, "mode", None),
+        "pack_mode": getattr(args, "pack_mode", "auto"),
+        "score_env_overrides": score_env_overrides(),
         "write_mode": getattr(args, "consolidation", "live"),
         "gold_injection": bool(getattr(args, "inject_gold", False)),
         "qa_sample_per_category": getattr(args, "qa_sample", 0) or None,

@@ -176,3 +176,56 @@ Conclusion: **the evidence contract's narrow-pattern bottleneck is language-inde
 - Retrieval side: ranking calibration (previous section) + a QA mode (sem-dominant, rec→0, larger limit) is the shortest path from the 24% upper bound upward.
 - Write side: the pattern-expansion assessment (Next-4) now has a **bilingual baseline**: EN 0.29% / ZH 1.9%, with the comparison protocol ready.
 - Chinese end-to-end (milestone 2: QA translation + full chain) data is ready (`adapted-zh` scenarios + conv-30 funnel); the next session can continue directly.
+
+---
+
+## Addendum (2026-11-01): paired QA-mode experiment + Chinese end-to-end + pattern assessment
+
+Three Next items completed the same day (Next-2 milestone 2 / Next-3 end-to-end validation / Next-4 data part).
+
+### A. Paired QA-mode experiment (Next-3 end-to-end validation)
+
+**Design**: the same 304 questions (conv-26+30), same gold, same judge, same injected memories — only the retrieval config changes. QA mode = the ranking study's best combination as environment variables: `MEMORY_SCORE_W_RECENCY=0.0 MEMORY_SCORE_W_SEMANTIC=0.45` + `--pack-mode conflict` (limit 10) + `MEMORY_SCORE_MIN=0.15` (all captured in the run fingerprint `score_env_overrides`).
+
+| Metric | production | QA mode |
+| --- | --- | --- |
+| **Evidence in pack** | 44 (14.5%) | **193 (63.5%, 4.4x)** |
+| pack average | 2.65 | 10.0 |
+| **overall J-accuracy** | 24.0% | 25.3% (+1.3pp) |
+| adversarial abstention | 84.5% | **32.4% (collapsed)** |
+| open_domain | 11.4% | **43.9% (+32.5pp)** |
+| temporal | 0.0% | 15.4% |
+| multi_hop / single_hop | 0% / 0% | 3.2% / 0% |
+| per-question flips | — | +46 up / −42 down |
+
+**Three conclusions**:
+
+1. **Retrieval recall is unlocked**: evidence-in-pack 4.4x; the offline ranking prediction (top10 ≈ 66%) held end-to-end.
+2. **But the gain is offset by abstention collapse**: adversarial fell 84.5% → 32.4% — near-related content in the big pack tempts the model to answer "no-info" questions concretely. Net gain only +1.3pp (46 up vs 42 down). **Abstention protection is a precondition for productionizing a QA mode** (e.g., enable QA mode only for answerable query classes, or force an abstention channel when no direct hit exists).
+3. **Anatomy of single_hop 0/43** (zero in both configs): sampling shows three causes — **incomplete pack coverage of multi-fact answers** (gold lists two facts, only one entered the pack), **reasoning burn producing empty answers**, and **LoCoMo gold demanding enumeration completeness while evidence turns merely justify**. This exposes the benchmark's deep structure: "evidence in pack" overstates readiness; the correct metric is **all required evidence covered** (already counted in metrics).
+
+### B. Chinese end-to-end (milestone 2 complete)
+
+QA translated (protocol `locomo-zh-qa-v1`, 304 pairs, dates normalized like "2023年5月7日", originals kept in `original_en`). Chinese full chain (Chinese memories × Chinese questions × Chinese gold × judge comparing Chinese) vs English production (same 304 questions):
+
+| | English | Chinese |
+| --- | --- | --- |
+| J-accuracy | 24.0% | **23.0%** |
+| adversarial abstention | 84.5% | 84.5% |
+| open_domain | 11.4% | 8.8% |
+| retrieval evidence coverage | 44 | 33 |
+
+**The memory pipeline performs statistically equivalently in Chinese** (±1pp) — extraction, retrieval, answering, and judging are language-symmetric. Chinese FTS evidence coverage is slightly lower (33 vs 44) — a lead for Chinese retrieval tuning.
+
+### C. Pattern expansion assessment (Next-4 data part; design is a separate topic)
+
+Classifying live-funnel candidates (zh conv-26+30 = 350, en conv-26 = 188): the current 4 patterns (residence/origin/nickname/general preference) cover only about **6–10%** of candidates. Expansion demand clusters in four families:
+
+| family | examples | risk |
+| --- | --- | --- |
+| identity/family status | "我是单亲家长" "我有两个小一点的孩子" | low |
+| plans & ongoing | "我们在考虑下个月去露营" "我正在建图书馆" | needs temporal validity (plans expire) |
+| abilities & habits | "我会拉小提琴" "我吹单簧管" | low |
+| past events | "我认识这些朋友4年了，自从搬来以后" | needs history/current distinction |
+
+Two noise classes must be excluded at the same time: **praise-of-others sentences** ("我喜欢你用艺术讲故事" — pattern-matched but not the speaker's preference) and **fragments**. Conclusion: without semantic constraints, false-positive promotions on Chinese corpora will appear before coverage gains (the single zh promotion being a true preference was luck). Data: `pattern-assessment.json` (coarse) + full candidate text in the funnel databases.
