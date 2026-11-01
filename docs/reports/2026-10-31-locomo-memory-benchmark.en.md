@@ -196,8 +196,8 @@ Three Next items completed the same day (Next-2 milestone 2 / Next-3 end-to-end 
 | adversarial abstention | 84.5% | **32.4% (collapsed)** |
 | single_hop (single-hop) | 11.4% | **43.9% (+32.5pp)** |
 | open_domain (open-domain) | 0.0% | 15.4% |
-| multi_hop (multi-hop) | 0.0% | 3.2% |
-| temporal (temporal) | 0.0% | 0.0% |
+| temporal (temporal) | 0.0% | **3.2%** |
+| multi_hop (multi-hop) | 0.0% | 0.0% |
 | per-question flips | — | +46 up / −42 down |
 
 **Three conclusions**:

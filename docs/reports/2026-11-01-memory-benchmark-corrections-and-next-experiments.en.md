@@ -73,8 +73,9 @@ Same 304 questions / gold / judge / injected memories — only the designated va
 
 Conclusions:
 
-1. **Each lever alone more than doubles answerable accuracy** (pack 3.1x > weights 2.4x); combined is super-additive at 4.1x — matching the offline ranking prediction.
-2. **Abstention damage tracks pack size** (weights −14.1pp vs pack −35.2pp): the physical presence of near-related memories, not ranking changes, drives unsupported answering.
+1. **Each lever alone more than doubles answerable accuracy** (pack 3.1x > weights 2.4x); combined reaches 4.1x. In increment terms: production 5.6% → +8.1pp (weights) → +12.0pp (pack) → combined +17.6pp — the combined increment is **slightly below** the sum of the single increments (+20.1pp); the two levers partially overlap (both act by raising evidence-in-pack), so this is not super-additivity.
+2. **Abstention loss correlates strongly with pack size, but ranking changes contribute independently**: the weights-only cell kept pack size (limit 3) yet still lost 14.1pp — better ranking surfaces near-miss content even in small packs; pack expansion removes another 35.2pp on top. Attribute as "recall improvement itself raises unsupported-answering risk", not pack count alone.
+3. The strict abstention guard is currently a **prompt constraint only**, not an independent evidence verifier — it does not check whether the answer is supported by the evidence; true evidence-sufficiency verification belongs to P3 (MBENCH-004).
 3. **The strict abstention guard works but overshoots**: it recovers 22.5pp of abstention (32.4%→54.9%) for only 3.9pp of answerable accuracy, and overall (27.6%) beats every other cell. An ideal guard would sit between strict and unguarded (e.g., retrieval-confidence gating: force abstention when the best pack score is below a threshold) — the next step for P1 task 3.
 4. **Overall barely moves across all cells (24–27.6%) while answerable/abstention swing violently** — overall accuracy is insensitive to this trade-off; separate reporting (P0-4) is validated.
 5. Production ordering: **weights-only (no_recency) is the safest first change** (2.4x answerable, −14.1pp abstention, zero pack-size change / zero token-budget cost); pack expansion must ship with abstention protection.

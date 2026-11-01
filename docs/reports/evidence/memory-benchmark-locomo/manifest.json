@@ -51,38 +51,50 @@
       "id": "personamem-full-matrix",
       "command": "python -m memory.benchmark --dir memory/benchmark/_public/personamem/adapted-full --matrix --embedding-fixture <fullset-fixture>",
       "result": "四模式全部 5000/5000 (100%)，recall 100%，forbidden 0，precision 33.4%",
-      "artifacts": ["personamem-full-matrix-20261031.txt"]
+      "artifacts": [
+        "personamem-full-matrix-20261031.txt"
+      ]
     },
     {
       "id": "locomo-live-ingest",
       "command": "python -m memory_eval --workdir runs/.../locomo-live-ingest --stage ingest --consolidation live --conversations 1 --memory-base-url http://127.0.0.1:8081 --memory-model qwen3.8-flash-next-iq2_xs",
       "result": "conv-26: 419 消息 → 188 候选（A103/B85）→ 0 accepted 证据 → 0 晋升",
-      "artifacts": ["locomo-live-ingest-report.json"]
+      "artifacts": [
+        "locomo-live-ingest-report.json"
+      ]
     },
     {
       "id": "locomo-full-gold",
       "command": "python -m memory_eval --stage all --mode hybrid --qa-sample 4 --seed 20261031 --consolidation oracle --inject-gold --llm-base-url http://127.0.0.1:8081/v1 --llm-model qwen3.8-flash-next-iq2_xs",
       "result": "196 QA J-accuracy 18.9%（adversarial 70%，single_hop 2.5%，temporal 0%）；上界配置",
-      "artifacts": ["locomo-full-gold-report.json"],
+      "artifacts": [
+        "locomo-full-gold-report.json"
+      ],
       "known_artifact": "oracle 候选受当时未修复的 TTL 回填工件影响（13 REJECTED），干净漏斗以 live-ingest 为准"
     },
     {
       "id": "locomo-smoke",
       "command": "同 full-gold 但 --conversations 2 --qa-sample 2",
       "result": "18 QA：证据入包 2/14，可回答题 0/14，adversarial 3/4",
-      "artifacts": ["locomo-smoke-report.json"]
+      "artifacts": [
+        "locomo-smoke-report.json"
+      ]
     },
     {
       "id": "locomo-conflict-cmp",
       "command": "同 smoke 加 --pack-mode conflict",
       "result": "与 auto 完全一致（2/14）——limit 不是约束",
-      "artifacts": ["locomo-conflict-cmp-report.json"]
+      "artifacts": [
+        "locomo-conflict-cmp-report.json"
+      ]
     },
     {
       "id": "locomo-threshold-diag",
       "command": "同 smoke 加 env MEMORY_SCORE_MIN=0.15",
       "result": "与 auto 完全一致（2/14）——排序是约束，阈值不是单独约束",
-      "artifacts": ["locomo-threshold-diag-report.json"]
+      "artifacts": [
+        "locomo-threshold-diag-report.json"
+      ]
     }
   ],
   "retrieval_decomposition": {
@@ -94,5 +106,104 @@
     "ruff": "ruff check . 全清",
     "check_docs": "python scripts/check_docs.py 通过",
     "detect_changes": "scope=all 7 files / 1 symbol / 800 flows / CRITICAL——全部来自出站会话既有未提交改动，非本轮基准文件；不豁免"
+  },
+  "mbench003_p1_runs": {
+    "paired_design": "同 304 题（conv-26+30）/ 同 gold 注入 / 同 answer+judge 模型，只变指定检索配置",
+    "models": {
+      "answer_judge": {
+        "endpoint": "http://127.0.0.1:8081/v1",
+        "model": "qwen3.8-flash-next-iq2_xs",
+        "temperature": 0.0,
+        "max_tokens": 2048,
+        "note": "reasoning 模型；/no_think 实测无效"
+      },
+      "embedding": {
+        "endpoint": "http://127.0.0.1:1234",
+        "model": "text-embedding-qwen3-embedding-0.6b",
+        "dim": 1024
+      }
+    },
+    "cells": [
+      {
+        "id": "production",
+        "report": "locomo-full-1986qa-report.json",
+        "per_question": "per-question/production-full-1986.jsonl",
+        "config": {}
+      },
+      {
+        "id": "weights-only",
+        "report": "ablation-weights-only-report.json",
+        "per_question": "per-question/ablation-weights-only-304.jsonl",
+        "config": {
+          "score_env": {
+            "MEMORY_SCORE_W_RECENCY": "0.0",
+            "MEMORY_SCORE_W_SEMANTIC": "0.45"
+          },
+          "pack_mode": "auto"
+        }
+      },
+      {
+        "id": "pack-only",
+        "report": "ablation-pack-only-report.json",
+        "per_question": "per-question/ablation-pack-only-304.jsonl",
+        "config": {
+          "score_env": {
+            "MEMORY_SCORE_MIN": "0.15"
+          },
+          "pack_mode": "conflict"
+        }
+      },
+      {
+        "id": "combined",
+        "report": "locomo-qamode-paired-report.json",
+        "per_question": "per-question/ablation-combined-304.jsonl",
+        "config": {
+          "score_env": {
+            "MEMORY_SCORE_W_RECENCY": "0.0",
+            "MEMORY_SCORE_W_SEMANTIC": "0.45",
+            "MEMORY_SCORE_MIN": "0.15"
+          },
+          "pack_mode": "conflict"
+        }
+      },
+      {
+        "id": "combined-guard",
+        "report": "ablation-combined-guard-report.json",
+        "per_question": "per-question/ablation-combined-guard-304.jsonl",
+        "config": {
+          "score_env": {
+            "MEMORY_SCORE_W_RECENCY": "0.0",
+            "MEMORY_SCORE_W_SEMANTIC": "0.45",
+            "MEMORY_SCORE_MIN": "0.15"
+          },
+          "pack_mode": "conflict",
+          "abstention_guard": "strict-prompt"
+        }
+      }
+    ],
+    "headline": {
+      "answerable_accuracy": {
+        "production": 5.6,
+        "weights-only": 13.7,
+        "pack-only": 17.6,
+        "combined": 23.2,
+        "combined-guard": 19.3
+      },
+      "abstention_accuracy": {
+        "production": 84.5,
+        "weights-only": 70.4,
+        "pack-only": 49.3,
+        "combined": 32.4,
+        "combined-guard": 54.9
+      },
+      "overall_accuracy": {
+        "production": 24.0,
+        "weights-only": 27.0,
+        "pack-only": 25.0,
+        "combined": 25.3,
+        "combined-guard": 27.6
+      }
+    },
+    "erratum": "类别映射勘误与措辞修正见 docs/reports/2026-11-01-memory-benchmark-corrections-and-next-experiments.md（2026-11-01 深夜二次修正 multi/temporal 配对行）"
   }
 }

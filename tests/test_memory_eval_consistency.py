@@ -22,6 +22,8 @@ from memory_eval.scenarios import (
 
 # ── 固定契约（改动这里 = 有意识地换数据集/协议，必须有记录）──────────
 PINNED_DATASET_REVISION = "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376"
+# locomo10.json @ PINNED_DATASET_REVISION 的 sha256（fetch_locomo.py manifest 同值）
+PINNED_SOURCE_SHA256 = "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4"
 PINNED_TOTAL_QA = 1986
 PINNED_SCENARIOS = 10
 # 类别编号→名称（已对照 snap-research/locomo task_eval/evaluation.py 与
@@ -97,7 +99,8 @@ def test_adapted_dataset_contract():
     """适配产物的冻结契约：版本、场景数、题目数、类别分布、源 revision。"""
     index = load_index(ADAPTED_DIR)
     assert index["schema"] == PINNED_PROTOCOLS["index"]
-    assert index["source"]["sha256"], "index 缺少源 sha256"
+    assert index["source"]["sha256"] == PINNED_SOURCE_SHA256, (
+        f"数据源 sha256 漂移：{index['source'].get('sha256')} ≠ pin")
     assert len(index["scenarios"]) == PINNED_SCENARIOS
 
     scenarios = load_scenarios(ADAPTED_DIR)
