@@ -218,6 +218,7 @@ async def run(args: Any) -> int:
                     record = await answer_question(
                         env, scenario, qa, channel=args.mode, llm=llm, service=service,
                         pack_mode=PACK_MODES.get(getattr(args, "pack_mode", "auto")),
+                        strict=bool(getattr(args, "abstention_guard", False)),
                     )
                     judge_raw = judge_llm.chat(
                         build_judge_prompt(

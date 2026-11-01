@@ -40,6 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pack-mode", choices=("auto", "casual", "tech", "conflict"),
                         default="auto",
                         help="检索用法模式：auto=生产自动分类；conflict=limit10 检索友好对照")
+    parser.add_argument("--abstention-guard", action="store_true",
+                        help="弃答保护（MBENCH-003 P1 任务 3）：作答必须以记忆中直接对应"
+                             "陈述为前提，抑制大包下的无依据作答")
     parser.add_argument("--conversations", type=int, default=0, help="只跑前 N 段（0=全部）")
     parser.add_argument("--conversations-from", type=int, default=1,
                         help="从第 N 段开始跑（1-based，含）；与 --conversations 组合可拆"

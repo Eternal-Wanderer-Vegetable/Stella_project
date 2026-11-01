@@ -20,6 +20,7 @@ CHANNELS: dict[str, tuple[bool, bool]] = {
 }
 
 ANSWER_PROMPT_VERSION = "memory-eval-answer-v1"
+ANSWER_PROMPT_VERSION_STRICT = "memory-eval-answer-v1-strict"
 
 _ANSWER_INSTRUCTIONS = (
     "根据上面分节给出的记忆信息回答最后的问题。只使用记忆里能找到的信息；"
@@ -27,9 +28,23 @@ _ANSWER_INSTRUCTIONS = (
     "用与问题相同的语言，用一两句话简短回答。"
 )
 
+# 弃答保护变体（MBENCH-003 P1 任务 3）：把「没有直接对应陈述」设为硬性作答条件，
+# 抑制大记忆包下近似相关内容诱发的无依据作答。
+_ANSWER_INSTRUCTIONS_STRICT = (
+    "根据上面分节给出的记忆信息回答最后的问题。作答条件（必须全部满足）："
+    "记忆中必须存在与问题**直接对应**的陈述，你才能给出具体答案；"
+    "只要记忆没有直接支持，就必须回答「记忆中没有相关信息」，禁止根据近似内容推测或拼凑。"
+    "用与问题相同的语言，用一两句话简短回答。"
+)
 
-def compose_answer_prompt(result: Any, question: str, asker: str) -> tuple[str, int]:
-    """组装评测问答 prompt；返回 (prompt, 记忆包字符数)。"""
+
+def compose_answer_prompt(
+    result: Any, question: str, asker: str, *, strict: bool = False
+) -> tuple[str, int]:
+    """组装评测问答 prompt；返回 (prompt, 记忆包字符数)。
+
+    ``strict=True`` 为弃答保护变体（MBENCH-003 P1 任务 3）。
+    """
     from memory.prompt_builder import build_v2_named_sections
 
     sections = build_v2_named_sections(
@@ -46,8 +61,9 @@ def compose_answer_prompt(result: Any, question: str, asker: str) -> tuple[str, 
     memory_block = "\n\n".join(parts) if parts else "（只有当前时间信息）"
     if not has_memories:
         memory_block += "\n\n（本题未召回任何长期记忆。）"
+    instructions = _ANSWER_INSTRUCTIONS_STRICT if strict else _ANSWER_INSTRUCTIONS
     prompt = (
-        f"{memory_block}\n\n---\n{_ANSWER_INSTRUCTIONS}\n\n"
+        f"{memory_block}\n\n---\n{instructions}\n\n"
         f"问题（来自用户 {asker}）：{question}"
     )
     return prompt, pack_chars
@@ -62,11 +78,13 @@ async def answer_question(
     llm: Any,
     service: Any = None,
     pack_mode: str | None = None,
+    strict: bool = False,
 ) -> dict[str, Any]:
     """对单个 QA 走生产检索 → 记忆包 → 短答；返回带检索与成本明细的记录。
 
     ``pack_mode=None`` 走生产 ``detect_mode`` 自动分类；显式传入用法模式
     （如 ``CONFLICT_AVOID``，limit=10）即为「检索友好配置」对照实验。
+    ``strict=True`` 启用弃答保护指令（作答必须以记忆中直接对应陈述为前提）。
     """
     import memory.retrieval_v2 as retrieval_v2
     from config.spaces import resolve_space
@@ -96,7 +114,9 @@ async def answer_question(
         retrieval_v2.RAG_ENABLED, retrieval_v2.MEMORY_V2_ENABLED = old
         retrieval_v2._CACHE.clear()
 
-    prompt, pack_chars = compose_answer_prompt(result, qa["question"], asker)
+    prompt, pack_chars = compose_answer_prompt(
+        result, qa["question"], asker, strict=strict
+    )
     # reasoning 模型（gemma-4-e / qwen3.8 系）会先输出隐藏思考，预算必须给足
     completion = llm.chat(prompt, max_tokens=2048, temperature=0.0)
     retrieval_latency = time.monotonic() - started

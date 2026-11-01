@@ -52,6 +52,7 @@ def build_run_meta(args: Any, index: dict[str, Any], llm: Any | None, judge: Any
         "channel": getattr(args, "mode", None),
         "pack_mode": getattr(args, "pack_mode", "auto"),
         "score_env_overrides": score_env_overrides(),
+        "abstention_guard": bool(getattr(args, "abstention_guard", False)),
         "write_mode": getattr(args, "consolidation", "live"),
         "gold_injection": bool(getattr(args, "inject_gold", False)),
         "qa_sample_per_category": getattr(args, "qa_sample", 0) or None,
