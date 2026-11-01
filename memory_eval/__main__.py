@@ -40,6 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pack-mode", choices=("auto", "casual", "tech", "conflict"),
                         default="auto",
                         help="检索用法模式：auto=生产自动分类；conflict=limit10 检索友好对照")
+    parser.add_argument("--pack-representation", choices=("T0", "T1", "T2", "T3"),
+                        default="T0",
+                        help="MBENCH-004 P2 记忆包表示实验：T0=生产渲染；T1=+来源时间；"
+                             "T2=+事件时间；T3=+来源/主体（检索不变，只改表示）")
     parser.add_argument("--abstention-guard", action="store_true",
                         help="弃答保护（MBENCH-003 P1 任务 3）：作答必须以记忆中直接对应"
                              "陈述为前提，抑制大包下的无依据作答")

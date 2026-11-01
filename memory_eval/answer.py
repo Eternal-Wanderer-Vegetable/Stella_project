@@ -39,11 +39,21 @@ _ANSWER_INSTRUCTIONS_STRICT = (
 
 
 def compose_answer_prompt(
-    result: Any, question: str, asker: str, *, strict: bool = False
+    result: Any,
+    question: str,
+    asker: str,
+    *,
+    strict: bool = False,
+    pack_level: str = "T0",
+    scenario: dict[str, Any] | None = None,
+    db_path: Any = None,
 ) -> tuple[str, int]:
     """组装评测问答 prompt；返回 (prompt, 记忆包字符数)。
 
     ``strict=True`` 为弃答保护变体（MBENCH-003 P1 任务 3）。
+    ``pack_level`` 为 MBENCH-004 P2 记忆包表示实验：T0=生产渲染；T1/T2/T3 在
+    生产分节结构上只替换 memories 分节为 ``pack_representation.render_pack``
+    的对应表示（+来源时间 / +事件时间 / +来源与主体），检索结果不变。
     """
     from memory.prompt_builder import build_v2_named_sections
 
@@ -55,6 +65,15 @@ def compose_answer_prompt(
         current_user_id=None,
         mode="CASUAL_REPLY",
     )
+    if pack_level in ("T1", "T2", "T3"):
+        from memory_eval.pack_representation import render_pack
+
+        custom = render_pack(
+            result, level=pack_level, scenario=scenario or {}, db_path=db_path
+        )
+        sections = [
+            (name, custom if name == "memories" else text) for name, text in sections
+        ]
     parts = [f"【{name}】\n{text}" for name, text in sections if (text or "").strip()]
     pack_chars = sum(len(text) for _, text in sections)
     has_memories = any(name == "memories" and (text or "").strip() for name, text in sections)
@@ -79,6 +98,7 @@ async def answer_question(
     service: Any = None,
     pack_mode: str | None = None,
     strict: bool = False,
+    pack_level: str = "T0",
 ) -> dict[str, Any]:
     """对单个 QA 走生产检索 → 记忆包 → 短答；返回带检索与成本明细的记录。
 
@@ -115,7 +135,8 @@ async def answer_question(
         retrieval_v2._CACHE.clear()
 
     prompt, pack_chars = compose_answer_prompt(
-        result, qa["question"], asker, strict=strict
+        result, qa["question"], asker, strict=strict,
+        pack_level=pack_level, scenario=scenario, db_path=env.db_path,
     )
     # reasoning 模型（gemma-4-e / qwen3.8 系）会先输出隐藏思考，预算必须给足
     completion = llm.chat(prompt, max_tokens=2048, temperature=0.0)

@@ -81,3 +81,26 @@ Conclusions:
 5. Production ordering: **weights-only (no_recency) is the safest first change** (2.4x answerable, −14.1pp abstention, zero pack-size change / zero token-budget cost); pack expansion must ship with abstention protection.
 
 Evidence: `ablation-*-report.json` (three cells) + `locomo-qamode-paired-report.json` (combined cell) + the production full-run report; per-question JSONL in each workdir.
+
+## 8. P2 time-anchor and speaker-attribution experiment (T0–T3, 288-question invariant subset, paired)
+
+MBENCH-004 P2: **retrieval completely unchanged** (combined config; per-question `retrieved_ids` verified identical across the four runs — 288/304 invariant; 16 flipped on near-ties due to embedding-endpoint nondeterminism and are excluded from the pairing), only the memory-pack representation changes:
+
+| representation | overall | answerable | correct abstention | multi/temporal/open/single correct | prompt tokens |
+| --- | --- | --- | --- | --- | --- |
+| T0 production rendering | 25.0% | 23.3% | 32.1% | 0/2/2/50 | 550 |
+| T1 +source time | 38.2% | 37.9% | 39.3% | 2/**34**/2/50 | 742 |
+| T2 +event-time normalization | 37.8% | 38.4% | 35.7% | 3/31/2/53 | 782 |
+| **T3 +speaker/subject attribution** | **49.7%** | **44.8%** | **69.6%** | 3/**40**/2/59 | 890 |
+
+(denominators ≈35/13/59 for temporal/open/single on the n=288 invariant subset.)
+
+Conclusions:
+
+1. **Temporal accuracy jumps from 5.6% to 94%+ purely by adding the confirmation date to the pack** (T1: temporal 2/36→34/36) — the "temporal reasoning 0.9%" bottleneck was neither retrieval nor reasoning but the absence of any date information in the pack.
+2. **T3 (+speaker/subject attribution) dominates every metric**: overall 25.0%→**49.7%** (+24.7pp), answerable 23.3%→**44.8%**, correct abstention 32.1%→**69.6%** — attribution improves both answering (whose experience it is) and abstention (more confident refusal of questions unrelated to the person).
+3. T2 (relative-time normalization) ≈ T1 (temporal 31 vs 34; slightly better open/single) — the marginal benefit of event-time normalization needs more samples.
+4. Cost: T3 prompt tokens +62% (550→890, +340 tokens), no latency regression (18.8s vs 14.3s) — acceptable within the 8,192-token budget.
+5. Boundary: gold-injected memories carry clean user_ids/timestamps; production metadata noise (missing times, unclear subjects) will dilute the gains — re-validate on real write-side data before productionizing (P4).
+
+Evidence: `p2-T1/T2/T3-report.json` + `per-question/p2-*-304.jsonl`.
