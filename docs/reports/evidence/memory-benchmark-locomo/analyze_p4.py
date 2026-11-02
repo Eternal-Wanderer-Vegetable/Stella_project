@@ -38,7 +38,7 @@ def stats(rows, name):
     for r in graded:
         s = r.get("sufficiency") or "?"
         suff[s] = suff.get(s, 0) + 1
-    out = {
+    return {
         "cell": name,
         "n": len(graded),
         "overall": round(hits / len(graded) * 100, 1),
@@ -49,7 +49,6 @@ def stats(rows, name):
         "gated_insufficient": gated,
         "sufficiency": suff,
     }
-    return out
 
 
 p4_rows = list(load(RUN).values())

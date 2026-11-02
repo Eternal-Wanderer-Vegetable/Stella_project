@@ -280,6 +280,22 @@ Interaction notes:
 
 Memories with `RESTRICTED` / `INTERNAL` visibility, or with `BOUNDARY_PROTECTION` / `CONFLICT_AVOID` usage, may enter only the second section. The two sections are never mixed.
 
+### Memory reliability gray flags (MBENCH-004, default off)
+
+Two production flags validated on unseen data (1,682 questions); semantics and rollback
+conditions are in the [memory tuning runbook](../guides/memory-tuning.en.md):
+
+- `MEMORY_PACK_METADATA_MODE=full`: chat-material entries gain a `｜确认 YYYY-MM-DD`
+  (confirmed-on) time annotation from the memory row's `last_confirmed_at` (no extra
+  queries). Basis: the primary bottleneck for temporal questions was the absence of
+  dates in the pack (temporal 2/36→34/36). When off, rendering is byte-identical.
+- `MEMORY_SUFFICIENCY_GUARD_MODE=off/shadow/enforce`: before answering, a ROLE_EXTRACT
+  judge decides evidence sufficiency over the whole pack (SUPPORTED/INSUFFICIENT/AMBIGUOUS).
+  shadow records without gating; enforce short-circuits INSUFFICIENT into a fixed abstention
+  reply (delivered normally) and appends a conservative-answering directive to the memories
+  section on AMBIGUOUS. The verifier is fail-open on every path (budget exhausted / no backend /
+  error → answer normally).
+
 ## User Profile Governance
 
 `user_profiles` stores only **stable facts** (language preferences, technical proficiency, observable behavior). Personality judgments, mental states, and value judgments are filtered by `stable_profile_facts()` on both the write and read sides.

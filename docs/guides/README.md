@@ -12,5 +12,6 @@
 | [Cometa 外部任务](cometa.md) | 接入外部 Agent、认证与长任务回投 |
 | [定时任务](scheduling.md) | 管理群级 Cron、权限和投递 |
 | [技能使用](skills.md) | 配置运行时技能、来源与受控执行 |
+| [记忆调优](memory-tuning.md) | 记忆可靠性栈灰度旗标、检索配置与回退条件 |
 
 检查命令见 [Agent 验证门禁](../agent/verification.md)；历史证据从 [档案导航](../history/README.md) 查找。

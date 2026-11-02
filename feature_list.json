@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-10-31",
-  "active_feature": "XPLAT-PIPELINE-IMPLEMENTATION",
+  "updated_at": "2026-11-02",
+  "active_feature": "SETTINGS-DOCTOR-MODEL-CONFIG-RECOVERY",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -2107,6 +2107,101 @@
       ]
     },
     {
+      "id": "WINDOWS-MANAGED-STARTUP-SUPERVISOR",
+      "name": "Windows Corona/Nucleus 托管启动与状态监视",
+      "description": "在 Windows 源码检出中启动或接管 Corona-managed Stella，等待 Nucleus 健康并可持续监视运行状态；不直接管理 Nucleus 子进程。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "scripts/start_managed_stella.ps1",
+        "docs/development/deployment.md",
+        "docs/development/deployment.en.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "Windows 脚本调用现有 managed runtime 入口并采用 Corona/Nucleus 生命周期，不走 legacy bot.py 启动",
+        "脚本等待 Nucleus ready 与 Corona health HTTP 200，并提供持续状态监视选项",
+        "已有 Corona 实例可安全接管，不创建重复进程或自动重启",
+        "双语部署文档、PowerShell 语法、当前 Windows 实例启动/接管验收和文档门禁完成"
+      ],
+      "evidence": [
+        {
+          "command": "Windows PowerShell parser; scripts/start_managed_stella.ps1 -TimeoutSeconds 30; scripts/start_managed_stella.ps1 -PollIntervalSeconds 1 -Watch; python3 scripts/check_docs.py; git diff --check; serial GitNexus detect-changes scope all and compare main",
+          "result": "初始 managed 状态为 desired=stopped；经 python -m deploy runtime start --component stella 启动后，Corona PID 9244 管理 Nucleus PID 2768，core=ready，status API 可达，/_corona/v1/health HTTP 200，OneBot healthy。后续脚本执行返回 already_running 并通过 readiness；-Watch 多次轮询无状态变化，手动 Ctrl+C 仅结束 watcher。PowerShell parser parse-ok；文档检查 121 files / 1,327 local links / 577 migration anchors / 0 errors；diff check 通过。未运行测试或提交。 GitNexus serial scope=all: 5 tracked files / 3 section symbols / 0 processes / LOW; compare main: 9 files / 3 symbols / 782 processes / CRITICAL from existing outbound fanout, retained without waiver. The new untracked script is outside diff-based graph detection; its external CLI boundary was source-audited."
+        }
+      ]
+    },
+    {
+      "id": "SETTINGS-DOCTOR-MANAGED-PORT-ACCURACY",
+      "name": "Corona 托管模式设置页端口误报修复",
+      "description": "修复 Settings doctor 将 Corona 自身托管的 OneBot 监听端口误报为外部占用的问题；仅在 ready 核心、运行配置与目标配置端口一致时收敛该检查。",
+      "status": "done",
+      "dependencies": [
+        "WINDOWS-MANAGED-STARTUP-SUPERVISOR"
+      ],
+      "scope": [
+        "corona/config_api.py managed doctor aggregation",
+        "tests/corona/test_config_api.py",
+        "docs/development/deployment.md",
+        "docs/development/deployment.en.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "Corona 自己托管且健康的 OneBot 监听不再被设置页报告为外部端口冲突",
+        "核心健康探测失败、目标端口与运行端口不一致时仍保留错误",
+        "定向回归、Python 验证门禁和双语文档检查通过",
+        "受管实例重新加载补丁后设置页验收；真实 LM Studio 与待应用配置告警保留各自诊断结果"
+      ],
+      "evidence": [
+        {
+          "command": "GitNexus impact system_doctor/run_doctor and Corona route lookup; direct route/source reference audit",
+          "result": "目标符号及 corona/config_api.py 在索引中均为 UNKNOWN，未将其作为低风险依据。GitNexus 绑定 Stella_project@cf63061 与目标源码 HEAD 一致；源码确认 Settings doctor 由 Corona 的 /api/v1/system/doctor 路由聚合 legacy doctor 与 managed checks，并被 dashboard/src/stores/doctor.ts/SettingsPage 消费。源码搜索补证了代理拓扑与健康路由。"
+        },
+        {
+          "command": "STELLA_HOME=E:\\stella\\stella_project\\StellaData read-only runtime/doctor/model/config probes",
+          "result": "Corona PID 32376 持有 8080 并由其代理至 ready Nucleus PID 30740；managed status、Corona health HTTP 200、OneBot healthy。截图的占用错误在同一环境的 CLI doctor 可复现，但将运行态管理监听与外部 bind check 混为一谈。LM Studio 本地端点当前不可达且 llama 组件 disabled；desired_revision 不等于 applied_revision，差异来源为外部环境编辑且含 STELLA_LIGAMINA_*/工具进程环境键名，未打印值或擅自应用。"
+        },
+        {
+          "command": "python -m pytest tests/corona/test_config_api.py -q; ruff check corona/config_api.py tests/corona/test_config_api.py; git diff --check",
+          "result": "9 passed / 1 existing Starlette python_multipart PendingDeprecationWarning; changed-file Ruff and diff check passed. Regression confirms exact managed listener becomes OK without dropping implicit checks from the CLI summary, pending target-port drift remains blocking, and failed core health probe preserves the error."
+        },
+        {
+          "command": "python scripts/check_docs.py; python -m pytest tests -q; ruff check .; feature_list.json parse; git diff --check",
+          "result": "Docs passed: 121 files / 1,327 local links / 577 migration anchors / 0 errors. Full pytest collection stopped before running tests because the selected Conda interpreter lacks nonebot.adapters.qq. Full Ruff reported three existing findings only in untracked extensions/ligamina_bridge/__init__.py; changed-file Ruff passes. feature_list.json parses and diff check passes. The pre-existing bridge was left untouched."
+        },
+        {
+          "command": "python -m deploy runtime restart --component stella; runtime status; GET /_corona/v1/health; Settings doctor in Edge",
+          "result": "Two authorized managed restarts loaded the code and summary correction. Final Corona PID 47088 supervises Nucleus PID 52012; core ready, managed status healthy, OneBot healthy, health endpoint HTTP 200. Refreshed Settings doctor shows 40 passed / 2 warnings / 0 errors / 42 total; onebot_port is explicitly reported as Corona-managed and normal."
+        }
+      ]
+    },
+    {
+      "id": "SETTINGS-DOCTOR-MODEL-CONFIG-RECOVERY",
+      "name": "设置页模型端点与待应用配置告警处理",
+      "description": "恢复或明确当前不可达的本地模型端点，并在审查外部环境修订后决定应用、回退或逐项合并。",
+      "status": "in_progress",
+      "dependencies": [
+        "SETTINGS-DOCTOR-MANAGED-PORT-ACCURACY"
+      ],
+      "scope": [
+        "本地 CHAT/MEMORY/VISION 端点与 llama runtime component",
+        "STELLA_HOME managed desired/applied revision",
+        "模型角色与 provider 配置的运行时验收",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "配置角色所需模型端点通过连通与模型列表探测，或明确切换到经用户确认的可用 provider",
+        "待应用环境修订的变更键经审阅并按用户选择应用、回退或合并，核心重载后 desired/applied revision 一致",
+        "设置页重新运行 doctor，模型与配置告警按实际状态消失或保留准确说明"
+      ],
+      "evidence": [
+        {
+          "command": "Settings doctor after managed restart; read-only model and ConfigStore probes",
+          "result": "Live Settings doctor 42 total: 40 ok / 2 warn / 0 error. CHAT/MEMORY/VISION target Strata at 127.0.0.1:8081; there is no listener, and the recorded Strata PID 55864 is stale. LM Studio is reachable at 127.0.0.1:1234 and exposes six models, none matching the configured qwen3.8-flash-next-iq2_xs. The warning therefore concerns the unavailable configured Strata model endpoint even though its legacy title says LM Studio. GPU reports 10,177/16,303 MiB in use, so Strata was not started. A desired revision is pending from external_edit with 48 changed key names, including CODEX/CONDA and Ligamina token variables; no values were read or printed. No model service or config revision has been started/applied/reverted. Waiting for user choice of intended model service/provider and review disposition for the pending environment revision."
+        }
+      ]
+    },
+    {
       "id": "MBENCH-002",
       "name": "公开数据集记忆系统基准评测（LoCoMo 端到端 + PersonaMem 全量对照）",
       "description": "按 SMB 讨论结论建立 memory_eval 评测包：隔离回放真实摄入/检索/作答/judge 全链路；LoCoMo 10 段 196 QA 上界测量、PersonaMem-v2 全量 5000 例四模式对照、live 整合漏斗与三组分解实验。",
@@ -2130,6 +2225,33 @@
       ],
       "acceptance": "LoCoMo 上界 J-accuracy 18.9%（196 QA，judge=answer=qwen3.8-flash@8081）；PersonaMem 全量四模式 5000/5000、forbidden 0；live 漏斗 188 候选/0 accepted/0 晋升（合同句型覆盖 17/5882=0.29% 为瓶颈）；分解实验证明排序（非阈值/limit）是检索主约束。",
       "evidence": "docs/reports/evidence/memory-benchmark-locomo/",
+      "branch": "codex/memory-benchmark"
+    },
+    {
+      "id": "MEMRELP-001",
+      "name": "记忆可靠性栈生产化（T3 表示 + 充分性验证器灰度旗标）",
+      "description": "将 MBENCH-004 验证的改进接入生产回复管线：T3 记忆包元数据渲染与证据充分性守护（三态判定，INSUFFICIENT 硬短路弃答），全部走独立 env 旗标默认 off；附 P4-6 验证栈 runbook（含回退条件）。",
+      "status": "done",
+      "dependencies": [
+        "MBENCH-002"
+      ],
+      "scope": [
+        "config/settings.py 灰度旗标（MEMORY_PACK_METADATA_MODE / MEMORY_SUFFICIENCY_GUARD_MODE）",
+        "memory/prompt_builder.py T3 渲染（off 逐字节兼容）",
+        "memory/sufficiency_guard.py 生产验证器（全路径 fail-open）",
+        "core/runtime/turn_service.py shadow/enforce 接线",
+        "docs/guides/memory-tuning.md(.en) runbook + memory-system.md(.en) 旗标小节",
+        "docs/reports/2026-11-02-mbench005-production-integration.md(.en)"
+      ],
+      "done_criteria": [
+        "旗标 off 时生产输出逐字节不变（既有字节兼容套件原样通过）",
+        "新旗标测试全绿（13 用例：渲染/解析/五条 fail-open/三模式接线）",
+        "验证器全路径 fail-open（预算/无后端/异常不阻塞回复）",
+        "runbook 交付灰度顺序与回退条件（退化 >5pp 即回退）",
+        "生产默认未改（两旗标默认 off）"
+      ],
+      "acceptance": "旗标默认 off 生产行为逐字节不变；enforce+INSUFFICIENT 短路弃答带 delivery_source_kind=memory-sufficiency-abstention；AMBIGUOUS 追加保守指令；验证器五条 fail-open 路径测试覆盖；P4 验证栈 .env runbook 交付。",
+      "evidence": "docs/reports/2026-11-02-mbench005-production-integration.md",
       "branch": "codex/memory-benchmark"
     }
   ]
