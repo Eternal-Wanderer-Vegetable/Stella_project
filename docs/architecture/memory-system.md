@@ -274,6 +274,19 @@ score = W_CONTEXT × 上下文契合
 
 `RESTRICTED` / `INTERNAL` 可见性，或带 `BOUNDARY_PROTECTION` / `CONFLICT_AVOID` 用途的记忆，只能进入第二区。两区绝不混合。
 
+### 记忆可靠性灰度旗标（MBENCH-004，默认关闭）
+
+两个经未见数据验证（1,682 题）的生产旗标，语义与回退条件见
+[记忆调优 runbook](../guides/memory-tuning.md)：
+
+- `MEMORY_PACK_METADATA_MODE=full`：聊天素材条目追加 `｜确认 YYYY-MM-DD` 时间标注
+  （来自记忆行 `last_confirmed_at`，无额外开销）。依据：时间类问题的首要瓶颈是
+  记忆包内无日期（temporal 2/36→34/36）。off 时渲染逐字节不变。
+- `MEMORY_SUFFICIENCY_GUARD_MODE=off/shadow/enforce`：回答前由 ROLE_EXTRACT 对整包
+  记忆判定证据充分性（SUPPORTED/INSUFFICIENT/AMBIGUOUS）。shadow 只记录不拦截；
+  enforce 下 INSUFFICIENT 短路弃答（固定文案经正常投递）、AMBIGUOUS 在记忆分节追加
+  保守作答指令。验证器全路径 fail-open（预算耗尽/无后端/异常 → 正常作答）。
+
 ## 用户画像治理
 
 `user_profiles` 只保存**稳定事实**（语言偏好、技术水平、可观察行为）。人格判断、心理状态、价值判断在写入侧与读取侧都被 `stable_profile_facts()` 过滤。

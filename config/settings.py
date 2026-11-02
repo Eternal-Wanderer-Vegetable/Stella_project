@@ -635,6 +635,34 @@ MEMORY_TRACE_ENABLED = _env_bool("MEMORY_TRACE_ENABLED", "true")
 # 决策追踪表名
 MEMORY_TRACE_TABLE = _env("MEMORY_TRACE_TABLE", "memory_traces")
 
+# ---------- 记忆可靠性栈灰度（MBENCH-004，默认全部关闭） ----------
+# 依据：未见数据验证（docs/reports/2026-11-02-mbench004-p4-production-validation.md，
+# overall 24.0%→50.6%、可回答题 5 倍、弃答同向 +10.1pp）与 P2/P3 隔离实验。
+# 两旗标独立；默认 off = 生产行为逐字节不变，灰度顺序与回退条件见
+# docs/guides/memory-tuning.md。
+# 记忆包元数据表示：off=现有渲染 / full=T3（每条记忆追加确认时间与归属主体
+# 标注；P2 实验 temporal 类 2/36→34/36）。meta 数据来自记忆行既有列，无额外开销。
+MEMORY_PACK_METADATA_MODE = _env_choice(
+    "MEMORY_PACK_METADATA_MODE",
+    "off",
+    ("off", "full"),
+)
+# 证据充分性守护：off=关闭 / shadow=验证器只判定+记录不拦截 / enforce=
+# INSUFFICIENT 短路弃答（经正常投递链路，delivery_source_kind=memory-sufficiency-
+# abstention）。验证器走 ROLE_EXTRACT 槽位，预算耗尽或调用失败一律 fail-open
+# （正常作答）。实施顺序：测试 enforce → shadow 观察判定分布 → 达标后 enforce
+# （P3 实验：INSUFFICIENT 格对对抗题 26/26 正确弃答、误杀率 3.8%）。
+MEMORY_SUFFICIENCY_GUARD_MODE = _env_choice(
+    "MEMORY_SUFFICIENCY_GUARD_MODE",
+    "off",
+    ("off", "shadow", "enforce"),
+)
+# enforce 下 INSUFFICIENT 的固定弃答回复（经正常投递；shadow 不使用）
+MEMORY_SUFFICIENCY_ABSTENTION_REPLY = _env(
+    "MEMORY_SUFFICIENCY_ABSTENTION_REPLY",
+    "（这部分我还没有可靠的记忆，暂时答不上来。）",
+)
+
 # ---------- QQ 私聊与个人记忆（计划 §6.2/§6.9 的 feature flags） ----------
 # 私聊接入本体。计划定案：最终发布私聊默认启用；灰度阶段运维可显式关闭。
 # 私聊允许策略独立于 ALLOWED_GROUPS（后者是群开关，不是私聊开关）。

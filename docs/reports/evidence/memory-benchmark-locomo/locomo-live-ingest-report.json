@@ -1,0 +1,66 @@
+{
+  "report_schema": "memory-eval-report/1",
+  "generated_at": "2026-10-31T12:33:52Z",
+  "git_head": "cf630612c05f8ff9f7c8c61192b060c77b676856",
+  "memory_schema_version": 23,
+  "dataset": {
+    "name": "snap-research/locomo",
+    "revision": "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376",
+    "index_sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+    "license": "CC-BY-NC-4.0"
+  },
+  "channel": "hybrid",
+  "write_mode": "live",
+  "gold_injection": false,
+  "qa_sample_per_category": null,
+  "seed": 20261031,
+  "answer_model": null,
+  "judge_model": null,
+  "consolidation": {
+    "role": "ROLE_CONSOLIDATION（生产 backend_for 装配）",
+    "extract_role": "ROLE_EXTRACT（按配置可用则启用）"
+  },
+  "prompts": {
+    "answer": "memory-eval-answer-v1",
+    "judge": "locomo-judge-v1"
+  },
+  "summary": {
+    "total": 0,
+    "accuracy": null,
+    "unparseable": 0,
+    "errors": 0,
+    "by_category": {},
+    "adversarial_abstention_accuracy": null,
+    "write_coverage_memories": null,
+    "write_coverage_candidates": null,
+    "retrieval_evidence_coverage": null,
+    "pack_memory_count_avg": null,
+    "pack_chars_avg": null,
+    "scenarios": 1,
+    "funnel_totals": {
+      "candidates_total": 188,
+      "memories_total": 0,
+      "memories_active": 0
+    }
+  },
+  "scenarios": [
+    {
+      "scenario_id": "locomo-conv-26",
+      "funnel": {
+        "candidates_total": 188,
+        "candidates_by_status": {
+          "OBSERVING": 188
+        },
+        "candidates_by_user": {
+          "9100101": 103,
+          "9100102": 85
+        },
+        "memories_total": 0,
+        "memories_active": 0
+      },
+      "consolidation_calls": 0,
+      "qa_total": 0,
+      "aggregate": {}
+    }
+  ]
+}

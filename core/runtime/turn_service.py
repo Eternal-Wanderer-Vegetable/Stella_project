@@ -388,6 +388,53 @@ class TurnService:
                            reason_code="call_budget")
             return TurnPlan(ctx, BUDGET_LIMITED)
 
+        # ── 证据充分性守护（MBENCH-004 P3 生产化；灰度旗标默认 off）──
+        # off = 完全不进入本段；shadow = 只判定+记录不拦截；enforce =
+        # INSUFFICIENT 硬短路弃答、AMBIGUOUS 保守作答指令。验证器内部
+        # 全路径 fail-open（budget/无后端/异常 → verdict 为空 = 放行）。
+        sufficiency_verdict = ""
+        guard_mode = ""
+        if MEMORY_V2_ENABLED and getattr(ctx, "conversation_memories", None):
+            from config import settings as _guard_settings
+
+            guard_mode = str(
+                getattr(_guard_settings, "MEMORY_SUFFICIENCY_GUARD_MODE", "off") or "off"
+            )
+        if guard_mode != "off":
+            from memory.sufficiency_guard import judge_sufficiency
+
+            with _flow_span(fctx, "sufficiency.guard"):
+                question = getattr(ctx, "retrieval_query", "") or ctx.message or ""
+                try:
+                    sufficiency_verdict = await judge_sufficiency(
+                        question,
+                        getattr(ctx, "conversation_memories", []) or [],
+                        conversation_key=getattr(ctx, "conversation_key", ""),
+                        turn_deadline=getattr(ctx, "turn_deadline", None),
+                    )
+                except Exception as e:
+                    logger.warning(f"[SufficiencyGuard] 判定异常，fail-open 放行: {e}")
+                    sufficiency_verdict = ""
+                if sufficiency_verdict:
+                    ctx.memory_sufficiency = sufficiency_verdict
+                    trace = getattr(ctx, "memory_trace", None)
+                    if isinstance(trace, dict):
+                        trace["sufficiency"] = sufficiency_verdict
+                    _flow_decision(fctx, "sufficiency.guard", status="succeeded",
+                                   reason_code=f"sufficiency.{sufficiency_verdict}")
+                    if guard_mode == "enforce" and sufficiency_verdict == "INSUFFICIENT":
+                        # 硬短路弃答（P3 验证的 B3 语义）：固定文案经正常投递链路。
+                        from config import settings as _abstain_settings
+
+                        ctx.reply = _abstain_settings.MEMORY_SUFFICIENCY_ABSTENTION_REPLY
+                        ctx.delivery_source_kind = "memory-sufficiency-abstention"
+                        _flow_decision(fctx, "prepare.direct", status="succeeded",
+                                       reason_code="sufficiency_abstain")
+                        logger.info(
+                            f"[SufficiencyGuard] INSUFFICIENT → 弃答（用户 {ctx.user_id}）"
+                        )
+                        return TurnPlan(ctx, DIRECT)
+
         user_prompt = ctx.message
         context_text = ""
         v2_sections: list[tuple[str, str]] = []
@@ -428,6 +475,23 @@ class TurnService:
                         context_text = _attr_section + "\n\n" + context_text
                         v2_sections.insert(0, ("identity", _attr_section))
                 user_prompt = _compose_prompt(context_text, ctx)
+                # AMBIGUOUS 保守作答（enforce）：记忆分节追加保守指令——
+                # 对应关系不确定时明确说明没有相关信息（P3 验证的 B3 语义）。
+                if sufficiency_verdict == "AMBIGUOUS" and guard_mode == "enforce":
+                    v2_sections = [
+                        (
+                            n,
+                            t + (
+                                "\n（注意：以上记忆与当前问题的对应关系不确定——"
+                                "若不能据此确定答案，请直接说明你没有相关信息。）"
+                            ),
+                        )
+                        if n == "memories" and t
+                        else (n, t)
+                        for n, t in v2_sections
+                    ]
+                    context_text = "\n\n".join(text for _, text in v2_sections)
+                    user_prompt = _compose_prompt(context_text, ctx)
             else:
                 from memory.prompt_builder import build_prompt_context
 

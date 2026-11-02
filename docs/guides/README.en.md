@@ -12,5 +12,6 @@ Choose the page matching your task; these are maintained documents, not dated ac
 | [Cometa tasks](cometa.en.md) | Connect external agents, auth and long-task delivery |
 | [Scheduling](scheduling.en.md) | Manage group cron, permissions and delivery |
 | [Skills](skills.en.md) | Configure runtime skills, sources and execution |
+| [Memory tuning](memory-tuning.en.md) | Memory reliability stack gray flags, retrieval config and rollback conditions |
 
 For test/build gates read [Agent verification](../agent/verification.md); historical evidence is indexed in [Archives](../history/README.en.md).

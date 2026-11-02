@@ -1,0 +1,232 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+"""生产检索 + 记忆包组装 + 短答生成（评测侧，无生产代码改动）。"""
+
+from __future__ import annotations
+
+import time
+from typing import Any
+
+# 检索通道（与 memory/benchmark.py RETRIEVAL_MODES 语义一致）：
+#   rule     : RAG off + 无语义分
+#   embedding: RAG off + 真实 embedding 语义分（服务不可用回退 rule）
+#   fts      : RAG on  + 无语义分
+#   hybrid   : RAG on  + 真实 embedding 语义分（生产默认形态）
+CHANNELS: dict[str, tuple[bool, bool]] = {
+    "rule": (False, False),
+    "embedding": (False, True),
+    "fts": (True, False),
+    "hybrid": (True, True),
+}
+
+ANSWER_PROMPT_VERSION = "memory-eval-answer-v1"
+ANSWER_PROMPT_VERSION_STRICT = "memory-eval-answer-v1-strict"
+
+_ANSWER_INSTRUCTIONS = (
+    "根据上面分节给出的记忆信息回答最后的问题。只使用记忆里能找到的信息；"
+    "如果记忆中没有足够信息，就明确说明你没有相关信息，不要编造。"
+    "用与问题相同的语言，用一两句话简短回答。"
+)
+
+# 弃答保护变体（MBENCH-003 P1 任务 3）：把「没有直接对应陈述」设为硬性作答条件，
+# 抑制大记忆包下近似相关内容诱发的无依据作答。
+_ANSWER_INSTRUCTIONS_STRICT = (
+    "根据上面分节给出的记忆信息回答最后的问题。作答条件（必须全部满足）："
+    "记忆中必须存在与问题**直接对应**的陈述，你才能给出具体答案；"
+    "只要记忆没有直接支持，就必须回答「记忆中没有相关信息」，禁止根据近似内容推测或拼凑。"
+    "用与问题相同的语言，用一两句话简短回答。"
+)
+
+
+def compose_answer_prompt(
+    result: Any,
+    question: str,
+    asker: str,
+    *,
+    strict: bool = False,
+    pack_level: str = "T0",
+    scenario: dict[str, Any] | None = None,
+    db_path: Any = None,
+) -> tuple[str, int]:
+    """组装评测问答 prompt；返回 (prompt, 记忆包字符数)。
+
+    ``strict=True`` 为弃答保护变体（MBENCH-003 P1 任务 3）。
+    ``pack_level`` 为 MBENCH-004 P2 记忆包表示实验：T0=生产渲染；T1/T2/T3 在
+    生产分节结构上只替换 memories 分节为 ``pack_representation.render_pack``
+    的对应表示（+来源时间 / +事件时间 / +来源与主体），检索结果不变。
+    """
+    from memory.prompt_builder import build_v2_named_sections
+
+    sections = build_v2_named_sections(
+        "",
+        "",
+        result.conversation_memories,
+        result.behavior_constraints,
+        current_user_id=None,
+        mode="CASUAL_REPLY",
+    )
+    if pack_level in ("T1", "T2", "T3"):
+        from memory_eval.pack_representation import render_pack
+
+        custom = render_pack(
+            result, level=pack_level, scenario=scenario or {}, db_path=db_path
+        )
+        sections = [
+            (name, custom if name == "memories" else text) for name, text in sections
+        ]
+    parts = [f"【{name}】\n{text}" for name, text in sections if (text or "").strip()]
+    pack_chars = sum(len(text) for _, text in sections)
+    has_memories = any(name == "memories" and (text or "").strip() for name, text in sections)
+    memory_block = "\n\n".join(parts) if parts else "（只有当前时间信息）"
+    if not has_memories:
+        memory_block += "\n\n（本题未召回任何长期记忆。）"
+    instructions = _ANSWER_INSTRUCTIONS_STRICT if strict else _ANSWER_INSTRUCTIONS
+    prompt = (
+        f"{memory_block}\n\n---\n{instructions}\n\n"
+        f"问题（来自用户 {asker}）：{question}"
+    )
+    return prompt, pack_chars
+
+
+async def answer_question(
+    env: Any,
+    scenario: dict[str, Any],
+    qa: dict[str, Any],
+    *,
+    channel: str,
+    llm: Any,
+    service: Any = None,
+    pack_mode: str | None = None,
+    strict: bool = False,
+    pack_level: str = "T0",
+    sufficiency_guard: bool = False,
+) -> dict[str, Any]:
+    """``sufficiency_guard=True`` 为 MBENCH-004 P3 B3/B4：LLM 充分性验证器前置，
+    INSUFFICIENT → 强制弃答（不调用作答模型）；AMBIGUOUS → strict 作答。"""
+    """对单个 QA 走生产检索 → 记忆包 → 短答；返回带检索与成本明细的记录。
+
+    ``pack_mode=None`` 走生产 ``detect_mode`` 自动分类；显式传入用法模式
+    （如 ``CONFLICT_AVOID``，limit=10）即为「检索友好配置」对照实验。
+    ``strict=True`` 启用弃答保护指令（作答必须以记忆中直接对应陈述为前提）。
+    """
+    import memory.retrieval_v2 as retrieval_v2
+    from config.spaces import resolve_space
+
+    if channel not in CHANNELS:
+        raise ValueError(f"未知检索通道：{channel!r}（可选 {sorted(CHANNELS)}）")
+    rag_enabled, use_embedding = CHANNELS[channel]
+    space = resolve_space(int(scenario["group_id"]))
+    asker = str((scenario.get("speakers") or {}).get("a") or "user A")
+
+    old = (retrieval_v2.RAG_ENABLED, retrieval_v2.MEMORY_V2_ENABLED)
+    started = time.monotonic()
+    try:
+        retrieval_v2.RAG_ENABLED = rag_enabled
+        retrieval_v2.MEMORY_V2_ENABLED = True
+        retrieval_v2._CACHE.clear()
+        if use_embedding:
+            result = await retrieval_v2.retrieve_memories_emb(
+                space, None, qa["question"], trigger="reply", service=service,
+                mode=pack_mode,
+            )
+        else:
+            result = retrieval_v2.retrieve_memories(
+                space, None, qa["question"], trigger="reply", mode=pack_mode
+            )
+    finally:
+        retrieval_v2.RAG_ENABLED, retrieval_v2.MEMORY_V2_ENABLED = old
+        retrieval_v2._CACHE.clear()
+
+    sufficiency = None
+    if sufficiency_guard:
+        from memory_eval.sufficiency import (
+            FORCED_ABSTENTION_TEXT,
+            build_verifier_prompt,
+            parse_verdict_output,
+        )
+
+        pack_text = "\n".join(
+            str(m.get("content") or "") for m in result.conversation_memories
+        )
+        verifier_raw = llm.chat(
+            build_verifier_prompt(qa["question"], pack_text),
+            max_tokens=2048,
+            temperature=0.0,
+        )
+        sufficiency = parse_verdict_output(verifier_raw["text"])
+        if sufficiency == "INSUFFICIENT":
+            return {
+                "qid": qa["qid"],
+                "category": qa.get("category"),
+                "category_name": qa.get("category_name"),
+                "question": qa["question"],
+                "gold_answer": qa.get("gold_answer"),
+                "adversarial_answer": qa.get("adversarial_answer"),
+                "evidence_dia_ids": qa.get("evidence_dia_ids") or [],
+                "answer": FORCED_ABSTENTION_TEXT,
+                "retrieved_ids": [m.get("id") for m in result.conversation_memories],
+                "retrieved_contents": [m.get("content") or "" for m in result.conversation_memories],
+                "behavior_ids": [m.get("id") for m in result.behavior_constraints],
+                "ranked_ids": [
+                    str(row.get("id"))
+                    for row in (result.trace or {}).get("ranked_all") or []
+                    if row.get("id")
+                ][:20],
+                "top_score": max(
+                    (float(row.get("score") or 0.0) for row in (result.trace or {}).get("ranked_all") or []),
+                    default=0.0,
+                ),
+                "retrieval_result_mode": result.mode,
+                "pack_chars": len(pack_text),
+                "pack_memory_count": len(result.conversation_memories),
+                "retrieval_latency_seconds": round(time.monotonic() - started, 3),
+                "answer_latency_seconds": 0.0,
+                "answer_prompt_tokens": 0,
+                "answer_completion_tokens": 0,
+                "sufficiency": sufficiency,
+                "verifier_prompt_tokens": verifier_raw["prompt_tokens"],
+                "verifier_completion_tokens": verifier_raw["completion_tokens"],
+            }
+    # AMBIGUOUS → 保守作答（strict）；SUPPORTED → 正常作答（B3）。
+    # B4（sufficiency_guard + abstention_guard）对所有实际作答都用 strict。
+    if sufficiency == "AMBIGUOUS":
+        strict = True
+    # reasoning 模型（gemma-4-e / qwen3.8 系）会先输出隐藏思考，预算必须给足
+    prompt, pack_chars = compose_answer_prompt(
+        result, qa["question"], asker, strict=strict,
+        pack_level=pack_level, scenario=scenario, db_path=env.db_path,
+    )
+    completion = llm.chat(prompt, max_tokens=2048, temperature=0.0)
+    retrieval_latency = time.monotonic() - started
+
+    return {
+        "qid": qa["qid"],
+        "category": qa.get("category"),
+        "category_name": qa.get("category_name"),
+        "question": qa["question"],
+        "gold_answer": qa.get("gold_answer"),
+        "adversarial_answer": qa.get("adversarial_answer"),
+        "evidence_dia_ids": qa.get("evidence_dia_ids") or [],
+        "answer": completion["text"].strip(),
+        "retrieved_ids": [m.get("id") for m in result.conversation_memories],
+        "retrieved_contents": [m.get("content") or "" for m in result.conversation_memories],
+        "behavior_ids": [m.get("id") for m in result.behavior_constraints],
+        # 生产排序次序（阈值/limit 前）：真 MRR@K 与 any/all@K 的数据基础
+        "ranked_ids": [
+            str(row.get("id"))
+            for row in (result.trace or {}).get("ranked_all") or []
+            if row.get("id")
+        ][:20],
+        "top_score": max(
+            (float(row.get("score") or 0.0) for row in (result.trace or {}).get("ranked_all") or []),
+            default=0.0,
+        ),
+        "retrieval_result_mode": result.mode,
+        "pack_chars": pack_chars,
+        "pack_memory_count": len(result.conversation_memories),
+        "retrieval_latency_seconds": round(retrieval_latency, 3),
+        "answer_latency_seconds": round(completion["latency_seconds"], 3),
+        "answer_prompt_tokens": completion["prompt_tokens"],
+        "answer_completion_tokens": completion["completion_tokens"],
+        "sufficiency": sufficiency,
+    }

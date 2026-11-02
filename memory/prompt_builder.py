@@ -181,6 +181,26 @@ def _attribution_header(mem: dict, current_user_id) -> str:
     return "群共享事实 [subject=群/无个人主体]"
 
 
+def _confirmation_date(mem: dict) -> str:
+    """记忆确认时间的日期部分（YYYY-MM-DD）；缺失返回空串。"""
+    raw = str(mem.get("last_confirmed_at") or "").strip()
+    return raw[:10] if len(raw) >= 10 else ""
+
+
+def _metadata_time_suffix(mem: dict) -> str:
+    """T3 元数据段（MEMORY_PACK_METADATA_MODE=full）：`｜确认 YYYY-MM-DD`。
+
+    MBENCH-004 P2/P4 验证：记忆包内无日期是「时间类问题答不出」的首要瓶颈
+    （temporal 2/36→34/36）。off 或无日期时返回空串（逐字节兼容）。
+    """
+    from config import settings
+
+    if str(getattr(settings, "MEMORY_PACK_METADATA_MODE", "off") or "off") != "full":
+        return ""
+    date = _confirmation_date(mem)
+    return f"｜确认 {date}" if date else ""
+
+
 def build_conversation_section(
     memories: Iterable[dict],
     max_tokens: int = MEMORY_CONVERSATION_MAX_TOKENS,
@@ -196,7 +216,16 @@ def build_conversation_section(
     记忆带**不可裁断的归属头**，先拼完整条目再算 token——不能预算时算无标签
     正文、之后再补标签导致超额。缺省 None 保持旧格式逐字节不变（旧调用/旧
     测试兼容）。
+
+    ``MEMORY_PACK_METADATA_MODE=full``（MBENCH-004 P2/P4，灰度默认 off）：带
+    归属头的条目追加 `｜确认 YYYY-MM-DD` 时间段——记忆包内无日期是时间类问题
+    的首要瓶颈；token 计入预算（同归属头一起先拼再算）。off 时逐字节不变。
     """
+    from config import settings as _settings
+
+    metadata_mode = str(
+        getattr(_settings, "MEMORY_PACK_METADATA_MODE", "off") or "off"
+    ) == "full"
     attributed = current_user_id not in (None, 0, "")
     items: list[str] = []
     budget = max_tokens
@@ -205,7 +234,8 @@ def build_conversation_section(
         if not content:
             continue
         if attributed:
-            text = f"- {_attribution_header(mem, current_user_id)}：{content}"
+            time_suffix = _metadata_time_suffix(mem) if metadata_mode else ""
+            text = f"- {_attribution_header(mem, current_user_id)}{time_suffix}：{content}"
         else:
             text = f"- {content}"
         tokens = estimate_tokens(text)
