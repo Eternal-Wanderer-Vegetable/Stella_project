@@ -46,7 +46,16 @@ _SOURCE_COLUMNS = (
     "subject_key",
     "connection_id",
 )
-_ACCEPTED_KINDS = frozenset({"self_report", "explicit_preference"})
+_ACCEPTED_KINDS = frozenset(
+    {
+        "self_report",
+        "explicit_preference",
+        "identity_state",
+        "plan_intent",
+        "ability_habit",
+        "past_event",
+    }
+)
 _CONDITIONAL = re.compile(
     r"如果|要是|假如|倘若|可能|也许|听说|据说|好像|传闻|角色扮演|扮演|假装|开玩笑|玩笑|"
     r"\b(?:if|maybe|perhaps|supposedly|heard that|roleplay|pretend|joking)\b",
@@ -78,6 +87,72 @@ _PREFERENCE_PATTERN_EN = re.compile(
     re.IGNORECASE,
 )
 
+# ── MBENCH-004 P1 生产化：扩展句型族（2026-11-02）─────────────────────
+# 家族与形状精确镜像离线对照 A1+A2（202 样本 gold，MUST 召回 2.1%→21.0%、
+# 精度代理 97.2%；docs/reports/2026-11-02-mbench004-p1-evidence-contract.md）。
+# kind → type 绑定：plan_intent→PLAN（14 天观察 TTL 自动生效=计划时效管理），
+# 其余新族→FACT。全部 positive only（保守起点）。
+_IDENTITY_STATE_PATTERNS = {
+    "identity.state": re.compile(r"我是(?P<value>[^，。！？!?；;]+)[。！!]?"),
+    "identity.have": re.compile(r"我有(?P<value>[^，。！？!?；;]+)[。！!]?"),
+    "identity.state.en": re.compile(r"I am (?P<value>[^.!?;]+)[.!]?", re.IGNORECASE),
+    "identity.have.en": re.compile(r"I have (?P<value>[^.!?;]+)[.!]?", re.IGNORECASE),
+}
+_PLAN_INTENT_PATTERNS = {
+    "plan.intend": re.compile(r"我打算(?P<value>[^，。！？!?；;]+)[。！!]?"),
+    "plan.want": re.compile(r"我想(?P<value>[^，。！？!?；;]+)[。！!]?"),
+    "plan.will": re.compile(r"我要(?P<value>[^，。！？!?；;]+)[。！!]?"),
+    "plan.doing": re.compile(r"我正在(?P<value>[^，。！？!?；;]+)[。！!]?"),
+    "plan.going_to.en": re.compile(
+        r"I(?:'m| am) (?:going to|planning (?:on|to)|thinking of (?:going|working|"
+        r"putting|creating|building)) (?P<value>[^.!?;]+)[.!]?",
+        re.IGNORECASE,
+    ),
+    "plan.want_to.en": re.compile(r"I want to (?P<value>[^.!?;]+)[.!]?", re.IGNORECASE),
+}
+_ABILITY_HABIT_PATTERNS = {
+    "ability.can": re.compile(r"我会(?P<value>[^，。！？!?；;]+)[。！!]?"),
+    "ability.can.en": re.compile(r"I can (?P<value>[^.!?;]+)[.!]?", re.IGNORECASE),
+    "ability.play.en": re.compile(
+        r"I (?:play|sing) (?P<value>[^.!?;]+)[.!]?", re.IGNORECASE
+    ),
+}
+_PAST_EVENT_PATTERNS = {
+    "past.used_to": re.compile(r"我(?:以前|曾经)(?P<value>[^，。！？!?；;]+)[。！!]?"),
+    "past.used_to.en": re.compile(r"I used to (?P<value>[^.!?;]+)[.!]?", re.IGNORECASE),
+    "past.went_to.en": re.compile(r"I went to (?P<value>[^.!?;]+)[.!]?", re.IGNORECASE),
+    "past.had.en": re.compile(r"I had (?P<value>[^.!?;]+)[.!]?", re.IGNORECASE),
+}
+# kind → 候选 type 绑定（绑定不符 → status unknown，见 assess_candidate）。
+# self_report/explicit_preference 保持既有 reason 命名与绑定不变。
+_KIND_TYPE_BINDINGS = {
+    "self_report": "FACT",
+    "explicit_preference": "PREFERENCE",
+    "identity_state": "FACT",
+    "plan_intent": "PLAN",
+    "ability_habit": "FACT",
+    "past_event": "FACT",
+}
+# 新族 polarity 一律 positive（保守起点；否定表达延后）
+_POSITIVE_ONLY_KINDS = frozenset(
+    {"identity_state", "plan_intent", "ability_habit", "past_event"}
+)
+_SECOND_PERSON_VALUE = re.compile(r"你|您|\byou\b|\byour\b", re.IGNORECASE)
+_VALUE_PLACEHOLDER = re.compile(r"\bX\b(?![a-zA-Z])")
+_MIN_VALUE_LEN = 2
+
+
+def _match_value_pattern(pattern: re.Pattern, span: str) -> tuple[bool, str]:
+    """fullmatch 优先、search 兜底的单模式值匹配；返回 (matched, value)。"""
+    t = span.strip()
+    m = pattern.fullmatch(t)
+    if m:
+        return True, (m.groupdict().get("value") or "").strip()
+    m = pattern.search(t)
+    if m:
+        return True, (m.groupdict().get("value") or "").strip()
+    return False, ""
+
 
 def _semantic_contract_matches(
     span: str, *, predicate: str, canonical_value: str, polarity: str, statement_kind: str
@@ -90,20 +165,34 @@ def _semantic_contract_matches(
             return False
         match = pattern.fullmatch(span.strip())
         return bool(match and match.group("value").strip() == expected_value)
-    if statement_kind != "explicit_preference" or predicate != "preference.general":
+    if statement_kind == "explicit_preference":
+        if predicate != "preference.general":
+            return False
+        match = _PREFERENCE_PATTERN.fullmatch(span.strip()) or _PREFERENCE_PATTERN_EN.fullmatch(
+            span.strip()
+        )
+        if not match or match.group("value").strip() != expected_value:
+            return False
+        cue = match.group("cue").lower()
+        observed_polarity = (
+            "negative"
+            if cue in {"不喜欢", "讨厌", "don't like", "dislike"}
+            else "positive"
+        )
+        return observed_polarity == polarity
+    # ── MBENCH-004 P1 扩展族（identity_state/plan_intent/ability_habit/past_event）──
+    family_patterns = {
+        "identity_state": _IDENTITY_STATE_PATTERNS,
+        "plan_intent": _PLAN_INTENT_PATTERNS,
+        "ability_habit": _ABILITY_HABIT_PATTERNS,
+        "past_event": _PAST_EVENT_PATTERNS,
+    }.get(statement_kind)
+    if family_patterns is None or predicate not in family_patterns:
         return False
-    match = _PREFERENCE_PATTERN.fullmatch(span.strip()) or _PREFERENCE_PATTERN_EN.fullmatch(
-        span.strip()
-    )
-    if not match or match.group("value").strip() != expected_value:
+    if polarity != "positive":  # 新族保守起点：仅接受肯定极性
         return False
-    cue = match.group("cue").lower()
-    observed_polarity = (
-        "negative"
-        if cue in {"不喜欢", "讨厌", "don't like", "dislike"}
-        else "positive"
-    )
-    return observed_polarity == polarity
+    matched, value = _match_value_pattern(family_patterns[predicate], span)
+    return bool(matched and value == expected_value)
 
 
 def canonical_json(value: Any) -> str:
@@ -490,13 +579,16 @@ def assess_candidate(
         assessment_reasons.append("fact_subject_mismatch")
     if statement_kind not in _ACCEPTED_KINDS:
         assessment_reasons.append("statement_kind_not_accepted")
-    if statement_kind == "self_report" and str(candidate.get("type") or "FACT").upper() != "FACT":
-        assessment_reasons.append("self_report_type_mismatch")
-    if (
-        statement_kind == "explicit_preference"
-        and str(candidate.get("type") or "").upper() != "PREFERENCE"
-    ):
-        assessment_reasons.append("preference_type_mismatch")
+    for kind, bound_type in _KIND_TYPE_BINDINGS.items():
+        if statement_kind == kind and str(candidate.get("type") or "").upper() != bound_type:
+            assessment_reasons.append(f"{kind}_type_mismatch")
+    # A2 值段过滤器（MBENCH-004 P1：夸赞误归因/占位符/碎片；全 kind 生效）
+    if len(canonical_value.strip()) < _MIN_VALUE_LEN:
+        assessment_reasons.append("value_too_short")
+    if _VALUE_PLACEHOLDER.search(canonical_value):
+        assessment_reasons.append("value_placeholder")
+    if _SECOND_PERSON_VALUE.search(canonical_value):
+        assessment_reasons.append("value_second_person")
     for span in support_by_id.values():
         if _CONDITIONAL.search(span) or any(mark in span for mark in _QUOTE_MARKS):
             assessment_reasons.append("conditional_quoted_or_roleplay")

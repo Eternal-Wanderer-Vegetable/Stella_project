@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-02",
+  "updated_at": "2026-11-03",
   "active_feature": "SETTINGS-DOCTOR-MODEL-CONFIG-RECOVERY",
   "features": [
     {
@@ -2253,6 +2253,30 @@
       "acceptance": "旗标默认 off 生产行为逐字节不变；enforce+INSUFFICIENT 短路弃答带 delivery_source_kind=memory-sufficiency-abstention；AMBIGUOUS 追加保守指令；验证器五条 fail-open 路径测试覆盖；P4 验证栈 .env runbook 交付。",
       "evidence": "docs/reports/2026-11-02-mbench005-production-integration.md",
       "branch": "codex/memory-benchmark"
+    },
+    {
+      "id": "MEMWRT-001",
+      "name": "证据合同扩展生产化（句型族扩容 + A2 值段过滤器 + 误晋升审计）",
+      "description": "将 MBENCH-004 P1 离线对照验证的扩展句型族接入生产验收：新增 identity_state/plan_intent/ability_habit/past_event 四族 statement_kind （plan_intent→PLAN 自动获得 14 天时效 TTL），A2 值段过滤器（第二人称宾语/占位符/过短值）全 kind 生效，提取提示词契约块同步扩枚举。",
+      "status": "done",
+      "dependencies": [
+        "MBENCH-002"
+      ],
+      "scope": [
+        "memory/evidence_contract.py（新 kind/谓词表/_KIND_TYPE_BINDINGS/A2 过滤器）",
+        "memory/extraction_prompt.py（契约硬规则块同步扩枚举 + 第一人称逐字指引）",
+        "tests/test_memory_evidence_contract.py + test_extraction_prompt_contract.py 扩展",
+        "docs/architecture/memory-system.md(.en) 句型族清单 + docs/reports/2026-11-03-contract-expansion-production.md(.en)"
+      ],
+      "done_criteria": [
+        "对 202 样本标注集 shipped 复算：MUST 召回 ≥21.0%、MUST_NOT 误收 ≤1、精度代理 ≥94.6%",
+        "既有合同测试与硬门禁三套件（跨用户隔离/个人记忆分享/私聊接入）零失败",
+        "Rust 无需改动（语义合同 Python 独有实现；版本常量未动）",
+        "误晋升审计：MUST_NOT 19 条中 18 条未验收且 1 条为扩容前既有，新族零引入"
+      ],
+      "acceptance": "shipped（生产语义直调）对 202 样本：MUST 召回 30/143（21.0%，A0 基线 10 倍）、MUST_NOT 误收 1/19（维持基线）、精度代理 97.1%；plan_intent→PLAN 绑定让计划类自动获得 14 天时效 TTL。",
+      "evidence": "docs/reports/2026-11-03-contract-expansion-production.md",
+      "branch": "codex/evidence-contract-expansion"
     }
   ]
 }

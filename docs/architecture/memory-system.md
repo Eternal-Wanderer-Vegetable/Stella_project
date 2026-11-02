@@ -135,6 +135,26 @@ TTL **按类型分档**（`MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE`）：`EV
 
 > 统一 30 天的代价不只是候选池变大：那条 `EVENT` 会整整一个月都落在主动验证的取数范围内，被反复挑中去追问同一个人。见 [`bug_report_2026_8_31#1.md`](../../design_docs/bug_report/bug_report_2026_8_31%231.md) 现象 2。
 
+### 证据合同验收句型（MBENCH-004 P1 扩展，2026-11-03）
+
+候选晋升前须通过 `memory/evidence_contract.py` 的服务端验收：`verification_contract` 的
+`exact_support_span` 必须与来源消息逐字对上，且 statement_kind/predicate 命中**支持的刻板
+句型**。支持的六族（kind → type 绑定，全部 positive only，A2 值段过滤——第二人称宾语/
+占位符/过短值——全部 kind 生效）：
+
+| kind | 句型示例 | type |
+| --- | --- | --- |
+| self_report | 我住在X / 我来自X / 我叫X / 我在X工作（+ .en） | FACT |
+| explicit_preference | 我喜欢X / 我不喜欢X（+ .en） | PREFERENCE |
+| identity_state | 我是X / 我有X（+ .en） | FACT |
+| plan_intent | 我打算X / 我想X / 我要X / 我正在X（+ en 变体） | PLAN |
+| ability_habit | 我会X / I can X / I play X | FACT |
+| past_event | 我以前/曾经X / I used to X / I went to X / I had X | FACT |
+
+扩容依据与误晋升审计见 [证据合同扩展报告](../reports/2026-11-03-contract-expansion-production.md)
+（202 样本标注集：MUST 召回 2.1%→21.0%、MUST_NOT 误收维持 1、精度代理 97.1%）；
+对照器 `memory_eval/contract_study.py` 与标注集随 PR #127 入库，复算命令见该报告。
+
 ## 晋升层：Gate 1 三档
 
 `memory/memory_manager.py` 的判定：

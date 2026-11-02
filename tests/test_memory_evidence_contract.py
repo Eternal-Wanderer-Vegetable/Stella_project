@@ -43,9 +43,13 @@ def _candidate(
     user_id="111",
     source_ids=None,
 ):
+    kind_types = {
+        "explicit_preference": "PREFERENCE",
+        "plan_intent": "PLAN",
+    }
     return {
         "user_id": user_id,
-        "type": "PREFERENCE" if statement_kind == "explicit_preference" else "FACT",
+        "type": kind_types.get(statement_kind, "FACT"),
         "content": content,
         "source_message_ids": source_ids or [1],
         "owner_key": "space:1001",
@@ -217,3 +221,80 @@ def test_empty_added_identity_columns_do_not_change_legacy_snapshot_hash():
     after = _snapshot({**legacy_row, "subject_key": "", "connection_id": ""})
     assert after == before
     assert source_digest(after) == source_digest(before)
+
+
+def _content_row(tmp_path, content, candidate, *, marker=""):
+    sub = tmp_path / f"db-{marker or abs(hash(content))}"
+    sub.mkdir(parents=True, exist_ok=True)
+    conn = _database(sub)
+    conn.execute("UPDATE group_messages SET content = ? WHERE id = 1", (content,))
+    result = _assess(conn, candidate)
+    conn.close()
+    return result
+
+
+def test_identity_state_family_accepted(tmp_path):
+    result = _content_row(
+        tmp_path, "我是单亲家长",
+        _candidate(content="我是单亲家长", value="单亲家长",
+                   predicate="identity.state", statement_kind="identity_state"),
+    )
+    assert result["status"] == "accepted"
+    assert "identity.state" in result["claim_key"] or result["claim_key"].startswith("claim:v1:")
+
+
+def test_plan_intent_family_accepted_with_plan_type(tmp_path):
+    result = _content_row(
+        tmp_path, "我打算下个月去露营",
+        _candidate(content="我打算下个月去露营", value="下个月去露营",
+                   predicate="plan.intend", statement_kind="plan_intent"),
+    )
+    assert result["status"] == "accepted"
+
+
+def test_ability_and_past_families_accepted(tmp_path):
+    result = _content_row(
+        tmp_path, "我会拉小提琴",
+        _candidate(content="我会拉小提琴", value="拉小提琴",
+                   predicate="ability.can", statement_kind="ability_habit"),
+        marker="ability",
+    )
+    assert result["status"] == "accepted"
+    result = _content_row(
+        tmp_path, "我以前很喜欢打篮球",
+        _candidate(content="我以前很喜欢打篮球", value="很喜欢打篮球",
+                   predicate="past.used_to", statement_kind="past_event"),
+        marker="past",
+    )
+    assert result["status"] == "accepted"
+
+
+def test_expanded_family_rejections(tmp_path):
+    """第二人称宾语值 / 占位符 / 过短值 → 不 accepted（A2 值段过滤器）。"""
+    result = _content_row(
+        tmp_path, "我喜欢你画画",
+        _candidate(content="我喜欢你画画", value="你画画",
+                   predicate="preference.general",
+                   statement_kind="explicit_preference"),
+        marker="sec",
+    )
+    assert result["status"] != "accepted"
+    assert "value_second_person" in result["reason"]
+
+    result = _content_row(
+        tmp_path, "我住在X",
+        _candidate(content="我住在X", value="X",
+                   predicate="identity.state", statement_kind="identity_state"),
+        marker="ph",
+    )
+    assert result["status"] != "accepted"
+    assert "value_placeholder" in result["reason"]
+
+    result = _content_row(
+        tmp_path, "我会唱",
+        _candidate(content="我会唱", value="唱",
+                   predicate="ability.can", statement_kind="ability_habit"),
+        marker="short",
+    )
+    assert result["status"] != "accepted"
+    assert "value_too_short" in result["reason"]
