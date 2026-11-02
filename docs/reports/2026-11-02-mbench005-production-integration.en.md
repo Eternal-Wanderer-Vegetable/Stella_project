@@ -47,7 +47,7 @@ test_prompt_cache_prefix etc., 44 passed total). The memory_eval package is unto
 - Per-item env flags ✓ (weights/gate/threshold are already .env config; the runbook lists the validated values)
 - Defaults do not change production behavior ✓ (off byte-compat tests)
 - Rollback conditions documented ✓ (runbook: revert the flag on >5pp regression)
-- P4-2 judge human review: list ready, **NOT VERIFIED** (user step)
+- P4-2 judge human review ✓ (completed 2026-11-02: 90.0% agreement, zero over-generosity, see P4 report §P4-2)
 
 ## Gates
 

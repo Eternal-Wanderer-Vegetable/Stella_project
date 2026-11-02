@@ -21,9 +21,19 @@ By category (P4 stack): single_hop 366/727 (50.3%), temporal 99/258 (38.4%), mul
 
 **Core conclusion: the improvements hold on unseen data, and all three headline metrics improve simultaneously** — the "recall up / abstention down" trade-off observed in isolation (MBENCH-003) is resolved by the combined stack (attribution metadata in the representation + content-level abstention gating) on the full set. This is not overfitting to one conversation: the paired flip ratio is 13:1 over 1,682 questions.
 
-## P4-2 Same-family judge sampling — sample ready, human review NOT VERIFIED
+## P4-2 Same-family judge sampling — ✅ completed (human review 2026-11-02)
 
-A balanced 30-question review list (10 correct / 10 wrong / 5 adversarial correct abstentions / 5 boundary) is generated: `p4-judge-review-sample-30.jsonl` (with empty review_label fields). The structural bias of the judge sharing the model family with the answerer is still not quantified by human audit — **this is the only manual step the user needs to complete before merging PR #127**.
+The balanced 30-question list was judged item-by-item by the user (handwritten scan, transcribed). Results:
+
+- **judge-human agreement 27/30 (90.0%)**; cross table: judge correct→human correct **10/10
+  (zero over-generosity)**; of 20 judge-incorrect answers, 17 confirmed and 3 judged correct by
+  the human (2 empty answers treated as implicit abstention, 1 vague relative-time expression
+  accepted).
+- **Conclusion**: the judge is slightly conservative with zero over-generosity — the measured
+  accuracies (answerable 39.2% etc.) are conservative underestimates, not inflated; explicit
+  rules for "empty answer = abstention" and relative-time expressions are validator-v2 inputs.
+- Worksheet (with human verdicts and summary): `p4-judge-review-worksheet.md`; labels written
+  back to `p4-judge-review-sample-30.jsonl` (review_label/reviewer).
 
 ## P4-3 Real write-side end-to-end — NOT READY (open prerequisite)
 
@@ -51,7 +61,7 @@ Full P4 stack: answer prompt tokens **mean 689 / p95 1,065** (13% of the 8,192 b
 ## Acceptance mapping (plan §P4)
 
 - P4-1 reproducible improvement on unseen data ✓ (overall 2.1x, answerable 5x, abstention +10.1pp same-direction, paired 13:1)
-- P4-2 judge sampling: sample ready, human review NOT VERIFIED (user step)
+- P4-2 judge sampling ✓ (human agreement 90.0%, zero over-generosity, see §P4-2)
 - P4-3 real write-side end-to-end: NOT READY (prerequisite = P1 productionization, separate PR)
 - P4-4 isolation/revocation/lineage/failure recovery ✓ (32 tests; **long-run soak and live QQ gray rollout not done**)
 - P4-5 token budget and latency ✓

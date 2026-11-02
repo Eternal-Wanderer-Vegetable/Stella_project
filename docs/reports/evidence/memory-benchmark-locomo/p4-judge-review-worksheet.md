@@ -42,12 +42,23 @@
 | 29 | conv-50-q068 | temporal | When did Dave find the car he repaired and started sharing in his blog | last week of October 2023 | Dave found the car last week. |  incorrect  |  |  |
 | 30 | conv-50-q192 | adversarial | What realization did the nightclub experience bring to Dave? | （应弃答） |  |  incorrect  |  |  |
 
-## 汇总（复核完成后填写）
+## 汇总（2026-11-02 用户复核完成，手写扫描录入）
 
-| 组 | judge 与人工一致 | judge 判对人工判错 | judge 判错人工判对 |
-|---|---|---|---|
-| 可回答题（20） | | | |
-| 对抗弃答（5） | | | |
-| 边界（5） | | | |
+**总体一致率 27/30（90.0%）**。交叉表：
+
+| | 人工 correct | 人工 incorrect |
+|---|---|---|
+| judge correct | 10 | 0 |
+| judge incorrect | 3 | 17 |
+
+- **零过宽**：judge 判 correct 的 10 题人工全部确认——没有把错误答案记成正确。
+- **3 例过严**（judge 判错、人工判对）：
+  - conv-47-q176 / conv-50-q192（对抗题）：回答为空串（reasoning 烧空的已知失败形态），
+    人工将空答案视为隐式弃答计对；
+  - conv-50-q068（temporal）：回答「Dave found the car last week.」对 gold
+    「last week of October 2023」属相对时间表达模糊，人工从宽。
+- 结论：judge 略偏保守、**零过宽**——已测精度数字（可回答 39.2% 等）即使有偏差
+  也是保守低估，不构成能力高估；3/30 的样本过严率提示生产化时可对
+  「空回答=弃答」与「相对时间表达」加显式判定规则（validator v2 的输入）。
 
 复核结果回填后交回：将本文件与 JSONL 的 review_label 一起更新即可（MBENCH-005 报告将引用一致率）。
