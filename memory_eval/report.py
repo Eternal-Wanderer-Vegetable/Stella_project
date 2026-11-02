@@ -54,6 +54,8 @@ def build_run_meta(args: Any, index: dict[str, Any], llm: Any | None, judge: Any
         "pack_representation": getattr(args, "pack_representation", "T0"),
         "score_env_overrides": score_env_overrides(),
         "abstention_guard": bool(getattr(args, "abstention_guard", False)),
+        "sufficiency_guard": bool(getattr(args, "sufficiency_guard", False)),
+        "sufficiency_prompt_version": "sufficiency-verifier-v1",
         "write_mode": getattr(args, "consolidation", "live"),
         "gold_injection": bool(getattr(args, "inject_gold", False)),
         "qa_sample_per_category": getattr(args, "qa_sample", 0) or None,

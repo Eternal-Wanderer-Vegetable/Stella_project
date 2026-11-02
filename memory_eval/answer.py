@@ -99,7 +99,10 @@ async def answer_question(
     pack_mode: str | None = None,
     strict: bool = False,
     pack_level: str = "T0",
+    sufficiency_guard: bool = False,
 ) -> dict[str, Any]:
+    """``sufficiency_guard=True`` 为 MBENCH-004 P3 B3/B4：LLM 充分性验证器前置，
+    INSUFFICIENT → 强制弃答（不调用作答模型）；AMBIGUOUS → strict 作答。"""
     """对单个 QA 走生产检索 → 记忆包 → 短答；返回带检索与成本明细的记录。
 
     ``pack_mode=None`` 走生产 ``detect_mode`` 自动分类；显式传入用法模式
@@ -134,11 +137,65 @@ async def answer_question(
         retrieval_v2.RAG_ENABLED, retrieval_v2.MEMORY_V2_ENABLED = old
         retrieval_v2._CACHE.clear()
 
+    sufficiency = None
+    if sufficiency_guard:
+        from memory_eval.sufficiency import (
+            FORCED_ABSTENTION_TEXT,
+            build_verifier_prompt,
+            parse_verdict_output,
+        )
+
+        pack_text = "\n".join(
+            str(m.get("content") or "") for m in result.conversation_memories
+        )
+        verifier_raw = llm.chat(
+            build_verifier_prompt(qa["question"], pack_text),
+            max_tokens=2048,
+            temperature=0.0,
+        )
+        sufficiency = parse_verdict_output(verifier_raw["text"])
+        if sufficiency == "INSUFFICIENT":
+            return {
+                "qid": qa["qid"],
+                "category": qa.get("category"),
+                "category_name": qa.get("category_name"),
+                "question": qa["question"],
+                "gold_answer": qa.get("gold_answer"),
+                "adversarial_answer": qa.get("adversarial_answer"),
+                "evidence_dia_ids": qa.get("evidence_dia_ids") or [],
+                "answer": FORCED_ABSTENTION_TEXT,
+                "retrieved_ids": [m.get("id") for m in result.conversation_memories],
+                "retrieved_contents": [m.get("content") or "" for m in result.conversation_memories],
+                "behavior_ids": [m.get("id") for m in result.behavior_constraints],
+                "ranked_ids": [
+                    str(row.get("id"))
+                    for row in (result.trace or {}).get("ranked_all") or []
+                    if row.get("id")
+                ][:20],
+                "top_score": max(
+                    (float(row.get("score") or 0.0) for row in (result.trace or {}).get("ranked_all") or []),
+                    default=0.0,
+                ),
+                "retrieval_result_mode": result.mode,
+                "pack_chars": len(pack_text),
+                "pack_memory_count": len(result.conversation_memories),
+                "retrieval_latency_seconds": round(time.monotonic() - started, 3),
+                "answer_latency_seconds": 0.0,
+                "answer_prompt_tokens": 0,
+                "answer_completion_tokens": 0,
+                "sufficiency": sufficiency,
+                "verifier_prompt_tokens": verifier_raw["prompt_tokens"],
+                "verifier_completion_tokens": verifier_raw["completion_tokens"],
+            }
+    # AMBIGUOUS → 保守作答（strict）；SUPPORTED → 正常作答（B3）。
+    # B4（sufficiency_guard + abstention_guard）对所有实际作答都用 strict。
+    if sufficiency == "AMBIGUOUS":
+        strict = True
+    # reasoning 模型（gemma-4-e / qwen3.8 系）会先输出隐藏思考，预算必须给足
     prompt, pack_chars = compose_answer_prompt(
         result, qa["question"], asker, strict=strict,
         pack_level=pack_level, scenario=scenario, db_path=env.db_path,
     )
-    # reasoning 模型（gemma-4-e / qwen3.8 系）会先输出隐藏思考，预算必须给足
     completion = llm.chat(prompt, max_tokens=2048, temperature=0.0)
     retrieval_latency = time.monotonic() - started
 
@@ -160,6 +217,10 @@ async def answer_question(
             for row in (result.trace or {}).get("ranked_all") or []
             if row.get("id")
         ][:20],
+        "top_score": max(
+            (float(row.get("score") or 0.0) for row in (result.trace or {}).get("ranked_all") or []),
+            default=0.0,
+        ),
         "retrieval_result_mode": result.mode,
         "pack_chars": pack_chars,
         "pack_memory_count": len(result.conversation_memories),
@@ -167,4 +228,5 @@ async def answer_question(
         "answer_latency_seconds": round(completion["latency_seconds"], 3),
         "answer_prompt_tokens": completion["prompt_tokens"],
         "answer_completion_tokens": completion["completion_tokens"],
+        "sufficiency": sufficiency,
     }

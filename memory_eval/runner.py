@@ -220,6 +220,7 @@ async def run(args: Any) -> int:
                         pack_mode=PACK_MODES.get(getattr(args, "pack_mode", "auto")),
                         strict=bool(getattr(args, "abstention_guard", False)),
                         pack_level=getattr(args, "pack_representation", "T0"),
+                        sufficiency_guard=bool(getattr(args, "sufficiency_guard", False)),
                     )
                     judge_raw = judge_llm.chat(
                         build_judge_prompt(

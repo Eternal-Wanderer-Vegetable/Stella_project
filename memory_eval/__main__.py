@@ -44,6 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
                         default="T0",
                         help="MBENCH-004 P2 记忆包表示实验：T0=生产渲染；T1=+来源时间；"
                              "T2=+事件时间；T3=+来源/主体（检索不变，只改表示）")
+    parser.add_argument("--sufficiency-guard", action="store_true",
+                        help="MBENCH-004 P3 B3/B4：LLM 证据充分性验证器前置"
+                             "（INSUFFICIENT→弃答；AMBIGUOUS→保守作答）")
     parser.add_argument("--abstention-guard", action="store_true",
                         help="弃答保护（MBENCH-003 P1 任务 3）：作答必须以记忆中直接对应"
                              "陈述为前提，抑制大包下的无依据作答")

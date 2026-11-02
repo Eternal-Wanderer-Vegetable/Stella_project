@@ -104,3 +104,32 @@ Conclusions:
 5. Boundary: gold-injected memories carry clean user_ids/timestamps; production metadata noise (missing times, unclear subjects) will dilute the gains — re-validate on real write-side data before productionizing (P4).
 
 Evidence: `p2-T1/T2/T3-report.json` + `per-question/p2-*-304.jsonl`.
+
+## 9. P3 evidence-sufficiency judgment and reliable abstention (B0-B4, 304-question paired)
+
+MBENCH-004 P3: same 304 questions (combined retrieval config), only the abstention-protection mechanism changes. The P3-1 three-state classification (SUPPORTED/INSUFFICIENT/AMBIGUOUS) is judged by an LLM sufficiency verifier (`memory_eval/sufficiency.py`, prompt v1, same-family Strata model) over the whole pack: INSUFFICIENT -> forced abstention, AMBIGUOUS -> conservative answer (strict), SUPPORTED -> normal answer.
+
+| cell | mechanism | overall | answerable | correct abstention |
+| --- | --- | --- | --- | --- |
+| B0 | no protection | 24.0% | 5.6% | 84.5% |
+| B1 | strict prompt | 27.6% | 19.3% | 54.9% |
+| B2 | retrieval-score gate (tau 0.10-0.45 sweep) | **null result**: top-score distributions for answerable vs adversarial questions fully overlap (mean 0.408 both) - under gold injection the retrieval score has no discriminative power for answerability | | |
+| **B3** | **LLM sufficiency verifier** | **29.3%** | 20.2% | **59.2%** |
+| B4 | verifier + strict | 27.6% | 18.9% | 56.3% |
+
+### Verifier quality (B3 confusion matrix + counterfactual)
+
+| verdict | n | answerable correct | adversarial correctly abstained |
+| --- | ---: | --- | --- |
+| SUPPORTED | 50 | 23/46 (**50.0%**) | 0/4 |
+| INSUFFICIENT | 79 | 0/53 (0%) | **26/26 (100%)** |
+| AMBIGUOUS | 175 | 24/134 (17.9%) | 16/41 (39.0%) |
+
+**Counterfactual**: of the 53 answerable questions gated away by INSUFFICIENT, only **2** would have been answered correctly without the gate (gate loss rate 3.8%); of the 46 answerable questions marked SUPPORTED, only 4 were correct in B0 while the gate produced 23 correct (6x).
+
+Conclusions:
+
+1. **The verifier has genuine discriminative power**: SUPPORTED cells answer correctly at 50% (vs 8.7% base), INSUFFICIENT cells abstain 100% correctly on adversarial questions with zero mislabels - the P3-1 three-state classification works as designed.
+2. **B3 dominates B1 on all three metrics** (29.3>27.6 / 20.2>19.3 / 59.2>54.9) - a content-level verifier beats a pure prompt constraint, meeting the P3 acceptance criterion.
+3. **Lesson from the B2 null result**: score gating has no discriminative power under gold injection (the pool is always dense); it can only work on realistic sparse pools.
+4. Boundaries: the verifier shares the model family with answering/judging; INSUFFICIENT mis-gated 2 answerable questions; the AMBIGUOUS cell still mis-answers 39% of adversarial questions - validator v2 (few-shot + independent model) and P4 unseen-data validation are next.

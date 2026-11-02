@@ -374,3 +374,15 @@ def test_has_gram_overlap():
     assert has_gram_overlap("Alice lives in Springfield",
                             grams("Springfield is where she lives"))
     assert not has_gram_overlap("totally unrelated text", {"springfield is"})
+
+
+def test_sufficiency_verdict_parse():
+    """MBENCH-004 P3：验证器输出解析——schema 漂移（sufficient 布尔）兼容。"""
+    from memory_eval.sufficiency import parse_verdict_output
+
+    assert parse_verdict_output('{"verdict": "SUPPORTED"}') == "SUPPORTED"
+    assert parse_verdict_output('{"verdict":"INSUFFICIENT"}') == "INSUFFICIENT"
+    assert parse_verdict_output('{"sufficient": true, "reason": "x"}') == "SUPPORTED"
+    assert parse_verdict_output('{"sufficient": false}') == "INSUFFICIENT"
+    assert parse_verdict_output('```json\n{"verdict": "AMBIGUOUS"}\n```') == "AMBIGUOUS"
+    assert parse_verdict_output("完全无关文本") == "AMBIGUOUS"
