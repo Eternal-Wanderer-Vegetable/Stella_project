@@ -53,10 +53,10 @@ mod tests {
         let conn = Connection::open_in_memory().expect("open");
         conn.execute_batch(
             "CREATE TABLE schema_meta (k TEXT PRIMARY KEY, version INTEGER);
-             INSERT INTO schema_meta (k, version) VALUES ('version', 23);",
+             INSERT INTO schema_meta (k, version) VALUES ('version', 24);",
         )
         .expect("schema");
-        assert_eq!(MEMORY_SCHEMA_VERSION, 23);
+        assert_eq!(MEMORY_SCHEMA_VERSION, 24);
         assert!(ensure_supported(&conn).is_ok());
     }
 
@@ -70,6 +70,6 @@ mod tests {
         .expect("schema");
         assert!(ensure_supported(&conn)
             .unwrap_err()
-            .contains("expected 23, got 22"));
+            .contains("expected 24, got 22"));
     }
 }
