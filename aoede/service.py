@@ -377,7 +377,7 @@ async def proactive_speak_impl(
         # 主动发言前先确保短期记忆已更新（force 本地小批量，不打扰在线 LLM）
         try:
             from config import CONSOLIDATION_TRIGGER_NEW_MESSAGES
-            from memory.consolidator import maybe_consolidate
+            from mneme.consolidator import maybe_consolidate
 
             consolidator = host.get_consolidator()
             new_count = consolidator.has_new_messages_to_consolidate(
@@ -581,7 +581,7 @@ async def proactive_speak_impl(
                                  summary="note_stella_spoke(proactive)")
             # 回复效果学习（设计阶段六）：群级记录「主动插话是否被接话」；
             # user_id=0 表示全群目标，效果结算按群归因（不再作为过滤条件）。
-            from memory import expression_learning
+            from mneme import expression_learning
 
             expression_learning.on_reply_sent(
                 group_id=group_id,

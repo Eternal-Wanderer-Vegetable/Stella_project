@@ -1353,18 +1353,23 @@ async def record_group_chat(event: GroupMessageEvent):
                 metrics={"decision": getattr(decision, "decision", "") or ""},
             )
         if decision is not None and decision.should_speak and PARTICIPATION_TRIGGER_ENABLED:
-            # ALLOW_LLM：交给统一执行器（群锁/预算/去重/consolidate 都在里头）。
-            # create_task：评分在 priority 0 的非阻断监听器里，不能同步等 LLM。
+            # ALLOW_LLM → 统一机会层（S2-02，2026-11-03 计划 §6.2）：可取消
+            # debounce + 每会话唯一在途 + TTL，替代旧「命中即 spawn」。
+            # 评分在 priority 0 的非阻断监听器里，submit 只登记不阻塞。
             _flow_checkpoint(fctx, "participation.spawn",
-                             summary="spawned proactive speak, not awaited",
+                             summary="opportunity submitted, not awaited",
                              metrics={"trigger_text_chars": len(text)})
-            _spawn_participation_speak(
+            from aoede.opportunity import get_opportunity_manager
+
+            _submit_action = get_opportunity_manager().submit(
                 event.group_id,
                 decision,
                 bot_ref=normalized.bot_ref,
                 trigger_text=text,
                 parent_trace_id=ctx.trace_id,
             )
+            _flow_decision(fctx, "participation.opportunity", status="succeeded",
+                           reason_code=_submit_action)
 
 
 def _maybe_identity_direct_reply(ctx) -> None:
@@ -1600,6 +1605,9 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
         # 让仍在途/待发送的旧主动输出在发送前判为过期。
         with contextlib.suppress(Exception):
             get_participation_manager().bump_topic_revision(event.group_id)
+            from aoede.opportunity import get_opportunity_manager
+
+            get_opportunity_manager().cancel(event.group_id, "topic_revision_bumped")
         # 纯图片 @（无文字）时给 message 一个占位文本：它是检索查询与 prompt
         # 的当前输入，空串会让整轮对话退化成「没有当前输入」。
         message_text = normalized.text.strip() or "[图片]"
@@ -2784,6 +2792,9 @@ async def handle_toggle(bot: Bot, event: GroupMessageEvent):
         # 静音 = 显式取消信号（计划 §6.9 层 3）：在途的旧主动输出发送前判过期
         with contextlib.suppress(Exception):
             get_participation_manager().bump_topic_revision(event.group_id)
+            from aoede.opportunity import get_opportunity_manager
+
+            get_opportunity_manager().cancel(event.group_id, "topic_revision_bumped")
 
     reply = "好，我不主动说话了，被 @ 还是会回的" if mute else "好，我继续正常参与聊天"
     await _record_bot_lines(int(bot.self_id), event.group_id, [reply])
@@ -4189,9 +4200,33 @@ if scheduler is not None and PROACTIVE_ENABLED:
                            ))
             _timer_end(reason)
             return
-        from aoede.service import proactive_timer_tick
+        # S2-02（2026-11-03 计划 §6.2/§7）：定时任务只负责播报、机会恢复与
+        # 验证 ASK 的公平提交——不再「主动 @ 优先」，旧掷骰路径退役。
+        from aoede.opportunity import get_opportunity_manager
+        from aoede.service import announce_sleep_transition
 
-        await proactive_timer_tick(get_proactive_host(), bot, fctx=fctx)
+        host = get_proactive_host()
+        for group_id in ALLOWED_GROUPS:
+            try:
+                # 睡眠/苏醒播报独立于主动发言：即使 gate 拒绝发言也要播报
+                await announce_sleep_transition(host, bot, group_id)
+            except Exception as e:
+                logger.warning(f"⚠️ 睡眠播报异常（群 {group_id}）: {e}")
+            from stella_project.plugins.bot_main.transport_delivery import (
+                resolve_background_bot,
+            )
+
+            resolved = resolve_background_bot(
+                BotRef(f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id))
+            )
+            manager = get_opportunity_manager()
+            manager.recover_group(group_id, bot_ref=resolved)
+            # 验证 ASK 与普通机会同层竞争：已有在途机会时提交被拒（inflight）。
+            action = manager.submit_verification(group_id, bot_ref=resolved)
+            if action.startswith("dropped"):
+                _flow_decision(fctx, "proactive.timer.preflight", status="skipped",
+                               reason_code=f"verify_ask_{action.split(':', 1)[1]}",
+                               instance_key=f"grp:{group_id}")
         _timer_end("closed")
 
 
