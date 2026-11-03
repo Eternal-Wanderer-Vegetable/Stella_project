@@ -96,6 +96,7 @@ from mneme.schema import (
 )
 from mneme.text_similarity import is_similar, merge_content, same_normalized_text
 from mneme.timeutil import seconds_since
+from mneme.verification import MnemeVerificationStore
 
 _consolidator_instance: Optional["MemoryConsolidator"] = None
 
@@ -1840,6 +1841,27 @@ class MemoryConsolidator:
             importance = float(validated.get("importance", importance))
 
             # ── 候选强化（交叉验证）：先找同空间同用户的待处理候选 ──
+            # 复活守卫（S2-01，2026-11-03 计划 §6.4）：同 claim 已有拒绝
+            # tombstone 且本次来源是旧来源子集/相同 → 不把旧候选重置 NEW、
+            # 不新建候选。全新来源 row id（用户后续主动给出的新直接证据）
+            # 放行，允许新 candidate generation。
+            _tomb = MnemeVerificationStore(str(DB_PATH))
+            _blocked = _tomb.resurrection_blocked(
+                owner_key=str(row_owner_key),
+                audience=str(row_audience),
+                fact_key=str(fact_key),
+                subject_key=str(row_subject or ""),
+                source_row_ids=[row_id for _, row_id, _ in evidence_rows],
+                source_digests=[digest for _, _, digest in evidence_rows],
+            )
+            if _blocked:
+                counts["skipped"] += 1
+                logger.info(
+                    f"🪦 [Consolidator] 旧证据拒绝重放已拦截（{_blocked}）："
+                    f"claim={str(fact_key)[:16]}…"
+                )
+                continue
+
             # 命中则复用原候选；新增来源才累积 occurrence/confidence。相同来源重放
             # 不可再次强化，否则批次重试会伪造交叉验证次数。
             # 类型条件分两档：同类型相似即命中；跨类型只在归一化后逐字相同时命中

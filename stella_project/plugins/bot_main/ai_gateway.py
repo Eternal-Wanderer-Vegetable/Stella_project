@@ -1274,6 +1274,20 @@ async def record_group_chat(event: GroupMessageEvent):
             get_proactive().record_tome(ctx.group_id, ctx.user_id)
             # 只要还愿意跟 Bot 说话就不算「不想聊」，顺手解除退避（自愈，见 reset_no_reply）
             reset_no_reply(ctx.group_id, ctx.user_id)
+            # 一次性求证结算挂钩（S2-01，2026-11-03 计划 §6.4）：to_me 消息
+            # 尝试裁决在途 attempt。保守绑定：只有**显式回复问题片段**的同
+            # 会话同主体消息才能结算；无绑定继续等到 deadline。异常不拖垮
+            # 消息链路。
+            with contextlib.suppress(Exception):
+                from mneme.verification import get_verification_store
+
+                get_verification_store(str(DB_PATH)).settle_reply(
+                    conversation_key=getattr(ctx, "conversation_key", "") or "",
+                    subject_key=f"qq:{ctx.user_id}",
+                    reply_message_id=str(getattr(ctx, "msg_id", "") or ""),
+                    reply_to_message_id=str(getattr(ctx, "reply_to_msg_id", "") or "") or None,
+                    text=str(getattr(ctx, "message", "") or ""),
+                )
         # 记录会话活动时间（用于空闲判定）。只更新时间戳，无 DB 访问。
         # The registry key distinguishes same-numbered groups reached through
         # different Bot connections. Session summaries use this key as well.
@@ -4188,6 +4202,14 @@ if scheduler is not None and PARTICIPATION_ENABLED:
         "interval", seconds=PARTICIPATION_TICK_INTERVAL, id="participation_tick"
     )
     async def participation_tick_job():
+        # 一次性求证到期结算（S2-01）：PENDING 过 deadline → UNANSWERED +
+        # tombstone + 候选 CAS 拒绝；幂等，晚到回应不复活旧 attempt。
+        with contextlib.suppress(Exception):
+            from mneme.verification import get_verification_store
+
+            settled = get_verification_store(str(DB_PATH)).resolve_expired()
+            if settled:
+                logger.info(f"⌛ [主动@] 结算到期求证 {len(settled)} 条（UNANSWERED）")
         try:
             changes = get_participation_manager().tick()
             for change in changes:

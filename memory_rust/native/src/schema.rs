@@ -9,7 +9,7 @@ pub const BACKEND_API_VERSION: u32 = 4;
 // v21 增加 opaque platform_message_id / subject_key；旧扩展不得读新库。
 // v22 增加可信连接与身份作用域；合同继续严格相等，旧扩展拒载新库。
 // v23 增加追加式 transport message events/parts/relations；旧扩展拒载新库。
-pub const MEMORY_SCHEMA_VERSION: i64 = 23;
+pub const MEMORY_SCHEMA_VERSION: i64 = 24;
 
 pub fn ensure_supported(conn: &Connection) -> Result<(), String> {
     let table_exists = conn

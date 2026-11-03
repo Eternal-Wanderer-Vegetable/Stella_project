@@ -60,7 +60,7 @@ from nonebot import logger
 from config import DB_PATH
 
 # 当前 Schema 版本（v23：transport message events/parts/relations，见 migrate_v23）。
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 # 备份文件名（放在数据库同目录）
 BACKUP_FILENAME = "stella_memory_backup.db"
 
@@ -1271,6 +1271,14 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
             from mneme.message_store import create_message_store_tables
 
             create_message_store_tables(conn)
+    # v24：一次性求证持久生命周期（2026-11-03 计划 §6.4）：attempts + 拒绝
+    # tombstones。Aoede 经 MnemeVerificationStore 操作；active claim 部分唯一
+    # 索引防并发追问同一旧证据。
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            from mneme.verification import MnemeVerificationStore
+
+            MnemeVerificationStore(str(DB_PATH)).ensure_tables(conn)
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

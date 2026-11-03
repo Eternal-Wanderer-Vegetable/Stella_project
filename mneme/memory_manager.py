@@ -481,6 +481,43 @@ class MemoryManager:
             instance_key = f"cand:{candidate['id']}"
             with _probe_span(ctx, "memory.promotion.gate",
                              instance_key=instance_key) as gate_span:
+                # 拒绝复活守卫（S2-01，2026-11-03 计划 §6.4）：候选命中拒绝
+                # tombstone（同 claim + 来源子集重放）时不得晋升——Python 侧
+                # 与 native 晋升事务各自校验，REJECTED 终态优先于并发晋升。
+                from mneme.verification import MnemeVerificationStore
+
+                _blocked = MnemeVerificationStore(str(DB_PATH)).resurrection_blocked(
+                    owner_key=str(candidate.get("owner_key") or ""),
+                    audience=str(candidate.get("audience") or ""),
+                    fact_key=str(candidate.get("fact_key") or ""),
+                    subject_key=str(candidate.get("subject_key") or ""),
+                    source_row_ids=[
+                        int(r) for r in self._candidate_source_row_ids_raw(candidate)
+                    ],
+                    source_digests=[],
+                )
+                if _blocked:
+                    _reject_conn = self._connect()
+                    _reject_conn.execute(
+                        "UPDATE memory_candidates SET status = 'REJECTED',"
+                        " updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                        " AND status IN ('NEW','OBSERVING')",
+                        (candidate["id"],),
+                    )
+                    _reject_conn.commit()
+                    _reject_conn.close()
+                    _probe_decision(ctx, "memory.promotion.gate",
+                                    status="skipped",
+                                    reason_code="tombstone_rejected_replay",
+                                    summary=_blocked,
+                                    instance_key=instance_key)
+                    gate_span.finish(status="skipped",
+                                     reason_code="tombstone_rejected_replay")
+                    logger.info(
+                        f"[MemoryManager] candidate {candidate['id']} -> REJECTED"
+                        f"（tombstone：{_blocked}）"
+                    )
+                    continue
                 should_promote, reason = self._decide_promotion(candidate)
                 # 逐候选门槛事实（计划 §6.3 memory.promotion.gate）：阈值与
                 # 实际值（importance/confidence/occurrence/来源认可）同落。
@@ -1011,6 +1048,21 @@ class MemoryManager:
             str(k).strip().upper() in MemoryManager.DIRECT_EVIDENCE_SOURCE_KINDS
             for k in kinds
         )
+
+    @staticmethod
+    def _candidate_source_row_ids_raw(candidate: dict) -> list[int]:
+        """候选行的来源 row id 列表（source_message_ids JSON 里的整数字段）。
+
+        只为 tombstone 复活检查服务：解析失败按空处理（无来源 → 守卫按
+        「无来源子集」放行，由证据合同决定资格）。
+        """
+        import json as _json
+
+        try:
+            raw = _json.loads(candidate.get("source_message_ids") or "[]")
+            return [int(r) for r in raw if str(r).isdigit()]
+        except (TypeError, ValueError):
+            return []
 
     @staticmethod
     def _decide_promotion(candidate: dict) -> tuple[bool, str]:

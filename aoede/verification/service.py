@@ -204,7 +204,7 @@ def build_proactive_contract(host: ProactiveHost, group_id: int, target):
         evidence_by_id = {str(item[0]): item for item in evidence_rows}
         if set(evidence_by_id) != set(target.evidence_ids):
             return None, None, "evidence_lineage_changed"
-        from memory.evidence_contract import ASSESSMENT_VERSION, verify_source_snapshot
+        from mneme.evidence_contract import ASSESSMENT_VERSION, verify_source_snapshot
 
         provenance_rows = []
         for index, evidence_id in enumerate(target.evidence_ids):
@@ -448,6 +448,44 @@ async def proactive_at_user(host: ProactiveHost, bot, group_id: int, *, flow_ctx
                 logger.warning(f"⚠️ [主动@] 合同构建异常（按无合同继续）: {e}")
                 contract_error = contract_error or "contract_build_error"
         conversation_ref = host.register_group_ref(str(bot.self_id), group_id)
+        # 一次性求证持久预留（S2-01，2026-11-03 计划 §6.4）：发送前落盘
+        # RESERVED，修复「发出后才建记录」的崩溃窗口。同一 claim 已有在途
+        # 求证（唯一 active 索引）则放弃本轮——不并发追问同一旧证据。
+        from mneme.verification import digest_json, get_verification_store
+
+        verification_store = get_verification_store(host.db_path())
+        reserved = verification_store.open_attempt(
+            candidate_id=target.candidate_id,
+            candidate_content_digest=digest_json(
+                {
+                    "type": getattr(target, "candidate_type", ""),
+                    "content": target.candidate_content,
+                }
+            ),
+            owner_type=getattr(target, "owner_type", ""),
+            owner_key=getattr(target, "owner_key", ""),
+            subject_key=getattr(target, "fact_subject_key", "")
+            or f"qq:{target.user_id}",
+            audience=getattr(target, "audience", ""),
+            fact_key=getattr(target, "fact_key", ""),
+            evidence_digest=digest_json(sorted(target.source_digests)),
+            evidence_ids=list(target.evidence_ids),
+            source_row_ids=list(target.source_row_ids),
+            source_digests=list(target.source_digests),
+            bot_ref=f"legacy-qq:{bot.self_id}",
+            connection_id=f"legacy-qq:{bot.self_id}",
+            conversation_key=conversation_ref.conversation_key,
+            opportunity_id=f"proactive-at:{group_id}:{target.user_id}",
+        )
+        if not reserved:
+            host.flow_decision(flow_ctx, "proactive.at.preflight", status="skipped",
+                               reason_code="verification_attempt_active",
+                               instance_key=f"grp:{group_id}")
+            logger.info(
+                f"⏳ [主动@] 群 {group_id} 候选 {target.candidate_id} 已有在途求证，跳过"
+            )
+            outcome = "attempt_active_conflict"
+            return False
         async with lock:
             ctx = ChatContext(
                 user_id=target.user_id,
@@ -622,6 +660,32 @@ async def proactive_at_user(host: ProactiveHost, bot, group_id: int, *, flow_ctx
                 ),
             )
             delivered = delivered_texts(receipts)
+            # 一次性求证发送结算（S2-01）：按逐段真实回执定型 attempt——
+            # 全部 acknowledged → PENDING_VERIFICATION（deadline=ACK+300s）；
+            # 确定全部失败（无任何已发片段）→ CANCELLED；未知/部分成功保守
+            # 记 DELIVERY_UNKNOWN，不重投、不冒充未回应。
+            _ack_ids = [
+                mid
+                for receipt in receipts
+                if receipt.status == "acknowledged"
+                for mid in receipt.platform_message_ids
+            ]
+            _failed_only = bool(receipts) and all(
+                receipt.status == "failed" for receipt in receipts
+            )
+            if _ack_ids:
+                verification_store.mark_sent(
+                    target.candidate_id, _ack_ids,
+                    verification_window_seconds=300.0,
+                )
+            elif _failed_only:
+                verification_store.mark_cancelled(
+                    target.candidate_id, "all_segments_failed"
+                )
+            else:
+                verification_store.mark_delivery_unknown(
+                    target.candidate_id, "delivery_receipts_unresolved"
+                )
             if not delivered:
                 logger.error(f"[主动@] 群 {group_id} 发送失败，不记账不学习")
                 host.flow_decision(flow_ctx, "proactive.send", status="failed",
@@ -646,7 +710,7 @@ async def proactive_at_user(host: ProactiveHost, bot, group_id: int, *, flow_ctx
                                      summary="note_stella_spoke(proactive)")
                 # 回复效果学习（设计阶段六）：目标是「主动 @ 是否被回应/忽略」；
                 # message 传空——build_instruction 的罐头指令不是用户的表达素材。
-                from memory import expression_learning
+                from mneme import expression_learning
 
                 expression_learning.on_reply_sent(
                     group_id=group_id,
