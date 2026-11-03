@@ -140,6 +140,10 @@ def test_opportunity_speak_invoked_without_memory_prerequisite(
         calls, _db = _install_host(tmp_path, monkeypatch)
         clock = _FakeClock()
         manager = OpportunityManager(clock=clock)
+        # CI runners are fresh containers: monotonic ~= uptime can read as
+        # "inside the 600s cooldown" against a zero last-spoke stamp. The
+        # unit test pins the timing layer, so stub the safety floor out.
+        manager._cooldown_blocked = lambda gid: False
 
         manager._evidence_for = lambda host, opp: {
             "trigger_msg_id": 42,
@@ -188,6 +192,7 @@ def test_r0_budget_blocks_context_only_participation(tmp_path, monkeypatch) -> N
 
         clock = _FakeClock()
         manager = OpportunityManager(clock=clock)
+        manager._cooldown_blocked = lambda gid: False
         assert manager.submit(1, _decision()) == "created"
         clock.now += 3.0
         loop.fire_all()
