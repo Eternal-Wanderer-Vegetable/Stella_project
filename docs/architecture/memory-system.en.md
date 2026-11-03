@@ -2,6 +2,8 @@
 
 [中文](memory-system.md) | English · [Documentation](../README.en.md)
 
+The canonical implementation lives in the `mneme/` package (`memory/*` are explicit aliases to the same implementation; data paths unchanged); see [Mneme](mneme.en.md) for naming and code boundaries.
+
 This document explains **why Stella's memory system is designed this way** and the specific rules for each gate. See the [architecture documentation](README.en.md) for the directory structure and processing flow, and the [configuration reference](../reference/configuration.en.md) for configuration options.
 
 ## Conversation, personal memory, and attribution in 6.1.0

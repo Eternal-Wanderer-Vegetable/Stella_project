@@ -1,3 +1,11 @@
+## 2026-11-03 — Aoede / Mneme 阶段一实施（S1-00…S1-04）
+
+- Scope / Current State：分支 `codex/aoede-mneme-proactive`（自 837a089）。阶段一「行为等价拆分」五工作包全部提交：S1-00 合同冻结（1c78905）、S1-01 中立端口（68edc85）、S1-02 Aoede 提取（4b53464）、S1-03 Mneme 改名（32029ac）、S1-04 发布/文档/flow 收口（本提交）。阶段二（S2-01…S2-04）未实施。
+- What's Done：正式包 `aoede/`（proactive*/participation/编排外移 + host 注入）与 `mneme/`（47 模块机械迁移）；`memory/*` 为身份保持兼容别名（sys.modules 自替换，CLI 双向等价）；`stella_contracts/aoede.py` 端口合同；ai_gateway 瘦委托 + scheduler 单注册；发布 payload COMMON_DIRS 加入两新包；双语架构文档 aoede/mneme（S1 骨架）；flow catalog 锚点迁至规范路径并重新生成 immutable manifest（旧 manifest 未改）。
+- Evidence：定向主动套件 106 passed（与基线一致）；受影响消费者（attribution/reply/time-sensitive/promotion/message-relations/observability 三批/aoede+mneme 兼容）全绿；全量 tests 4201 passed，17 失败经基线 worktree 对照证实为环境/既有（缺 nonebot 适配器、Windows 进程锁、corona/nucleus 隔离检查），非本轮回归；ruff 全仓 clean；check_docs 127 文件/1357 链接/0 错误；flow --check ok；新旧 CLI 退出码一致；import 身份 17 对全同。detect-changes：S1-02 LOW、S1-03 CRITICAL/47 flows（已报告，即改名本身）。
+- What's Next：阶段二 S2-01（求证持久生命周期，schema 下一版本以执行时最新+1 为准重核）→ S2-02（统一机会流程）→ S2-03（PROACTIVE_FREQUENCY）→ S2-04（行为验收+双语文档正文）。真模型/QQ 灰度/Windows 安装与 native wheel 验收未做，阶段一整体 **NOT READY for G1 全项**（缺安装环境验收），可独立回滚。
+- Files：`aoede/`、`mneme/`、`memory/`（兼容层）、`stella_contracts/aoede.py`、`ai_gateway.py`、`scripts/build_release_package.py`、`scripts/generate_message_flow.py`、`core/observability/flow_catalog.py`、`internal_flow_catalog.py`、新 manifest、`docs/architecture/aoede|mneme(.en).md`、`tests/aoede|mneme/`、状态三文件。未跟踪的 bridge/debug/startup 文件未混入。
+
 ## 2026-11-03 — Aoede / Mneme 两阶段工程计划
 
 - Scope / Current State：仅制定计划；生产代码、测试、配置、数据库与服务均未改。交付 [Aoede / Mneme 工程计划](docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)，源码锚定 `837a0892e4f33e9341e0ecd1ac33049afad82271`。`AOEDE-MNEME-PLAN` 登记为规划完成；现有 active feature 的在途状态保留，不启动实施。

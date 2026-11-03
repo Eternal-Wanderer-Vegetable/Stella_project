@@ -1,3 +1,12 @@
+## Current Handoff — Aoede / Mneme stage 1 complete (2026-11-03)
+
+- Status: **S1-00…S1-04 done（行为等价拆分）** on `codex/aoede-mneme-proactive`（5 提交，837a089→S1-04）。阶段二未实施；G1 全项验收缺安装环境/发布成品核对，整体 NOT READY。
+- Current Objective：续接按计划 §7 执行 S2-01（先修求证闭环；schema 下一版以执行时 latest+1 重核，native 常量同步）；G1 gate 未全绿前不影响 S2 编码开工，但发布成品（payload/Docker/import smoke）验收须在 G1 前补。
+- Files：见 progress.md 同日条目。计划：docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md。
+- Evidence：定向主动 106 passed 基线一致；全量 4201 passed，17 失败基线对照为环境/既有；ruff/docs/flow --check 全绿；CLI/导入身份合同由 tests/aoede + tests/mneme 固化。
+- Blockers：真实模型、QQ 灰度、Windows 成品安装/回滚、native wheel parity 未验收。保留工作树既有未跟踪文件（ligamina_bridge/debug.log/start_managed_stella.ps1/.zcode），未混入提交。
+- Recommended Next Step：读计划 §6.2/§7 S2-01；实施前重新 impact 求证主符号并冻结 schema 版本；继续临时 STELLA_HOME 隔离测试。
+
 ## Current Handoff — Aoede / Mneme plan (2026-11-03)
 
 - Current Objective：本轮规划交付完成，实施未启动。完整计划：[Aoede / Mneme 两阶段工程计划](docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)。任务 `AOEDE-MNEME-PLAN`；原有 active feature 保留，勿据此启动其遗留运行操作。

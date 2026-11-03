@@ -13,6 +13,8 @@ Choose the page matching your task; these are maintained documents, not dated ac
 | [LLM cost and budget](llm-budget.en.md) | Analyze model queues, budgets and cost |
 | [Plugins, extensions, control plane](integrations.en.md) | Integrate plugins, extensions, status API or desktop shell |
 | [Memory system](memory-system.en.md) | Change capture, promotion, retrieval or compaction |
+| [Mneme (canonical memory naming)](mneme.en.md) | Verify memory package naming, compat layer and data paths |
+| [Aoede (proactive participation)](aoede.en.md) | Modify proactive speech, participation scoring and verification |
 | [Rust memory backend](memory-rust-backend.en.md) | Select native modes or check backend compatibility |
 | [Capabilities](capability-system.en.md) | Change Router, providers or Comes |
 | [Knowledge base](knowledge-base.en.md) | Change imports, ACLs, retrieval or evidence isolation |

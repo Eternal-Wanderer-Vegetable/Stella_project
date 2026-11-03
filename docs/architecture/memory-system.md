@@ -2,6 +2,8 @@
 
 中文 | [English](memory-system.en.md) · [文档总览](../README.md)
 
+正式实现位于 `mneme/` 包（`memory/*` 为同一实现的显式别名，数据路径不变），命名与代码边界见 [Mneme](mneme.md)。
+
 本文说明 Stella 的记忆系统**为什么这样设计**，以及各道闸门的具体规则。目录结构与处理流程见 [架构说明](README.md)，配置项见 [配置参考](../reference/configuration.md)。
 
 ## 6.1.0 会话、个人记忆与归属保护

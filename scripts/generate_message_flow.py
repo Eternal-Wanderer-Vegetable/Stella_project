@@ -413,7 +413,8 @@ class ProjectIndex:
     语义，变化即 manifest 漂移。
     """
 
-    PACKAGE_DIRS = ("core", "memory", "capability", "cometa", "gravitas", "knowledge",
+    PACKAGE_DIRS = ("core", "memory", "aoede", "mneme", "capability", "cometa",
+                    "gravitas", "knowledge",
                     "webui", "config", "stella_project", "scripts",
                     "astrbot_compat", "corona", "nucleus", "deploy",
                     "stella_bootstrap", "stella_contracts")
