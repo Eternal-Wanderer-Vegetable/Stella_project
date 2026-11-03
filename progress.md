@@ -1,3 +1,11 @@
+## 2026-11-03 — PR #129 + 真实环境联调（双核心托管 + 频率 6.0）
+
+- Scope / Current State：draft PR #129（CI 全绿）。生产以 `scripts/start_managed_stella.ps1` 起 Corona/Nucleus 双核心；`PROACTIVE_FREQUENCY=6.0` 经 WebUI 高级设置保存并应用（托管修订链路）。灰度联调连环抓出 4 个真缺陷并全部修复推送。
+- 实测修复链（每项都有生产证据）：① `budget_scope_key` 裸 Bot partial repr（dc808e8）；② `_env_frequency` 不被 AST 提取 → WebUI 无该字段（d9edf81，373 字段含新键）；③ `_resolve_bot` 双重解析裸 Bot → VERIFY_ASK 全部无声释放、零 trace（cf396b0）——修复后 `proactive_at` root 开始创建；④ 进程 fresh 时 `in_cooldown` 用 monotonic≈uptime 误判冷却（31e653d，与 CI Linux 矩阵同源）；⑤ 15 条消息门槛按计划 §6.2 从 can_speak 退役（24ea3f3）——fresh 进程计数恒 0 曾把验证 ASK 全部拒为「距上次发言仅 0 条新消息」。
+- 最终实测状态：每分钟每群 VERIFY_ASK 机会 → 预算授予（R=6）→ 门禁放行 → pick_target → `no_candidate`（候选空间/活跃窗口不匹配，按设计跳过）→ token 干净退回。一旦活跃用户与候选匹配，完整链（attempt→提问→结算）即真实触发。
+- 既有问题记录：用户 cron 经 cometa 报 UNKNOWN_ERROR（600s 重试）；memories_fts 1 行索引漂移 warning；ligamina_bridge 扩展自身加载失败。
+- What's Next：挂机观察首个真实 attempt→提问→结算闭环；CI 于最新提交重跑；扩大灰度仍按计划 Gate G2。
+
 ## 2026-11-03 — 真实环境启动与首轮灰度实测
 
 - Scope / Current State：在本分支（258f9da+dc808e8）以 `python bot.py` 启动生产 bot（Bot 1694717255 经 NapCat 已连接，WebUI 8080）。schema23→24 迁移带备份成功（`agent_memory.db.pre-v24-20261103-174926.bak`）；4 张新表落库；mneme 采集门/aoede 参与评分/预算层全部活跃。
