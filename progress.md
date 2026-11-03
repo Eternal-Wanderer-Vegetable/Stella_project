@@ -1,3 +1,11 @@
+## 2026-11-03 — 真实环境启动与首轮灰度实测
+
+- Scope / Current State：在本分支（258f9da+dc808e8）以 `python bot.py` 启动生产 bot（Bot 1694717255 经 NapCat 已连接，WebUI 8080）。schema23→24 迁移带备份成功（`agent_memory.db.pre-v24-20261103-174926.bak`）；4 张新表落库；mneme 采集门/aoede 参与评分/预算层全部活跃。
+- 实测发现并已修复：**budget_scope_key 裸 Bot 缺陷**——定时路径的裸 OneBot Bot 的 `connection_id` 是惰性 partial，scope 键落成 `functools.partial(...)|...`。已修复合成 `legacy-qq:{self_id}`（dc808e8，含回归测试钉死与入口路径同桶）；生产库 5 行脏键迁移后又出现系旧进程临终 tick 所写（新进程只写干净键），重复脏行已删除。
+- 灰度行为实测：每分钟 tick 对 5 个白名单群各提交验证 ASK 机会，全部被 `budget_empty (R=1.0)` 正确拒绝（桶初始 0、按 R/3600 补充）——「单群低频」灰度语义按计划工作；参与评分在实时消息上持续出分（IGNORE 段正常）。
+- 既有问题记录（非本分支）：①「定时任务失败，600 秒后重试：UNKNOWN_ERROR」为用户预约任务经 cometa 执行失败（启动即触发，重试中）；② memories_fts 索引 2113 行 ≠ active 2112 行（迁移校验 warning，1 行陈旧索引）；③ ligamina_bridge 扩展加载失败（用户未跟踪扩展自身的 matcher 签名问题）。
+- What's Next：等待首个预算 token 满（约 1 小时）观察第一次真实主动机会（验证 ASK 或插话）；真模型/QQ 灰度扩大与 Windows VM 验收继续 NOT READY。
+
 ## 2026-11-03 — PR #129 起草与首轮验收
 
 - Scope / Current State：分支推远端并创建 **draft PR #129**（base main）。验收首轮完成：payload import smoke、native wheel schema24 重建与 parity、docker 镜像 smoke 合同补齐、全量复跑、flow 漂移门禁收口。
