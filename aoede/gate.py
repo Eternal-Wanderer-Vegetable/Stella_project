@@ -190,7 +190,7 @@ def can_speak(group_id: int, kind: str) -> tuple[bool, str]:
     会更省，但它是用户显式设置的意图，优先级应当高于时段与冷却）：
 
         总开关 → 分路开关 → 运行时静音 → 睡眠时段 → 醒来缓冲
-        → 群级冷却 → 新消息门槛
+        → 群级冷却（新消息门槛已随 2026-11-03 计划 §6.2 退役）
 
     注意：话题插话的**概率掷骰不在此处**——那是 join 路径独有的，
     由调用方在 gate 通过后自行掷骰（主动 @ 不掷骰，它有配额与冷却约束）。
@@ -214,9 +214,9 @@ def can_speak(group_id: int, kind: str) -> tuple[bool, str]:
     if proactive.in_cooldown(group_id):
         return False, "群级冷却中"
 
-    if not proactive.has_enough_new_messages(group_id):
-        return False, f"距上次发言仅 {proactive.messages_since_spoke(group_id)} 条新消息"
-
+    # 2026-11-03 计划 §6.2：固定 MIN_MESSAGES_SINCE_SPOKE 消息数门槛自新
+    # 统一机会路径退役——它对刚重启的进程恒为 0（必然拒绝），且旧语义把
+    # 「群不够热闹」当作一切主动路径的前置，与上下文优先管线冲突。
     return True, "允许"
 
 

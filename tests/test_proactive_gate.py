@@ -250,7 +250,10 @@ def test_cooldown_blocks(_allow_all, monkeypatch):
     assert not ok and "冷却" in reason
 
 
-def test_message_threshold_blocks(_allow_all, monkeypatch):
+def test_message_threshold_retired(_allow_all, monkeypatch):
+    """2026-11-03 计划 §6.2：固定消息数门槛自 can_speak 退役——新进程
+    消息计数恒 0 会把主动路径整体锁死（灰度实测缺陷）。"""
+
     class _NotEnough:
         def in_cooldown(self, group_id):
             return False
@@ -259,8 +262,8 @@ def test_message_threshold_blocks(_allow_all, monkeypatch):
             return False
 
         def messages_since_spoke(self, group_id):
-            return 3
+            return 0
 
     monkeypatch.setattr(gate, "get_proactive", lambda: _NotEnough())
     ok, reason = gate.can_speak(1, "join")
-    assert not ok and "新消息" in reason
+    assert ok and reason == "允许"
