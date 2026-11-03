@@ -597,7 +597,7 @@ def _same_domain_pairs(
     只比同域的：域是能力查询的分组依据，也是路由竞争最激烈的地方（同域的两条能力争的是
     同一批问句）。跨域挨得近不一定有害——「天气」与「番剧」本来就不会被同一句话触发。
     """
-    from memory.embeddings import cosine_similarity
+    from mneme.embeddings import cosine_similarity
 
     by_domain: dict[str, list[str]] = {}
     for capability in reg.routable():

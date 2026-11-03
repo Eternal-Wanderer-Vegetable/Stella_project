@@ -28,7 +28,7 @@ from typing import Any
 
 from core.observability import message_flow
 from core.observability.message_flow import _dump, _new_id, _scrub_deep, sanitize_text
-from memory.timeutil import utc_now
+from mneme.timeutil import utc_now
 
 
 def record(

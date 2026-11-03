@@ -373,7 +373,7 @@ def _cmd_paths(args: argparse.Namespace) -> int:
 
 def _cmd_space_merge(args: argparse.Namespace) -> int:
     """把若干空间合并成一个（替代过去要用户手搓的那串 UPDATE）。"""
-    from memory import space_merge
+    from mneme import space_merge
 
     sources = [s.strip() for s in args.source.replace("，", ",").split(",") if s.strip()]
     if not sources:

@@ -60,14 +60,14 @@ class ReplayEnv:
     # ── 生命周期 ──────────────────────────────────────────────
     def setup(self, *, batch_size: int | None = None) -> None:
         """建 schema、patch 隔离路径（可反复进入；恢复用 :meth:`close`）。"""
-        import memory.consolidator as consolidator_mod
-        import memory.memory_manager as memory_manager_mod
-        import memory.post_processors as post_processors
-        import memory.pre_processors as pre_processors
-        import memory.retrieval_v2 as retrieval_v2
-        import memory.retriever as retriever
-        import memory.schema as schema_mod
-        from memory.consolidator import MemoryConsolidator
+        import mneme.consolidator as consolidator_mod
+        import mneme.memory_manager as memory_manager_mod
+        import mneme.post_processors as post_processors
+        import mneme.pre_processors as pre_processors
+        import mneme.retrieval_v2 as retrieval_v2
+        import mneme.retriever as retriever
+        import mneme.schema as schema_mod
+        from mneme.consolidator import MemoryConsolidator
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self.db_path)
@@ -106,7 +106,7 @@ class ReplayEnv:
             setattr(mod, attr, old)
         self._patches.clear()
         if getattr(self, "_batch_originals", None):
-            import memory.consolidator as consolidator_mod
+            import mneme.consolidator as consolidator_mod
 
             for attr, old in self._batch_originals.items():
                 setattr(consolidator_mod, attr, old)
@@ -119,7 +119,7 @@ class ReplayEnv:
         阈值检查对 force 同样生效（``new_count < _batch_size(force)`` 即跳过），
         逐会话回放必须让阈值恰好等于当前会话消息数，才能保证「一会话恰好一批」。
         """
-        import memory.consolidator as consolidator_mod
+        import mneme.consolidator as consolidator_mod
 
         if not getattr(self, "_batch_originals", None):
             raise RuntimeError("ReplayEnv.setup() 未调用")
@@ -180,7 +180,7 @@ class ReplayEnv:
     # ── 整合器装配 ────────────────────────────────────────────
     def build_consolidator(self, *, live: bool = False, fake_backend: Any = None) -> Any:
         """装配整合器：live 用生产 backend_for 角色；否则注入假后端（测试）。"""
-        from memory.consolidator import MemoryConsolidator
+        from mneme.consolidator import MemoryConsolidator
 
         cons = MemoryConsolidator.__new__(MemoryConsolidator)
         if live:

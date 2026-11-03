@@ -116,9 +116,9 @@ async def run_study(
     scenarios_limit: int = 0,
 ) -> dict[str, Any]:
     """对 workdir 下每个场景库执行研究；返回可 JSON 化的报告。"""
-    import memory.retrieval_v2 as retrieval_v2
+    import mneme.retrieval_v2 as retrieval_v2
     from config.spaces import resolve_space
-    from memory.embeddings import EmbeddingService
+    from mneme.embeddings import EmbeddingService
 
     scenarios = load_scenarios(data_dir, limit=scenarios_limit or None)
 

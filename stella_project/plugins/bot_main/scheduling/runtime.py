@@ -34,8 +34,8 @@ from typing import Any
 
 from nonebot import logger
 
+from aoede.gate import can_speak_for_scheduled
 from core.observability import message_flow
-from memory.proactive_gate import can_speak_for_scheduled
 
 from .agent import AgentRunLimits, ScheduledAgentRunner, TaskCancelledError
 from .context import build_scheduled_context

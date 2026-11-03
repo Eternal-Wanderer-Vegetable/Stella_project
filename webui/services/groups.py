@@ -116,7 +116,7 @@ def set_mute(group_id: int, *, muted: bool, actor: str) -> dict:
     _memory_db().parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(_memory_db())
     try:
-        from memory.schema import create_group_runtime_state_table
+        from mneme.schema import create_group_runtime_state_table
 
         create_group_runtime_state_table(conn)
         conn.execute(

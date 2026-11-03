@@ -159,7 +159,7 @@ def _capture_gate() -> dict:
     capabilities 的泄漏面约束同一纪律。取不到就让面板少一块。
     """
     try:
-        from memory.capture_gate import status_snapshot
+        from mneme.capture_gate import status_snapshot
 
         return status_snapshot()
     except Exception:

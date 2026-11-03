@@ -1,0 +1,226 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""记忆语义检索（可选，Embedding）。
+
+通过本地 LM Studio 的 OpenAI 兼容 ``/v1/embeddings`` 接口，把查询与记忆内容编码为
+向量并计算余弦相似度，取代 ``memory.policy._semantic_similarity`` 的词面 Jaccard
+占位——短中文文本上词面几乎不命中，导致排序缺乏区分力。
+
+编码约定（依据实测，见 scripts/build_embedding_fixture.py 的注释）：
+1. **query 与 content 一律裸文本编码，不加 ``Instruct:`` 前缀**。实测 22 个用例，
+   不加前缀正/噪音余弦中位差 0.124，优于加前缀的 0.110；最差间隔 −0.109 也优于
+   −0.145。Qwen3 官方建议的指令前缀在此场景（短中文群聊检索）不带来收益。
+2. **维度固定 1024，不做 MRL 降维**。LM Studio 忽略 ``dimensions`` 参数，且降维
+   只省约 20MB 磁盘，不值得。
+3. LM Studio 返回的向量已归一化（L2 范数 1.0000），故点积即余弦；但 cosine 实现
+   仍保留“除模长”兜底，避免上游改变行为时产生零分错误。
+
+设计原则：
+1. **可降级**：任何一步失败（服务不可用 / 无 embedding 模型 / 解析异常）都返回
+   ``None``，调用方回退到规则版语义分，绝不让语义检索成为主链路的硬依赖；
+2. **缓存**：key 含模型名、维度与文本哈希，避免不同模型/维度互相污染；
+3. **纯向量工具与网络分离**：cosine / 归一化是纯函数，可离线单测；
+   EmbeddingService 才持有 httpx 客户端与缓存；
+4. **按实际端点共享闸门**：相同 URL 的 embedding 与 LLM 调用共用配置资源组；显式
+   ``MEMORY_EMBEDDING_GATE`` 可声明物理资源共享关系。独立或临时 fallback URL 使用
+   哈希资源名并按保守并发 1 排队，不借用原端点的票据。批量编码（``input`` 支持数组，
+   一次请求只抢一次票据）是将来的优化方向。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import math
+from contextlib import asynccontextmanager
+from typing import Any
+
+import httpx
+from nonebot import logger
+
+from gravitas.contracts import WorkClass
+from gravitas.model_calls import (
+    ModelAttemptBudgetExceededError,
+    ModelCallDeferred,
+    model_call_scope,
+)
+
+# 文本 → 向量 的进程内缓存（键为 “model:dim:sha256(text)”，值为 float 列表或 None）
+_CACHE: dict[str, list[float] | None] = {}
+
+# 固定编码维度（LM Studio 下 Qwen3-Embedding 输出 1024，不做 MRL 降维）
+EMBEDDING_DIM = 1024
+
+
+def _cache_key(model: str, dim: int, text: str) -> str:
+    """缓存键：模型 + 维度 + 文本哈希，避免跨模型/维度复用错误向量。"""
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return f"{model or ''}:{dim}:{digest}"
+
+
+def normalize(vec: list[float]) -> list[float]:
+    """L2 归一化向量；空/全零向量返回原样（避免除零）。"""
+    norm = math.sqrt(sum(v * v for v in vec))
+    if not vec or norm == 0.0:
+        return vec
+    return [v / norm for v in vec]
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """两个向量的余弦相似度（自动按内部做点积，需维度一致）。
+
+    LM Studio 返回的向量已归一化，此时点积即余弦；这里仍除模长兜底，
+    保证上游返回未归一化向量时结果也正确。
+    """
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return max(0.0, min(1.0, dot / (na * nb)))
+
+
+@asynccontextmanager
+async def _maybe_gate(work_class: WorkClass, base_url: str):
+    """按实际 URL 或显式声明的共享槽对 embedding 请求排队。
+
+    ``auto`` 按 URL 匹配已有槽；显式槽名声明物理资源共享；独立 URL 获得
+    哈希资源名并按并发 1 排队。fallback 不会错误地持有主 URL 的资源票据。
+
+    config 与 core.llm 都在函数内延迟 import，保持纯向量工具
+    （cosine / normalize）可离线单测。
+    """
+    from config import settings
+    from core.llm import embedding_gate
+    from gravitas.model_calls import (
+        ModelCallContext,
+        model_attempt,
+        resource_group_for_url,
+    )
+
+    configured = str(getattr(settings, "MEMORY_EMBEDDING_GATE", "auto") or "auto").strip()
+    declared_slot = None
+    if configured and configured.lower() not in {"auto", "none"}:
+        declared_slot = embedding_gate() or None
+    resource = resource_group_for_url(base_url, declared_slot=declared_slot)
+    async with model_attempt(
+        ModelCallContext(
+            resource_group_id=resource,
+            work_class=work_class,
+            tag="memory-embedding",
+        )
+    ):
+        yield
+
+
+class EmbeddingService:
+    """调用 LM Studio /v1/embeddings 的语义编码服务（带缓存与降级）。"""
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str = "",
+        timeout: float = 10.0,
+        dim: int = EMBEDDING_DIM,
+        cache: dict[str, list[float] | None] | None = None,
+        work_class: WorkClass = WorkClass.BACKGROUND,
+    ):
+        """参数:
+            base_url: LM Studio 服务地址，如 http://127.0.0.1:1234；
+            model: 嵌入模型 ID；留空则由服务端默认路由；
+            timeout: 单次编码请求超时；
+            dim: 预期编码维度（仅用于缓存键，不发给服务端——LM Studio 忽略 dimensions）；
+            cache: 可注入的缓存（测试用），缺省用模块级 _CACHE。
+        """
+        self.base_url = base_url.rstrip("/")
+        self.model = model or ""
+        self.timeout = timeout
+        self.dim = dim
+        self._cache = cache if cache is not None else _CACHE
+        self.work_class = WorkClass(work_class)
+
+    async def _request_embedding(
+        self, base_url: str, model: str, text: str
+    ) -> list[float]:
+        payload: dict[str, Any] = {"input": text}
+        if model:
+            payload["model"] = model
+        async with (
+            _maybe_gate(self.work_class, base_url),
+            httpx.AsyncClient(
+                timeout=httpx.Timeout(self.timeout), trust_env=False
+            ) as client,
+        ):
+            resp = await client.post(f"{base_url}/v1/embeddings", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        vector = data["data"][0]["embedding"]
+        if not isinstance(vector, list) or not vector:
+            raise ValueError("embedding 返回为空")
+        return [float(value) for value in vector]
+
+    async def embed(self, text: str) -> list[float] | None:
+        """把一段文本编码为向量；失败返回 None（调用方自行降级）。"""
+        text = (text or "").strip()
+        if not text:
+            return None
+        key = _cache_key(self.model, self.dim, text)
+        if key in self._cache:
+            return self._cache[key]
+
+        async with model_call_scope():
+            return await self._embed_uncached(text, key)
+
+    async def _embed_uncached(self, text: str, key: str) -> list[float] | None:
+        last_error: Exception | None = None
+        vector: list[float] | None = None
+        try:
+            vector = await self._request_embedding(self.base_url, self.model, text)
+        except (ModelCallDeferred, ModelAttemptBudgetExceededError):
+            # A full shared queue is backpressure, not a failed model result.
+            # Leave it uncached so a later turn can retry.
+            return None
+        except Exception as exc:
+            last_error = exc
+
+        if vector is None:
+            try:
+                from deploy.llama import ensure_local_embedding_service
+
+                fallback = await asyncio.to_thread(
+                    ensure_local_embedding_service,
+                    preferred_url=self.base_url,
+                )
+                if fallback.get("ok") and fallback.get("endpoint"):
+                    fallback_url = str(fallback["endpoint"]).rstrip("/")
+                    fallback_model = str(fallback.get("model") or self.model)
+                    vector = await self._request_embedding(
+                        fallback_url, fallback_model, text
+                    )
+            except (ModelCallDeferred, ModelAttemptBudgetExceededError):
+                return None
+            except Exception as exc:
+                last_error = exc
+
+        if vector is None:
+            logger.warning(f"[Embedding] 编码失败（{text[:20]}…）: {last_error}")
+            self._cache[key] = None
+            return None
+
+        self._cache[key] = vector
+        return vector
+
+    async def similarity(self, query: str, content: str) -> float | None:
+        """查询与记忆内容的余弦相似度；任一侧编码失败返回 None。"""
+        q = await self.embed(query)
+        c = await self.embed(content)
+        if q is None or c is None:
+            return None
+        return cosine_similarity(q, c)
+
+    def clear(self) -> None:
+        """清空进程内缓存（测试/热重载用）。"""
+        self._cache.clear()

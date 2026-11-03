@@ -63,7 +63,7 @@ from typing import Any
 from typing_extensions import Self
 
 from gravitas.dependency_recovery import StorageDomain, connect_sqlite
-from memory.timeutil import log_sqlite_error, utc_now
+from mneme.timeutil import log_sqlite_error, utc_now
 
 # 事件种类（计划 §6.2 event_kind）
 KIND_START = "start"

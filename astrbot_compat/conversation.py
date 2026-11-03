@@ -33,7 +33,7 @@ SEL_CONV_KEY = "sel_conv_id"
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
-    from memory.schema import create_astrbot_conversations_table
+    from mneme.schema import create_astrbot_conversations_table
 
     create_astrbot_conversations_table(conn)
     return conn

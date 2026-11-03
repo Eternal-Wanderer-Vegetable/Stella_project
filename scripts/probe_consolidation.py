@@ -47,9 +47,9 @@ from core.llm import ROLE_CONSOLIDATION, ROLE_EXTRACT
 from core.llm.lm_studio import LMStudioBackend
 from gravitas.contracts import WorkClass
 from gravitas.model_calls import execute_model_call, model_call_scope, role_call_context
-from memory.consolidation_prompt import format_consolidation_prompt
-from memory.consolidator import MemoryConsolidator
-from memory.policy import validate_candidate
+from mneme.consolidation_prompt import format_consolidation_prompt
+from mneme.consolidator import MemoryConsolidator
+from mneme.policy import validate_candidate
 
 DEFAULT_INPUT = Path("windows_raw.json")
 OUT_MD = Path("consolidation_probe.md")
@@ -244,7 +244,7 @@ async def run_window_two_stage(
     has_self_disclosure 为真时才调用阶段2——与 consolidate_group 的逻辑一致。
     阶段2 未成功（解析失败）时回退阶段1 候选，同样与生产一致。
     """
-    from memory.extraction_prompt import format_extraction_prompt
+    from mneme.extraction_prompt import format_extraction_prompt
 
     messages = format_messages(window)
     senders = window_senders(window)
@@ -331,7 +331,7 @@ async def run_positive(
             print(format_consolidation_prompt("（无）", format_messages(case["messages"])))
             # 两阶段时把阶段2 prompt 也打出来，便于离线检查提取模板
             if runner is not None:
-                from memory.extraction_prompt import format_extraction_prompt
+                from mneme.extraction_prompt import format_extraction_prompt
                 print(f"----- {case['id']} 阶段2 提取 prompt -----")
                 print(format_extraction_prompt(format_messages(case["messages"])))
         return 0

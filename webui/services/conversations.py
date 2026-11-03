@@ -13,7 +13,7 @@ from pathlib import Path
 
 import config.settings as settings
 from core.transport.keys import decode_conversation_key_v2
-from memory.message_store import effective_history_filter
+from mneme.message_store import effective_history_filter
 from webui.db import connect_ro
 
 

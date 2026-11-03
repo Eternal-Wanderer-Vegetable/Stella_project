@@ -34,7 +34,7 @@ def inject_gold_memories(env: Any, scenario: dict[str, Any]) -> int:
     检索命中会退化为抽签；按会话时间分布才与生产 recency 语义一致。
     """
     from config.spaces import resolve_space
-    from memory.retriever import _upsert_fts_record
+    from mneme.retriever import _upsert_fts_record
 
     space = resolve_space(int(scenario["group_id"]))
     texts = evidence_texts(scenario)

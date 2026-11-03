@@ -14,7 +14,7 @@ from dotenv.parser import parse_stream
 import config.settings as settings
 from core.transport.keys import conversation_key_v2
 from core.transport.models import BotRef, SceneRef
-from memory.message_store import effective_history_filter
+from mneme.message_store import effective_history_filter
 from stella_bootstrap.transport_settings import (
     TransportSettingsError,
     TransportSettingsV1,

@@ -155,7 +155,7 @@ def exhausted_action() -> str:
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
-    from memory.schema import create_llm_usage_daily_table
+    from mneme.schema import create_llm_usage_daily_table
 
     create_llm_usage_daily_table(conn)
     return conn

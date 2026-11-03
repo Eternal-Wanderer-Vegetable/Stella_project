@@ -79,7 +79,7 @@ def sqlite_v2_registrar(
         raise TypeError("connection_factory must be callable")
 
     def register(bot: BotRef, scene: SceneRef, memory_space: str | None) -> ConversationRefV2:
-        from memory.conversation_registry import register_conversation_v2
+        from mneme.conversation_registry import register_conversation_v2
 
         connection = connection_factory()
         try:
@@ -387,7 +387,7 @@ class TransportIngress:
         turn_context = None
         if turn_requested:
             try:
-                from memory.ownership import scope_for_chat_context
+                from mneme.ownership import scope_for_chat_context
 
                 scope_available = scope_for_chat_context(
                     ctx, memory_space=conversation.memory_space

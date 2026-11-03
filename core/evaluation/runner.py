@@ -298,7 +298,7 @@ def _execute_pipeline(
     （note_stella_spoke）。第二遍：全新 manager 重算同一序列的纯决策并逐
     消息比对（同 fixtures 两次决策必须一致）。
     """
-    from memory.participation import ParticipationManager
+    from aoede.participation import ParticipationManager
 
     _redirect_loguru_to_stderr()  # nonebot import 重配了 stdout sink，立即改回 stderr
 
@@ -788,7 +788,7 @@ def _load_snapshot_if_any(config: ExperimentConfig, paths: ExperimentPaths) -> b
 
 def _build_verify_manager(paths: ExperimentPaths, dataset_dir: Path):
     """第二遍重算用的全新 manager：同打分表、同 fixture embedding、同日志目录。"""
-    from memory.participation import ParticipationManager
+    from aoede.participation import ParticipationManager
 
     clock = VirtualClock(start=datetime(2026, 1, 1, tzinfo=timezone.utc))
     manager = ParticipationManager(

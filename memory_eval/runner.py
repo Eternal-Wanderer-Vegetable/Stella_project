@@ -103,7 +103,7 @@ def build_embedding_service(args: Any) -> Any | None:
             MEMORY_EMBEDDING_MODEL,
             MEMORY_EMBEDDING_TIMEOUT,
         )
-        from memory.embeddings import EmbeddingService
+        from mneme.embeddings import EmbeddingService
 
         return EmbeddingService(
             getattr(args, "embedding_base_url", None) or MEMORY_EMBEDDING_BASE_URL,

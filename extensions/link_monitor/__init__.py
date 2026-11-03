@@ -33,7 +33,7 @@ from gravitas.dependency_recovery import (
     connection_scope,
     dependency_recovery,
 )
-from memory.timeutil import humanize_duration
+from mneme.timeutil import humanize_duration
 
 if TYPE_CHECKING:
     from core.pipeline import Pipeline

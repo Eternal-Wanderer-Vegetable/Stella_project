@@ -33,8 +33,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def _prepare(db: Path) -> None:
-    import memory.consolidator as consolidator
-    import memory.memory_manager as mm
+    import mneme.consolidator as consolidator
+    import mneme.memory_manager as mm
 
     consolidator.DB_PATH = db
     mm.DB_PATH = db
@@ -48,7 +48,7 @@ def _seed_candidate(db: Path, source_id: int, *, content: str, importance: float
     """Create a candidate through the production accepted-evidence writer."""
     from core.transport.keys import conversation_key_v2
     from core.transport.models import BotRef, SceneRef, UserRef
-    from memory.consolidator import MemoryConsolidator
+    from mneme.consolidator import MemoryConsolidator
 
     connection_id = "native-fullchain-test"
     bot_ref = BotRef(connection_id, "generic", "service:test", "test-bot")
@@ -138,7 +138,7 @@ def _seed_memory(db: Path, mid: str, *, content: str, confidence: float,
 def _run_promotion(mode: str) -> dict:
     import os
 
-    import memory.memory_manager as mm
+    import mneme.memory_manager as mm
     from core.observability import turn_trace
 
     old_env = os.environ.get("MEMORY_BACKEND")
@@ -238,7 +238,7 @@ def _retrieve_smoke() -> dict:
     decision, backend = resolve_backend("rust")
     if decision.selected != "rust":
         return {"native_loaded": False, "fallback_reason": decision.fallback_reason}
-    import memory.memory_manager as mm
+    import mneme.memory_manager as mm
 
     tmp = Path(tempfile.mkdtemp(prefix="rust-retrieve-"))
     db = tmp / "memory.db"

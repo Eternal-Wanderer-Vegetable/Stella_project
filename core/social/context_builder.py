@@ -71,7 +71,7 @@ def _record_usage(
         return
     try:
         from core.social.contracts import utc_now_iso
-        from memory import social_store
+        from mneme import social_store
 
         social_store.ensure_tables()
         conn = _connect()
@@ -157,7 +157,7 @@ def build_social_block(
         if social_mode not in ("shadow", "active"):
             return "", selection
         from config import settings as _s2
-        from memory import jargon_service
+        from mneme import jargon_service
 
         scope = ConversationScope.from_context(ctx)
         inject_allowed = social_mode == "active"
@@ -169,7 +169,7 @@ def build_social_block(
         expression_entries: list[dict] = []
         if getattr(_s2, "SOCIAL_EXPRESSION_INJECT", False):
             try:
-                from memory import expression_selector
+                from mneme import expression_selector
 
                 expression_entries = expression_selector.select(
                     scope, ctx.message or "",

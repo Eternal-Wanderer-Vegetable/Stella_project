@@ -55,7 +55,7 @@ def compose_answer_prompt(
     生产分节结构上只替换 memories 分节为 ``pack_representation.render_pack``
     的对应表示（+来源时间 / +事件时间 / +来源与主体），检索结果不变。
     """
-    from memory.prompt_builder import build_v2_named_sections
+    from mneme.prompt_builder import build_v2_named_sections
 
     sections = build_v2_named_sections(
         "",
@@ -109,7 +109,7 @@ async def answer_question(
     （如 ``CONFLICT_AVOID``，limit=10）即为「检索友好配置」对照实验。
     ``strict=True`` 启用弃答保护指令（作答必须以记忆中直接对应陈述为前提）。
     """
-    import memory.retrieval_v2 as retrieval_v2
+    import mneme.retrieval_v2 as retrieval_v2
     from config.spaces import resolve_space
 
     if channel not in CHANNELS:

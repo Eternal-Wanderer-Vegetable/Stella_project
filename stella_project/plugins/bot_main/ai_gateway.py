@@ -152,8 +152,8 @@ from core.transport.legacy_ingress import shared_legacy_ingress
 from core.vision import extract_image_sources, vision_available
 from extensions import load_extensions
 from gravitas.errors import DeadlineExceeded
-from memory import addressing, capture_gate, expression_learning, social_store
-from memory.addressing_intent import (
+from mneme import addressing, capture_gate, expression_learning, social_store
+from mneme.addressing_intent import (
     CLEAR_ADDRESS,
     NOT_ADDRESS_REQUEST,
     QUERY_ADDRESS,
@@ -163,28 +163,28 @@ from memory.addressing_intent import (
     classify_addressing,
     is_likely_addressing_request,
 )
-from memory.compressor import get_compressor
-from memory.consolidator import get_consolidator, maybe_consolidate
-from memory.conversation_projection import (
+from mneme.compressor import get_compressor
+from mneme.consolidator import get_consolidator, maybe_consolidate
+from mneme.conversation_projection import (
     canonical_message_id_text,
     parse_platform_message_id,
     parse_qq_message_id,
 )
-from memory.post_processors import (
+from mneme.post_processors import (
     bad_phrase_filter,
     log_thought,
     parse_output,
     split_lines,
 )
-from memory.pre_processors import (
+from mneme.pre_processors import (
     build_context,
     record_message,
     resolve_reply_target,
 )
-from memory.session_compact import schedule_compact
-from memory.session_context import end_session
-from memory.session_context import idle_groups as idle_session_groups
-from memory.session_context import touch as session_touch
+from mneme.session_compact import schedule_compact
+from mneme.session_context import end_session
+from mneme.session_context import idle_groups as idle_session_groups
+from mneme.session_context import touch as session_touch
 
 # cometa QQ 桥接：必须在模块级绑定——handle_chat 的委派分支直接引用它，
 # 只在 _start_cometa 里局部导入绑定的只是局部名，@ 触发时 NameError
@@ -485,7 +485,7 @@ def _flow_watch_finish(matcher) -> None:
                             DELIVERY_ACKNOWLEDGED,
                             DeliveryReceipt,
                         )
-                        from memory import social_store
+                        from mneme import social_store
 
                         social_store.record_delivery(
                             DeliveryReceipt(
@@ -953,14 +953,14 @@ def _delivery_plan_is_current(
             ctx.runtime_key, ctx.turn_id, ctx.generation_epoch,
         ):
             return False
-        from memory.conversation_identity import get_identity_revision
+        from mneme.conversation_identity import get_identity_revision
 
         if get_identity_revision(ctx.conversation_key) != ctx.identity_revision:
             return False
         if plan.get("scope_versions_available") is not True:
             return False
-        from memory.ownership import person_owner_key, space_owner_key
-        from memory.scope_versions import current_versions_strict
+        from mneme.ownership import person_owner_key, space_owner_key
+        from mneme.scope_versions import current_versions_strict
 
         scope_keys: list[str] = []
         space = str(getattr(ctx, "group_shared_space", "") or "")
@@ -1047,7 +1047,7 @@ except Exception as e:
 # 只加字段/索引、绝不删数据；旧库升级到 v3（source_kind 等），
 # 首次迁移前自动备份为 stella_memory_backup.db
 try:
-    from memory.schema import ensure_v2_schema
+    from mneme.schema import ensure_v2_schema
 
     if ensure_v2_schema():
         logger.info("🔧 [Startup] 记忆系统 Schema 已升级到 v3")
@@ -1072,7 +1072,7 @@ except Exception as e:
 # 旧库导入与备份，失败只让社交功能停用，绝不阻断插件加载。
 if SOCIAL_ENABLED:
     try:
-        from memory.social_schema import ensure_social_schema
+        from mneme.social_schema import ensure_social_schema
 
         _social_import_stats = ensure_social_schema()
         logger.info(f"📦 [Startup] 社交旁表就绪（旧库导入: {_social_import_stats or '无'}）")
@@ -1083,7 +1083,7 @@ if SOCIAL_ENABLED:
 # 打开开关后，在插件装载阶段立即清空短期 / 长期记忆、重置检查点
 if DB_CLEANUP_ON_START:
     try:
-        from memory.db_cleaner import clean_db
+        from mneme.db_cleaner import clean_db
         results = clean_db(
             clear_short_term=True,
             clear_long_term=True,
@@ -1099,7 +1099,7 @@ if DB_CLEANUP_ON_START:
 # 命中全部剩余消息、把已整理过的内容重新整理一遍（2026-08-15 实测 1487 条）。
 # 这里在任何整合触发之前修正历史遗留的错位。
 try:
-    from memory.db_cleaner import align_all_checkpoints
+    from mneme.db_cleaner import align_all_checkpoints
 
     adjusted = align_all_checkpoints()
     if adjusted:
@@ -1111,7 +1111,7 @@ except Exception as e:
 # AT_MENTION 长期为 0 而 BOT_SELF>0 是 @ 消息未入库的退化信号（2026-08-17 缺陷）。
 # 表缺失 / 查询失败时函数内部静默返回，不影响启动。
 with contextlib.suppress(Exception):
-    from memory.db_cleaner import log_source_kind_distribution
+    from mneme.db_cleaner import log_source_kind_distribution
 
     log_source_kind_distribution()
 
@@ -1119,7 +1119,7 @@ with contextlib.suppress(Exception):
 # 若距上次清理已超 24h（如机器人昨晚关机漏跑），启动时补做一次，防止消息表无限膨胀
 if MESSAGE_CLEANUP_ENABLED:
     try:
-        from memory.db_cleaner import needs_cleanup, trim_group_messages
+        from mneme.db_cleaner import needs_cleanup, trim_group_messages
         if needs_cleanup():
             logger.info("🧹 [消息清理] 距上次清理超过 24h，启动时补执行")
             result = trim_group_messages()
@@ -1260,7 +1260,7 @@ async def record_group_chat(event: GroupMessageEvent):
         # 身份声明 hook（多人身份修复计划 §6.3）：入库拿到 source_row_id 后
         # 解析本人自我介绍/有目标纠正；零命中零写库，异常不拖垮消息链路。
         with contextlib.suppress(Exception):
-            from memory.conversation_identity import process_message_identity
+            from mneme.conversation_identity import process_message_identity
 
             process_message_identity(ctx)
     # 不再每条消息都触发短期记忆总结（避免频繁空检查消耗服务器资源）；
@@ -1361,7 +1361,7 @@ def _maybe_identity_direct_reply(ctx) -> None:
     ctx（含复合问题——照常交给 LLM）。失败静默，绝不阻塞正常回复。
     """
     try:
-        from memory.conversation_identity import identity_question_reply
+        from mneme.conversation_identity import identity_question_reply
 
         direct = identity_question_reply(ctx)
     except Exception:
@@ -1889,7 +1889,7 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 # 输出匹配（计划 §6.3.4）：注入的表达真的出现在已发文本 → applied=1，
                 # 只有 applied 的表达才关联使用结果；未匹配保持 unknown
                 with contextlib.suppress(Exception):
-                    from memory import expression_selector
+                    from mneme import expression_selector
 
                     expression_selector.mark_applied(ctx.turn_id, delivered)
             ack_count = sum(1 for r in receipts if r.status == "acknowledged")
@@ -1952,7 +1952,7 @@ private_chat_handler = on_message(
 
 def _register_private_conversation(bot: Bot, event: PrivateMessageEvent):
     """可信入口的注册表登记（计划 §6.1）：私聊首次对话分配持久存储会话。"""
-    from memory.conversation_registry import get_or_register_private
+    from mneme.conversation_registry import get_or_register_private
 
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -1963,7 +1963,7 @@ def _register_private_conversation(bot: Bot, event: PrivateMessageEvent):
 
 def _register_group_ref(bot_id: str, group_id: int):
     """Register a QQ group by the exact Bot identity that received it."""
-    from memory.conversation_registry import get_or_register_group
+    from mneme.conversation_registry import get_or_register_group
 
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -1987,7 +1987,7 @@ def _maybe_personal_sharing(ctx) -> None:
     """
     import sqlite3 as _sqlite3
 
-    from memory.personal_sharing import (
+    from mneme.personal_sharing import (
         canonical_owner,
         detect_revoke_intent,
         detect_sharing_intent,
@@ -2042,7 +2042,7 @@ def _maybe_personal_sharing(ctx) -> None:
             connection_id == f"legacy-qq:{bot_id}"
             and getattr(user_ref, "identity_domain", "") == "qq:client"
         ):
-            from memory.ownership import person_owner_key
+            from mneme.ownership import person_owner_key
 
             owner_candidates.append(
                 (person_owner_key("qq", bot_id, user_id), f"qq:{user_id}")
@@ -2124,7 +2124,7 @@ def _lookup_registered_ref(storage_session_id: int):
     调用方对 None 必须跳过并记原因——负存储 ID 本身不携带身份，绝不
     从负号反推伪造私聊 ref。
     """
-    from memory.conversation_registry import lookup_by_storage_session_id
+    from mneme.conversation_registry import lookup_by_storage_session_id
 
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -2251,7 +2251,7 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 )
                 # 身份声明 hook（多人身份修复计划 §6.3）：私聊同契约
                 with contextlib.suppress(Exception):
-                    from memory.conversation_identity import process_message_identity
+                    from mneme.conversation_identity import process_message_identity
 
                     process_message_identity(ctx)
                 # 共享授权入口（整改计划 P5，复核 F1/F4）：显式分享/撤回话术
@@ -4303,7 +4303,7 @@ if scheduler is not None and MESSAGE_CLEANUP_ENABLED:
     @scheduler.scheduled_job("cron", hour=MESSAGE_CLEANUP_HOUR, id="trim_group_messages")
     async def trim_messages_job():
         try:
-            from memory.db_cleaner import trim_group_messages
+            from mneme.db_cleaner import trim_group_messages
             result = trim_group_messages()
             deleted = result["deleted"]
             groups = result["groups"]
@@ -4315,12 +4315,12 @@ if scheduler is not None and MESSAGE_CLEANUP_ENABLED:
             logger.warning(f"⚠️ 消息清理异常: {e}")
         # 清理后复查各群 source_kind 分布，捕捉 @ 消息未入库的退化（每日复查）
         with contextlib.suppress(Exception):
-            from memory.db_cleaner import log_source_kind_distribution
+            from mneme.db_cleaner import log_source_kind_distribution
 
             log_source_kind_distribution()
         # 同步清理过期的记忆决策追踪，防止 memory_traces 无限膨胀
         try:
-            from memory.trace import prune_traces
+            from mneme.trace import prune_traces
             pruned = prune_traces(keep_days=30.0)
             if pruned > 0:
                 logger.info(f"📊 [Trace] 已清理 {pruned} 条过期决策追踪")
@@ -4344,7 +4344,7 @@ _stop_watcher_task: asyncio.Task | None = None
 async def _start_capture_gate() -> None:
     """装记忆采集就绪门（计划 §6.1）：启动即 fail-closed，探针证实
     CONSOLIDATION 就绪后才开门。装门失败也保持关门，绝不拖垮主进程。"""
-    from memory import capture_gate as _cg
+    from mneme import capture_gate as _cg
 
     try:
         await _cg.start_gate()
@@ -4564,8 +4564,8 @@ async def _graceful_shutdown_body(lifecycle, stop_errors: list[str],
 
     from aoede.service import background_tasks as aoede_background_tasks
     from aoede.verification.service import reply_check_tasks as aoede_reply_tasks
-    from memory.consolidator import pending_tasks as pending_consolidations
-    from memory.session_compact import pending_tasks as pending_compactions
+    from mneme.consolidator import pending_tasks as pending_consolidations
+    from mneme.session_compact import pending_tasks as pending_compactions
 
     await wait_for_tasks(
         _reply_check_tasks | aoede_reply_tasks | aoede_background_tasks,

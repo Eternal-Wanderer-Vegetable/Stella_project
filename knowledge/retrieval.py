@@ -215,7 +215,7 @@ class HybridRetriever:
         单库资料库场景是几千行量级；外部向量数据库是明确的 deferred 项
         （plan §12），到量之前这里是诚实的成本。
         """
-        from memory.embeddings import cosine_similarity
+        from mneme.embeddings import cosine_similarity
 
         conn = _connect(self.store)
         try:
@@ -303,7 +303,7 @@ def _rrf_fuse(
 
 def dedup_evidence(evidence: list[Evidence]) -> list[Evidence]:
     """近重复折叠：规范化文本相同（模板化文档常见）只保留最高分的一条。"""
-    from memory.text_similarity import normalize_text
+    from mneme.text_similarity import normalize_text
 
     seen: set[str] = set()
     result: list[Evidence] = []

@@ -36,7 +36,7 @@ def score_env_overrides() -> dict[str, str]:
 
 
 def build_run_meta(args: Any, index: dict[str, Any], llm: Any | None, judge: Any | None) -> dict[str, Any]:
-    from memory.schema import SCHEMA_VERSION
+    from mneme.schema import SCHEMA_VERSION
 
     return {
         "report_schema": REPORT_SCHEMA,

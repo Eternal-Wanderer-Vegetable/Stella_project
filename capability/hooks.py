@@ -164,7 +164,7 @@ def build_tool_tasks(
 
 async def _retrieve_memory(ctx: ChatContext) -> None:
     """Memory 分支：走既有的 build_user_context，逻辑一行不改（方案第 14 节）。"""
-    from memory.pre_processors import build_user_context
+    from mneme.pre_processors import build_user_context
 
     await build_user_context(ctx)
 

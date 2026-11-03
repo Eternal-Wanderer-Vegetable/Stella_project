@@ -22,7 +22,10 @@ from config import (
     LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
     MEMORY_BENCHMARK_DIR,
 )
-from memory.benchmark import (
+from memory_rust.backend import RetrievalRequest
+from memory_rust.python_backend import PythonMemoryBackend
+from memory_rust.selector import get_backend
+from mneme.benchmark import (
     MODE_FLAGS,
     case_semantically_covered,
     evaluate_retrieval_result,
@@ -31,10 +34,7 @@ from memory.benchmark import (
     load_embedding_fixture,
     write_case_db,
 )
-from memory.policy import detect_mode, mode_limit, normalize_mode
-from memory_rust.backend import RetrievalRequest
-from memory_rust.python_backend import PythonMemoryBackend
-from memory_rust.selector import get_backend
+from mneme.policy import detect_mode, mode_limit, normalize_mode
 
 SCORE_TOLERANCE = 1e-3
 # native 检索请求没有 FTS 开关（fts_enabled 只在晋升路径）：fts/hybrid 模式下
@@ -89,7 +89,7 @@ def _case_request(
 
 
 def _prepare_python_runtime(db_path: Path, *, rag_enabled: bool = False) -> tuple[Any, Any, Any, Any]:
-    import memory.retrieval_v2 as retrieval_v2
+    import mneme.retrieval_v2 as retrieval_v2
 
     old_state = (
         retrieval_v2.DB_PATH,
