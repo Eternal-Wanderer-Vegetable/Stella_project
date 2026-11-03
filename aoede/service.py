@@ -664,18 +664,41 @@ async def announce_sleep_transition(host: ProactiveHost, bot, group_id: int) -> 
     if host.send_background_message is None:
         logger.warning(f"⚠️ [{kind}] 宿主未装配后台发送通道，跳过播报")
         return
+    # 自发播报共用普通主动预算（S2-03，计划 §6.5）：R=0 时播报也关闭；
+    # ACK 才 commit，失败 release，未知保守消耗。
+    from aoede.budget import (
+        ProactiveBudgetStore,
+        budget_scope_key,
+        new_operation_id,
+    )
+    from config import PROACTIVE_FREQUENCY
+
+    store = ProactiveBudgetStore(host.db_path())
+    operation_id = new_operation_id()
+    reservation = store.reserve(
+        budget_scope_key(target.bot, group_id),
+        operation_id,
+        frequency_per_hour=float(PROACTIVE_FREQUENCY),
+        kind="ANNOUNCE",
+    )
+    if not reservation.granted:
+        logger.info(f"⏳ [{kind}] 播报因预算未放行（{reservation.reason}）")
+        return
 
     try:
         result = await host.send_background_message(target, OutboundMessage.text(line))
     except Exception as e:
         logger.warning(f"⚠️ [{kind}] 播报发送结果未知: {e}")
+        store.resolve_unknown(operation_id)
         return
     if result.status.value != "accepted":
         logger.warning(
             f"⚠️ [{kind}] 播报未确认送达: {result.status.value}/"
             f"{result.error_code or '-'}"
         )
+        store.release(operation_id)
         return
+    store.commit(operation_id)
 
     mark_announced(group_id, kind, today)
     await host.record_bot_lines(

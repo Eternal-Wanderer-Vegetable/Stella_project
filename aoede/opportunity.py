@@ -235,16 +235,49 @@ class OpportunityManager:
         except RuntimeError:
             logger.warning(f"⚠️ [Aoede] 群 {group_id} 宿主未装配，机会丢弃")
             return
+        # 持久预算（S2-03，计划 §6.5）：原子 reserve 先于生成/发送；同一
+        # 会话的 CONTRIBUTE 与 VERIFY_ASK 共用一桶；R=0 → 一律拒绝；store
+        # 不可用 fail closed。发送结算：at_user 的 bool 可信（False=无任何
+        # 已发片段 → release）；插话路径回执结算在 speak 内部完成，这里
+        # 保守 resolve_unknown（消耗，不自动退款）。
+        from aoede.budget import (
+            ProactiveBudgetStore,
+            budget_scope_key,
+            new_operation_id,
+        )
+        from config import PROACTIVE_FREQUENCY
+
+        store = ProactiveBudgetStore(host.db_path())
+        scope_key = budget_scope_key(opportunity.bot_ref, group_id)
+        operation_id = new_operation_id()
+        reservation = store.reserve(
+            scope_key,
+            operation_id,
+            frequency_per_hour=float(PROACTIVE_FREQUENCY),
+            kind=opportunity.kind,
+        )
+        if not reservation.granted:
+            logger.info(
+                f"⏳ [Aoede] 群 {group_id} 机会因预算未放行（{reservation.reason}，"
+                f"R={float(PROACTIVE_FREQUENCY)}）"
+            )
+            return
         try:
             if opportunity.kind == "VERIFY_ASK":
                 from aoede.verification.service import proactive_at_user
 
                 bot = _resolve_bot(host, opportunity.bot_ref)
                 if bot is None:
+                    store.release(operation_id)
                     return
-                await proactive_at_user(host, bot, group_id)
+                delivered = await proactive_at_user(host, bot, group_id)
+                if delivered:
+                    store.commit(operation_id)
+                else:
+                    store.release(operation_id)
                 return
             if opportunity.decision is None:
+                store.release(operation_id)
                 return
             await host.proactive_speak_for_group(
                 opportunity.bot_ref,
@@ -256,8 +289,10 @@ class OpportunityManager:
                 evidence=_evidence_for(host, opportunity),
                 parent_trace_id=opportunity.parent_trace_id,
             )
+            store.resolve_unknown(operation_id)
         except Exception as e:
             logger.warning(f"⚠️ [Aoede] 群 {group_id} 机会执行异常: {e}")
+            store.resolve_unknown(operation_id)
 
 
 def _instruction_for(decision) -> str:

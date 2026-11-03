@@ -1279,6 +1279,18 @@ def _migrate(conn: sqlite3.Connection, dry_run: bool = False) -> int:
             from mneme.verification import MnemeVerificationStore
 
             MnemeVerificationStore(str(DB_PATH)).ensure_tables(conn)
+    # v24（续）：Aoede 自有预算桶/预留台账（计划 §6.5）——DDL 由 Aoede
+    # 维护、同一升级协调器在同一 DB 执行，不与 Mneme 表互穿。
+    if not dry_run:
+        with contextlib.suppress(sqlite3.OperationalError):
+            from aoede.budget import ProactiveBudgetStore
+
+            conn2 = sqlite3.connect(str(DB_PATH))
+            try:
+                ProactiveBudgetStore(str(DB_PATH)).ensure_tables(conn2)
+                conn2.commit()
+            finally:
+                conn2.close()
     for table, column, ddl in _ADDITIVE_COLUMNS:
         if _column_exists(cursor, table, column):
             continue

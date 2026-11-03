@@ -793,9 +793,33 @@ USER_TIMEZONE = _env("USER_TIMEZONE", "")
 
 # ---------- 主动发言 ----------
 # 是否启用主动发言
+def _env_frequency(key: str, default: float) -> float:
+    """PROACTIVE_FREQUENCY 专用解析（S2-03）：必须有限且在 [0, 6]。
+
+    非法值（NaN/Inf/负数/超范围）启动时回退安全默认并诊断，不写回覆盖
+    用户文件；生效仍遵循既有「import 期冻结 + 重启应用」合同。
+    """
+    import math as _math
+
+    value = _env_float(key, default)
+    if not _math.isfinite(value) or value < 0.0 or value > 6.0:
+        from nonebot import logger
+
+        logger.warning(
+            f"⚠️ [Config] {key} 非法（须为 0–6 的有限数，默认 1.0 次/小时），"
+            f"回退默认值 {default}"
+        )
+        return default
+    return value
+
+
 PROACTIVE_ENABLED = _env_bool("PROACTIVE_ENABLED", "true")
 # 群级硬冷却（秒）：两次主动发言之间的最小间隔。
 # 120s 配合 CHECK_INTERVAL=30s / PROB_AT_FAST=0.35 时实测约每 3~4 分钟发言一次，过于频繁。
+# 普通主动参与的唯一用户数值（S2-03）：每精确会话的最高长期补充速率
+# （次/小时）。R=0 关闭普通主动参与与自发睡眠/苏醒播报；被动回复与
+# 用户预约任务不受影响。内部参数（debounce/TTL/推理额度）不在此暴露。
+PROACTIVE_FREQUENCY = _env_frequency("PROACTIVE_FREQUENCY", 1.0)
 PROACTIVE_COOLDOWN = _env_int("PROACTIVE_COOLDOWN", 600)
 # 距上次自己发言，群里至少要有多少条新消息才允许再开口。
 # 比纯时间冷却更贴合语义：冷清群里「自己说完等 10 分钟又自己说」是时间冷却
