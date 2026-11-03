@@ -125,7 +125,7 @@ jobs:
         env:
           REF: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
         run: |
-          docker run --rm "$REF" python -c "import config, core, memory, deploy, extensions, astrbot_compat, capability; print('镜像内 import 检查通过')"
+          docker run --rm "$REF" python -c "import config, core, memory, mneme, aoede, deploy, extensions, astrbot_compat, capability; print('镜像内 import 检查通过')"
           docker run --rm "$REF" python -c "from pathlib import Path; p=Path('/app/webui/dist/index.html'); assert p.is_file() and 'assets/' in p.read_text(encoding='utf-8'); print('Dashboard assets are bundled')"
           mkdir -p /tmp/stella-empty
           if docker run --rm -v /tmp/stella-empty:/data "$REF" 2>guard.err; then
