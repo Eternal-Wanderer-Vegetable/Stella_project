@@ -320,6 +320,17 @@ def _evidence_for(host, opportunity: _Opportunity):
 
 
 def _resolve_bot(host, bot_ref):
+    """把机会携带的 bot 句柄解析为可用 Bot。
+
+    两种形态都合法：装配层注入的 BotRef 模型（走 transport 解析），以及
+    定时路径已经解析过的裸 Bot 对象（有 ``self_id`` + ``call_api``）——
+    后者直接使用；再喂给 ``resolve_background_bot`` 会因身份不匹配静默
+    返回 None（2026-11-03 灰度实测缺陷：VERIFY_ASK 全部无声释放）。
+    """
+    if bot_ref is None:
+        return None
+    if hasattr(bot_ref, "call_api") and hasattr(bot_ref, "self_id"):
+        return bot_ref
     if host.resolve_background_bot is None:
         return None
     try:
