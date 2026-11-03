@@ -1,10 +1,10 @@
-## 2026-11-03 — PR #129 + 真实环境联调（双核心托管 + 频率 6.0）
+## 2026-11-03 — PR #129 flow 漂移与群 @ 回复修复
 
-- Scope / Current State：draft PR #129（CI 全绿）。生产以 `scripts/start_managed_stella.ps1` 起 Corona/Nucleus 双核心；`PROACTIVE_FREQUENCY=6.0` 经 WebUI 高级设置保存并应用（托管修订链路）。灰度联调连环抓出 4 个真缺陷并全部修复推送。
-- 实测修复链（每项都有生产证据）：① `budget_scope_key` 裸 Bot partial repr（dc808e8）；② `_env_frequency` 不被 AST 提取 → WebUI 无该字段（d9edf81，373 字段含新键）；③ `_resolve_bot` 双重解析裸 Bot → VERIFY_ASK 全部无声释放、零 trace（cf396b0）——修复后 `proactive_at` root 开始创建；④ 进程 fresh 时 `in_cooldown` 用 monotonic≈uptime 误判冷却（31e653d，与 CI Linux 矩阵同源）；⑤ 15 条消息门槛按计划 §6.2 从 can_speak 退役（24ea3f3）——fresh 进程计数恒 0 曾把验证 ASK 全部拒为「距上次发言仅 0 条新消息」。
-- 最终实测状态：每分钟每群 VERIFY_ASK 机会 → 预算授予（R=6）→ 门禁放行 → pick_target → `no_candidate`（候选空间/活跃窗口不匹配，按设计跳过）→ token 干净退回。一旦活跃用户与候选匹配，完整链（attempt→提问→结算）即真实触发。
-- 既有问题记录：用户 cron 经 cometa 报 UNKNOWN_ERROR（600s 重试）；memories_fts 1 行索引漂移 warning；ligamina_bridge 扩展自身加载失败。
-- What's Next：挂机观察首个真实 attempt→提问→结算闭环；CI 于最新提交重跑；扩大灰度仍按计划 Gate G2。
+- Scope / Current State：PR #129 仍为 draft，远端 HEAD `b71e809` 的 CI 当前有 `test (3.10/3.11/3.12)` 与 `flow-manifest` 失败；4 个失败共享同一根因：源码现算清单与仓库旧 manifest hash 不同。当前工作树已生成 `core/observability/flows/message-flow.9b19e90b7675.json`，远端尚未包含本地修复。
+- PR 测试根因/修复：3 个矩阵各为 4338 passed / 35 skipped / 1 failed，唯一失败 `TestDriftGate::test_committed_manifest_matches_source`；CI 算出新 manifest `04bddc…`，旧提交只含此前地址。重生成后 3.10/3.11/3.12 的 `generate_message_flow.py --check` 全通过；本地该 drift test 通过。
+- 群 @ 无回复根因/修复：OneBot 的 `to_me` 只识别消息首尾的 @，`is_chat_trigger` 原先只看该标志；中间位置的原生 `at` 段被拒为 `not_mentioned`。群触发现在扫描原生 @ 段并要求 `qq == event.self_id`；其他 Bot 的 @ 仍拒绝。回归测试先失败、修复后通过。
+- 验证：`TestSharedAdmission` + flow drift test **4 passed**；改动文件 Ruff 通过；`git diff --check` 退出码 0。托管重启后 Corona PID 33904 / Nucleus PID 33152 ready，API reachable，OneBot healthy。重启前日志里没有捕获到用户报告的那条原生 @ 事件，因此真实 QQ 回包仍待用户再发一条原生 @ 验收；本轮没有向 QQ 发消息。
+- What's Next：提交/推送这两个本地修复以触发 PR 最新 CI；用户在群里 @ Stella 后给大致时间，我再核对脱敏的触发、生成和发送结果。真模型/QQ 灰度、Windows 干净 VM 与自然度协议仍按 Gate G2 保持 NOT READY。
 
 ## 2026-11-03 — 真实环境启动与首轮灰度实测
 

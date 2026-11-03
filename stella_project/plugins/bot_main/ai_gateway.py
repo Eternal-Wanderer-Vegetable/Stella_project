@@ -1494,6 +1494,11 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
     normalized = _normalized_onebot_event(event)
     if isinstance(normalized, UnsupportedEvent):
         return False
+    # OneBot's adapter sets ``to_me`` only for an @ at the first or last
+    # segment. A native @ segment elsewhere in the message is still an
+    # explicit request to this bot, so include it in the same admission rule.
+    if not normalized.is_tome and _event_has_native_self_mention(event):
+        normalized = replace(normalized, is_tome=True)
     image_enabled = (
         not normalized.text.strip()
         and vision_available()
@@ -1513,6 +1518,27 @@ async def is_chat_trigger(event: GroupMessageEvent) -> bool:
         f"reason={admission.reason_code}"
     )
     return admission.allowed
+
+
+def _event_has_native_self_mention(event: GroupMessageEvent) -> bool:
+    """Return whether any native OneBot ``at`` segment targets this bot."""
+    self_id = str(getattr(event, "self_id", "") or "")
+    get_message = getattr(event, "get_message", None)
+    if not self_id or not callable(get_message):
+        return False
+    try:
+        segments = get_message()
+    except Exception:
+        return False
+    for segment in segments:
+        data = getattr(segment, "data", None)
+        if (
+            getattr(segment, "type", None) == "at"
+            and isinstance(data, dict)
+            and str(data.get("qq", "")) == self_id
+        ):
+            return True
+    return False
 
 
 async def is_plugin_trigger(event: MessageEvent) -> bool:

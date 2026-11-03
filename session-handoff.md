@@ -1,9 +1,11 @@
-## Current Handoff — PR #129 draft + acceptance round 1 (2026-11-03)
+## Current Handoff — PR #129 CI 漂移与群 @ 修复 (2026-11-03)
 
-- Status: **draft PR #129 已建**（base main，14 提交）。首轮验收通过：payload smoke、native wheel schema24（隔离安装 parity + fullchain PASS + 门禁收 24 拒 23）、docker smoke 合同补齐、全量 4302 passed（余量均基线/环境既有）、flow 门禁最终 HEAD 收口。
-- Current Objective：等 CI 结果；剩余 NOT READY 为外部验收（真模型/QQ 灰度、Windows VM 安装回滚、自然度标注协议）——按计划 §7 Gate G2 逐级灰度前必须冻结标注协议。
-- Blockers：无真模型与真实 QQ 环境；Windows 干净 VM。CI 已全绿（14 checks，258f9da）：lint 需按最新 ruff 排序导入块（738846b）；test 矩阵曾因新容器 uptime≈0 触发真实 600s 冷却误判——context-only 验收测试已 stub 冷却（258f9da）；docker 镜像 smoke 首次覆盖 mneme/aoede 导入并通过。
-- Recommended Next Step：盯 PR #129 CI；CI 绿后按计划 §7 G2 灰度清单准备影子验收配置；验收通过后去 draft。
+- Status：PR #129 仍为 draft。远端 HEAD `b71e809` 的 3 个 Python 测试矩阵与 flow-manifest 检查都因 stale flow manifest 失败；本地已生成新 manifest 并修复中间位置原生 @ 无法触发群聊的问题，改动尚未提交/推送。
+- Current Objective：将当前变更提交/推送到 PR #129 后重跑 CI；在用户下一次群 @ 后核对真实触发与回复回执。Aoede/Mneme 外部 G2 gates 继续 NOT READY。
+- Files：`core/observability/flows/message-flow.9b19e90b7675.json`、`stella_project/plugins/bot_main/ai_gateway.py`、`tests/test_private_chat_ingress.py`，以及本状态记录。保留既有未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+- Evidence：CI 在 `b71e809` 的三个矩阵各 4338 passed / 35 skipped / 1 failed，唯一失败为 `TestDriftGate::test_committed_manifest_matches_source`；新 manifest 在本地 Python 3.10/3.11/3.12 `--check` 均通过。`TestSharedAdmission` + drift test 4 passed，Ruff / `git diff --check` 通过。运行时受管重启后 Corona 33904 / Nucleus 33152 ready，OneBot healthy；未发送真实 QQ 测试消息。
+- Blockers：远端 PR 尚未收到这些本地修改，CI 仍显示旧 HEAD 失败；最近日志没有用户报告的原生 @ 事件，所以实际 QQ 回复待验证。
+- Recommended Next Step：仅 stage 修复文件，运行 GitNexus `detect-changes --scope all` 后提交/推送，等 PR CI 完成；用户发出一次原生群 @ 后按时间戳检查脱敏 trace。保持真模型/QQ 灰度扩大、Windows 安装回滚与自然度标注协议 gates。
 
 ## Current Handoff — Aoede / Mneme stage 2 code complete (2026-11-03)
 
