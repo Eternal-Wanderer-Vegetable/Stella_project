@@ -64,6 +64,21 @@ def test_new_bucket_starts_empty_no_free_token(tmp_path) -> None:
 
 def test_r0_never_refills(tmp_path) -> None:
     store = _store(tmp_path)
+    # R=0 is an absolute off switch: even a primed token is not spendable
+    db = tmp_path / "agent_memory.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT OR REPLACE INTO aoede_proactive_budget (scope_key, tokens,"
+        " last_refill_utc, config_frequency, updated_at_utc) VALUES (?, 1.0, ?, 0.0, ?)",
+        (SCOPE, datetime.now(timezone.utc).isoformat(timespec="seconds"),
+         datetime.now(timezone.utc).isoformat(timespec="seconds")),
+    )
+    conn.commit()
+    conn.close()
+    fresh = ProactiveBudgetStore(str(db))
+    decision = fresh.reserve(SCOPE, new_operation_id(), frequency_per_hour=0.0)
+    assert decision.granted is False
+    assert decision.reason == "proactive_disabled_r0"
     # even after simulated time passing, R=0 grants nothing
     assert store.reserve(SCOPE, new_operation_id(), frequency_per_hour=0.0).granted is False
     db = tmp_path / "agent_memory.db"

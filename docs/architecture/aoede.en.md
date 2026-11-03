@@ -41,10 +41,40 @@ imports the other.
   `aoede.service.background_tasks` and the host `register_task` hook; the
   assembly layer drains them on shutdown. No second scheduler.
 
-## Stage two (not implemented yet)
+## Stage two: unified opportunity pipeline (S2-02...S2-03 landed)
 
-The context-first unified opportunity pipeline
-(`ParticipationOpportunity`, debounce, SPEAK/WAIT/DROP), the one-shot
-verification persistence and the `PROACTIVE_FREQUENCY` budget land in
-stage two per the [plan](../plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)
-§6.2–6.5; contract types are already frozen in `stella_contracts/aoede.py`.
+- **Opportunity/timing layer** (`aoede/opportunity.py`): one in-flight
+  opportunity per conversation; each valid human message advances the
+  context revision, resets the silence window and merges (original expiry
+  kept); cancellable debounce (internal 3s) + TTL (internal 15s) with DROP
+  at expiry. Hard preflight covers only the master switch, mute, sleep and
+  wakeup grace; the old dice and 15-message gate no longer gate this path,
+  while the 600s cooldown stays as an internal safety floor enforced at
+  fire time. `memory=[]` is never a prerequisite: context-only
+  participation proceeds normally.
+- **One-shot verification** (S2-01): Mneme owns attempts + rejection
+  tombstones (`mneme/verification.py`, schema24). Reservation is written
+  before send; ACK sets deadline = ack+300s; binding is conservative (same
+  conversation, correct subject, explicit reply to a question fragment);
+  DENIED/UNCLEAR/UNANSWERED settle terminally with a tombstone and a CAS
+  candidate rejection; the consolidator and the promotion gate both check
+  old-source replay while legitimate new evidence may open a new
+  generation; confirmations record the relation only and never
+  auto-promote. User-level no_reply backoff and naturalness skips are
+  social signals and never clear tombstones.
+- **Persistent budget** (`aoede/budget.py`, S2-03): the single user knob
+  `PROACTIVE_FREQUENCY` (0-6 per hour, default 1.0; R=0 is an absolute off
+  switch for ordinary proactive participation and autonomous sleep/wakeup
+  announcements). Token bucket capacity 1, starts empty, refills on UTC
+  wall time; speak, verification ASK and autonomous announcements share one
+  bucket per conversation; commit on ACK, release only when nothing was
+  delivered, conservative consume on UNKNOWN; store outage fails closed.
+  Passive replies and user-scheduled tasks never touch the bucket.
+- The timer (since S2-02) only does sleep announcements, opportunity
+  recovery and fair verification-ASK submission - no verification priority.
+
+Known limits (as of this round): UNKNOWN settlements on the announcement
+and speak paths are conservative consumes without automatic retry; the
+native wheel has not been rebuilt for schema24 yet (old wheels refuse the
+new database and fall back safely to the Python backend). The acceptance
+matrix lives in plan section 8.

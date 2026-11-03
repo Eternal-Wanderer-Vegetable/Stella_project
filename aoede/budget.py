@@ -114,6 +114,9 @@ class ProactiveBudgetStore:
         """原子预留 1 个 token；不足或 store 不可用时拒绝（fail closed）。"""
         if not math.isfinite(frequency_per_hour) or frequency_per_hour < 0:
             return BudgetDecision(granted=False, reason="invalid_frequency")
+        if frequency_per_hour == 0:
+            # R=0 是绝对关闭（计划 §6.5）：即使桶里还有存量 token 也不放行
+            return BudgetDecision(granted=False, reason="proactive_disabled_r0")
         now = datetime.now(timezone.utc)
         try:
             conn = self._connect()

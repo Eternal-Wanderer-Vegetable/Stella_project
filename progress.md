@@ -1,3 +1,11 @@
+## 2026-11-03 — Aoede / Mneme 阶段二实施（S2-01…S2-04）
+
+- Scope / Current State：分支 `codex/aoede-mneme-proactive`。阶段二四个工作包代码面完成：S2-01 求证持久生命周期（ae463ae）、S2-02 统一机会流程（a1e4767）、S2-03 PROACTIVE_FREQUENCY 持久预算（12af2da）、S2-04 行为验收与双语文档（本提交）。
+- What's Done：`mneme/verification.py`（attempts/tombstone/CAS/保守绑定/启动恢复）+ schema23→24（Python 与 memory_rust 常量同步）；consolidator 与晋升门防复活守卫；`aoede/opportunity.py`（每会话唯一在途、debounce 3s/TTL 15s、验证 ASK 公平竞争、掷骰/条数门槛退役、定时任务改造）；`aoede/budget.py` + `PROACTIVE_FREQUENCY`（0–6，R=0 绝对关闭含自发播报；容量 1/初始 0/UTC 墙钟/回退不补/fail closed）+ 主动插话/验证 ASK/自发播报共用一桶；context-only 参与验收测试；aoede/mneme 双语文档 S2 正文 + 配置参考条目。
+- Evidence：aoede 46 + 回归面 221 passed（proactive/participation/mneme/schema/settings/consolidator/reply）；ruff 全仓 clean；check_docs 127/1356/0；detect-changes 各包 LOW/MEDIUM/HIGH 均已报告；新旧导入身份与 CLI 退出码合同由 tests/mneme 固化。
+- What's Next：全量 tests/ 复跑（含 runtime/adapter 环境受限文件）；native wheel 按 schema24 重建 + 隔离安装 parity（未做，NOT RUN）；真模型/QQ 灰度/Windows 安装回滚验收未做——**overall NOT READY**；G2 灰度（影子→隔离模型→单群低频）待上述验收后。
+- Files：`aoede/{opportunity,budget,service,host,verification/service}.py`、`mneme/verification.py`、`mneme/{schema,consolidator,memory_manager}.py`、`memory_rust/{backend.py,native/src/schema.rs}`、`ai_gateway.py`、`config/settings.py`、`.env.example`、`docs/{architecture/aoede(.en).md,reference/configuration(.en).md}`、`tests/aoede/{test_verification_lifecycle,test_opportunity_timing,test_frequency_budget,test_context_only_participation}.py`、状态三文件。
+
 ## 2026-11-03 — Aoede / Mneme 阶段一实施（S1-00…S1-04）
 
 - Scope / Current State：分支 `codex/aoede-mneme-proactive`（自 837a089）。阶段一「行为等价拆分」五工作包全部提交：S1-00 合同冻结（1c78905）、S1-01 中立端口（68edc85）、S1-02 Aoede 提取（4b53464）、S1-03 Mneme 改名（32029ac）、S1-04 发布/文档/flow 收口（本提交）。阶段二（S2-01…S2-04）未实施。

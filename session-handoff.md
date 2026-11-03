@@ -1,3 +1,11 @@
+## Current Handoff — Aoede / Mneme stage 2 code complete (2026-11-03)
+
+- Status: **S1-00…S2-04 全部工作包代码完成** on `codex/aoede-mneme-proactive`（10 提交，837a089→S2-04）。G2 验收矩阵未跑满：真模型/QQ 灰度/Windows/native wheel/全量复跑未做——**overall NOT READY**（按计划 §13 不以源码存在替代验收）。
+- Current Objective：全量复跑与补验收；G2 灰度前先重建 native wheel（schema24）并隔离安装 parity；QQ 影子→单群低频按计划 §7 每步绑定配置/模型/commit。
+- Evidence：阶段二各包定向回归 46/100/134/221 passed；detect-changes 各步已报告；文档/flow 门禁绿。S2-01 的 native wheel parity 与发布成品 import smoke 是 G1/G2 共同缺口。
+- Blockers：无真模型与真实 QQ 环境；Windows 安装器验收需干净 VM；rust 工具链在本会话未跑（NOT RUN 如实记录）。
+- Recommended Next Step：`python -m pytest tests -q` 全量复跑（临时 STELLA_HOME）；`cargo test --manifest-path memory_rust/native/Cargo.toml` + wheel 重建；然后按计划 §7 Gate G2 灰度清单逐项验收。
+
 ## Current Handoff — Aoede / Mneme stage 1 complete (2026-11-03)
 
 - Status: **S1-00…S1-04 done（行为等价拆分）** on `codex/aoede-mneme-proactive`（5 提交，837a089→S1-04）。阶段二未实施；G1 全项验收缺安装环境/发布成品核对，整体 NOT READY。

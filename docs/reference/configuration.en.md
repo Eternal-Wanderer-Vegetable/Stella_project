@@ -671,6 +671,7 @@ middle           → t = (SLOW - interval) / (SLOW - FAST)
 | Configuration | Default | Description |
 |---|---|---|
 | `PROACTIVE_ENABLED` | `true` | Global proactive-speaking switch |
+| `PROACTIVE_FREQUENCY` | `1.0` | The single user knob for ordinary proactive participation: maximum long-term refill rate per exact conversation (per hour, 0-6, fractions allowed). R=0 disables ordinary proactive participation and autonomous sleep/wakeup announcements; passive replies and user-scheduled tasks are unaffected. Restart to apply (S2-03) |
 | `PROACTIVE_INTERVAL_FAST` | `20.0` | Upper bound of the average interval considered “high frequency” (seconds) |
 | `PROACTIVE_INTERVAL_SLOW` | `180.0` | Lower bound of the average interval considered “quiet” (seconds) |
 | `PROACTIVE_PROB_AT_FAST` | `0.15` | Probability at the high-frequency end |

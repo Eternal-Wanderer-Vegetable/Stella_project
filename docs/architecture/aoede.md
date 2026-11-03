@@ -37,9 +37,28 @@ Aoede 是「是否、何时、对谁开口」的主动参与子系统（2026-11-
   与宿主 `register_task` 钩子），装配层关停时统一 drain，不双跑
   scheduler。
 
-## 阶段二（未实施）
+## 阶段二：统一机会流程（S2-02…S2-03 已落地）
 
-上下文优先的统一机会流程（`ParticipationOpportunity`、debounce、
-SPEAK/WAIT/DROP）、一次性求证持久生命周期与 `PROACTIVE_FREQUENCY`
-持久预算按 [计划](../plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)
-§6.2–6.5 在阶段二落地；合同类型已在 `stella_contracts/aoede.py` 冻结。
+- **机会/时机层**（`aoede/opportunity.py`）：每会话唯一在途机会；新消息推进
+  context revision、重置静默计时并合并（原 expiry 不顺延）；可取消 debounce
+  （内部 3s）+ TTL（内部 15s）到点 DROP。硬预检只含总开关/静音/睡眠/醒来
+  缓冲；旧掷骰与 15 条门槛不再前置阻断；600 秒冷却保留为内部安全下限（拦截
+  在开火时）。`memory=[]` 不是开口前提：context-only 参与照常进行。
+- **一次性求证**（S2-01）：Mneme 持有 attempts + 拒绝 tombstones
+  （`mneme/verification.py`，schema24）。预留先于发送；ACK 后 deadline =
+  ACK+300s；保守绑定（同会话同主体 + 显式回复问题片段）；DENIED/UNCLEAR/
+  UNANSWERED 终态 + tombstone + 候选 CAS 拒绝；写侧（consolidator）与晋升侧
+  （memory_manager）都校验旧证据重放，合法新证据可开新 generation；确认只
+  记录关系，不自动晋升。用户级 no_reply 退避与自然度 skip 是社交退避，
+  不会清除 tombstone。
+- **持久预算**（`aoede/budget.py`，S2-03）：唯一用户数值
+  `PROACTIVE_FREQUENCY`（0–6 次/小时，默认 1.0；R=0 绝对关闭普通主动参与与
+  自发睡眠/苏醒播报）。token bucket 容量 1、初始 0、按 UTC 墙钟补充；同一
+  会话的插话/验证 ASK/自发播报共用一桶；ACK commit、确定未发 release、
+  UNKNOWN 保守消耗；store 不可用 fail closed。被动回复与用户预约任务不经此桶。
+- 定时任务（S2-02 起）只做睡眠播报、机会恢复与验证 ASK 的**公平提交**——
+  不再有「主动 @ 优先」。
+
+已知边界（截至本轮）：播报与插话路径的 UNKNOWN 结算为保守消耗，不自动重投；
+native wheel 尚未按 schema24 重建（旧 wheel 拒读新库并安全回落 Python 后端）。
+阶段验收矩阵见 [计划](../plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md) §8。

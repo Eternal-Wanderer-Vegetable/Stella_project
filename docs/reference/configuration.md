@@ -682,6 +682,7 @@ interval >= SLOW → PROB_AT_SLOW
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `PROACTIVE_ENABLED` | `true` | 主动发言总开关 |
+| `PROACTIVE_FREQUENCY` | `1.0` | 普通主动参与的唯一用户数值：每精确会话的最高长期补充速率（次/小时，0–6 支持小数）。R=0 关闭普通主动参与与自发睡眠/苏醒播报；被动回复与用户预约任务不受影响。重启生效（S2-03） |
 | `PROACTIVE_INTERVAL_FAST` | `20.0` | 视为「高频」的平均间隔上界（秒） |
 | `PROACTIVE_INTERVAL_SLOW` | `180.0` | 视为「冷清」的平均间隔下界（秒） |
 | `PROACTIVE_PROB_AT_FAST` | `0.15` | 高频端概率 |
