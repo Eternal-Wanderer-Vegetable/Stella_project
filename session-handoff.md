@@ -1,11 +1,11 @@
 ## Current Handoff — PR #129 CI 漂移与群 @ 修复 (2026-11-03)
 
-- Status：PR #129 仍为 draft。远端 HEAD `b71e809` 的 3 个 Python 测试矩阵与 flow-manifest 检查都因 stale flow manifest 失败；本地已生成新 manifest 并修复中间位置原生 @ 无法触发群聊的问题，改动尚未提交/推送。
-- Current Objective：将当前变更提交/推送到 PR #129 后重跑 CI；在用户下一次群 @ 后核对真实触发与回复回执。Aoede/Mneme 外部 G2 gates 继续 NOT READY。
-- Files：`core/observability/flows/message-flow.9b19e90b7675.json`、`stella_project/plugins/bot_main/ai_gateway.py`、`tests/test_private_chat_ingress.py`，以及本状态记录。保留既有未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
-- Evidence：CI 在 `b71e809` 的三个矩阵各 4338 passed / 35 skipped / 1 failed，唯一失败为 `TestDriftGate::test_committed_manifest_matches_source`；新 manifest 在本地 Python 3.10/3.11/3.12 `--check` 均通过。`TestSharedAdmission` + drift test 4 passed，Ruff / `git diff --check` 通过。运行时受管重启后 Corona 33904 / Nucleus 33152 ready，OneBot healthy；未发送真实 QQ 测试消息。
-- Blockers：远端 PR 尚未收到这些本地修改，CI 仍显示旧 HEAD 失败；最近日志没有用户报告的原生 @ 事件，所以实际 QQ 回复待验证。
-- Recommended Next Step：仅 stage 修复文件，运行 GitNexus `detect-changes --scope all` 后提交/推送，等 PR CI 完成；用户发出一次原生群 @ 后按时间戳检查脱敏 trace。保持真模型/QQ 灰度扩大、Windows 安装回滚与自然度标注协议 gates。
+- Status：修复已提交并推送至 PR #129，HEAD `f42aa24`，PR 仍为 draft。flow-manifest、flow-closure、文档、lint、CLI、安全、Windows native reliability 及 Python 3.10/3.11/3.12 CI 均通过。
+- Current Objective：代码与 PR CI 修复完成；等待用户在群里 @ Stella 一次并提供大致时间，以核对真实触发与回复回执。Aoede/Mneme 外部 G2 gates 继续 NOT READY。
+- Files：`core/observability/flows/message-flow.9b19e90b7675.json`、`stella_project/plugins/bot_main/ai_gateway.py`、`tests/test_private_chat_ingress.py`、任务状态文件。保留既有未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+- Evidence：旧 HEAD `b71e809` 的三个矩阵各 4338 passed / 35 skipped / 1 failed，唯一失败 `TestDriftGate::test_committed_manifest_matches_source`；flow-manifest 同因旧内容寻址清单失败。新清单本地 Python 3.10/3.11/3.12 `--check` 均通过；`TestSharedAdmission` + drift test 4 passed；改动文件 Ruff、docs 与 `git diff --check` 通过；PR 新 HEAD 全部上述 CI 通过。托管重启后 Corona 33904 / Nucleus 33152 ready，OneBot healthy；本轮未发真实 QQ 消息。
+- Blockers：实际 QQ 回复仍未得到现场验收；重启前日志未捕获用户报告的原生 @ 消息。
+- Recommended Next Step：用户发出一次原生群 @ 后按时间戳检查脱敏 trace。保持真模型/QQ 灰度扩大、Windows 安装回滚与自然度标注协议 gates。
 
 ## Current Handoff — Aoede / Mneme stage 2 code complete (2026-11-03)
 

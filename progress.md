@@ -1,10 +1,10 @@
 ## 2026-11-03 — PR #129 flow 漂移与群 @ 回复修复
 
-- Scope / Current State：PR #129 仍为 draft，远端 HEAD `b71e809` 的 CI 当前有 `test (3.10/3.11/3.12)` 与 `flow-manifest` 失败；4 个失败共享同一根因：源码现算清单与仓库旧 manifest hash 不同。当前工作树已生成 `core/observability/flows/message-flow.9b19e90b7675.json`，远端尚未包含本地修复。
-- PR 测试根因/修复：3 个矩阵各为 4338 passed / 35 skipped / 1 failed，唯一失败 `TestDriftGate::test_committed_manifest_matches_source`；CI 算出新 manifest `04bddc…`，旧提交只含此前地址。重生成后 3.10/3.11/3.12 的 `generate_message_flow.py --check` 全通过；本地该 drift test 通过。
+- Scope / Current State：修复已提交并推送至 PR #129，HEAD `f42aa24`，PR 仍为 draft。新提交的 flow-manifest、flow-closure、文档、lint、CLI、安全、Windows native reliability 与 Python 3.10/3.11/3.12 CI 均通过。
+- PR 测试根因/修复：旧 HEAD `b71e809` 的三个矩阵各为 4338 passed / 35 skipped / 1 failed；唯一失败 `TestDriftGate::test_committed_manifest_matches_source`，flow-manifest 也因同一 stale content-addressed manifest 失败。源码变更后旧清单未重新生成；提交 `core/observability/flows/message-flow.9b19e90b7675.json` 后本地 3.10/3.11/3.12 `--check` 与远端所有相关门禁通过。
 - 群 @ 无回复根因/修复：OneBot 的 `to_me` 只识别消息首尾的 @，`is_chat_trigger` 原先只看该标志；中间位置的原生 `at` 段被拒为 `not_mentioned`。群触发现在扫描原生 @ 段并要求 `qq == event.self_id`；其他 Bot 的 @ 仍拒绝。回归测试先失败、修复后通过。
-- 验证：`TestSharedAdmission` + flow drift test **4 passed**；改动文件 Ruff 通过；`git diff --check` 退出码 0。托管重启后 Corona PID 33904 / Nucleus PID 33152 ready，API reachable，OneBot healthy。重启前日志里没有捕获到用户报告的那条原生 @ 事件，因此真实 QQ 回包仍待用户再发一条原生 @ 验收；本轮没有向 QQ 发消息。
-- What's Next：提交/推送这两个本地修复以触发 PR 最新 CI；用户在群里 @ Stella 后给大致时间，我再核对脱敏的触发、生成和发送结果。真模型/QQ 灰度、Windows 干净 VM 与自然度协议仍按 Gate G2 保持 NOT READY。
+- 验证：本地 `TestSharedAdmission` + flow drift test **4 passed**；改动文件 Ruff、docs、manifest `--check`、`git diff --check` 均通过。PR Python CI 3.10/3.11/3.12 全绿。托管重启后 Corona PID 33904 / Nucleus PID 33152 ready，API reachable，OneBot healthy。日志未捕获到用户报告的原生 @ 事件；本轮没有发送 QQ 消息，因此真实 QQ 回包仍待用户发一条群 @ 后验收。
+- What's Next：用户在群里 @ Stella 后给大致时间，以核对脱敏的触发、生成和发送结果。真模型/QQ 灰度扩大、Windows 干净 VM 与自然度协议仍按 Gate G2 保持 NOT READY。
 
 ## 2026-11-03 — 真实环境启动与首轮灰度实测
 
