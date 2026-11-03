@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "updated_at": "2026-11-03",
-  "active_feature": "SETTINGS-DOCTOR-MODEL-CONFIG-RECOVERY",
+  "active_feature": "AOEDE-MNEME-IMPL",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -2179,7 +2179,7 @@
       "id": "SETTINGS-DOCTOR-MODEL-CONFIG-RECOVERY",
       "name": "设置页模型端点与待应用配置告警处理",
       "description": "恢复或明确当前不可达的本地模型端点，并在审查外部环境修订后决定应用、回退或逐项合并。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [
         "SETTINGS-DOCTOR-MANAGED-PORT-ACCURACY"
       ],
@@ -2305,7 +2305,9 @@
       "name": "Aoede / Mneme 子系统拆分与主动发言改造实施",
       "description": "按 2026-11-03 计划两阶段实施：S1 行为等价拆分（aoede/mneme 包 + 兼容层 + 发布），S2 上下文优先参与、一次性求证持久生命周期与统一预算。",
       "status": "in_progress",
-      "dependencies": ["AOEDE-MNEME-PLAN"],
+      "dependencies": [
+        "AOEDE-MNEME-PLAN"
+      ],
       "scope": [
         "stella_contracts/aoede.py（新）",
         "aoede/（新）、mneme/（新）、memory/（兼容层）",

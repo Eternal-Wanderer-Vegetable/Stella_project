@@ -31,28 +31,28 @@ from pathlib import Path
 
 from nonebot import logger
 
-from memory.participation.buffer import BufferedMessage, MessageBuffer
-from memory.participation.decision import (
+from aoede.participation.buffer import BufferedMessage, MessageBuffer
+from aoede.participation.decision import (
     ALLOW_LLM,
     CANDIDATE,
     OBSERVE,
     DecisionTracker,
     ParticipationDecision,
 )
-from memory.participation.observability import (
+from aoede.participation.observability import (
     log_decision,
     record_to_db,
 )
-from memory.participation.scorer import (
+from aoede.participation.scorer import (
     compose_final_score,
     ngram_jaccard,
 )
-from memory.participation.scorer import (
+from aoede.participation.scorer import (
     score as score_message,
 )
-from memory.participation.signals import extract as extract_signals
-from memory.participation.state import ConversationState
-from memory.participation.tables import ParticipationTableError, TableStore
+from aoede.participation.signals import extract as extract_signals
+from aoede.participation.state import ConversationState
+from aoede.participation.tables import ParticipationTableError, TableStore
 
 __all__ = [
     "BufferedMessage",

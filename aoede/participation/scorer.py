@@ -14,12 +14,12 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from memory.participation.signals import SignalSnapshot
-from memory.participation.state import (
+from aoede.participation.signals import SignalSnapshot
+from aoede.participation.state import (
     ConversationState,
     TopicStatus,
 )
-from memory.participation.tables import ParticipationTables, TopicAnchors
+from aoede.participation.tables import ParticipationTables, TopicAnchors
 
 # 相似度回调：返回 0~1 或 None（embedding 不可用时）
 SimilarityFn = Callable[[str, str], "float | None"]

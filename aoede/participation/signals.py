@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from memory.participation.tables import SignalWords
+from aoede.participation.tables import SignalWords
 
 
 @dataclass(frozen=False)

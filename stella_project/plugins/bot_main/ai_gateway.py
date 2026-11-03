@@ -37,9 +37,7 @@ import contextlib
 import contextvars
 import functools
 import inspect
-import math
 import os
-import random
 import sqlite3
 import time
 import uuid
@@ -60,6 +58,24 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.exception import FinishedException
 from nonebot.rule import Rule
 
+from aoede.controller import get_proactive
+from aoede.gate import (
+    can_speak,
+)
+from aoede.host import ProactiveHost, install_host
+from aoede.participation import get_participation_manager
+from aoede.service import (
+    _PARTICIPATION_DEFAULT_INSTRUCTION as _PARTICIPATION_DEFAULT_INSTRUCTION,
+)
+from aoede.service import (
+    _PARTICIPATION_INSTRUCTIONS as _PARTICIPATION_INSTRUCTIONS,
+)
+from aoede.storage.legacy_state import (
+    record_at,
+    reset_no_reply,
+    set_proactive_muted,
+)
+from aoede.verification.target import pick_target
 from capability.hooks import register as register_capability_hook
 from config import (
     ADDRESSING_ENABLED,
@@ -88,13 +104,8 @@ from config import (
     PRIVATE_CHAT_ENABLED,
     PROACTIVE_CHECK_INTERVAL,
     PROACTIVE_ENABLED,
-    PROACTIVE_MAX_LINES,
-    PROACTIVE_REPLY_WINDOW_SECONDS,
     PROACTIVE_RUNTIME_TOGGLE_ENABLED,
-    PROACTIVE_SLEEP_ANNOUNCE,
-    PROACTIVE_SLEEP_MESSAGES,
     PROACTIVE_TOGGLE_ADMINS,
-    PROACTIVE_WAKEUP_MESSAGES,
     SEND_INTERVAL,
     SESSION_CONTEXT_ENABLED,
     SESSION_IDLE_CHECK_INTERVAL,
@@ -116,7 +127,6 @@ from core.shutdown import wait_for_tasks
 from core.social.contracts import (
     ConversationScope,
     MessageEvidence,
-    aggregate_delivery_status,
     delivered_texts,
     new_trace_id,
 )
@@ -160,7 +170,6 @@ from memory.conversation_projection import (
     parse_platform_message_id,
     parse_qq_message_id,
 )
-from memory.participation import get_participation_manager
 from memory.post_processors import (
     bad_phrase_filter,
     log_thought,
@@ -172,27 +181,6 @@ from memory.pre_processors import (
     record_message,
     resolve_reply_target,
 )
-from memory.proactive import get_proactive
-from memory.proactive_gate import (
-    can_speak,
-    is_sleeping,
-    note_sleep_transition,
-    user_now,
-)
-from memory.proactive_prompt import (
-    PROACTIVE_SKIP_MARKER,
-    build_instruction,
-    is_proactive_skip,
-)
-from memory.proactive_state import (
-    get_runtime_state,
-    mark_announced,
-    record_at,
-    record_reply_result,
-    reset_no_reply,
-    set_proactive_muted,
-)
-from memory.proactive_target import pick_target
 from memory.session_compact import schedule_compact
 from memory.session_context import end_session
 from memory.session_context import idle_groups as idle_session_groups
@@ -3874,6 +3862,193 @@ async def _record_bot_lines(
             logger.warning(f"⚠️ 记录 Bot 自身发言失败（跳过）: {e}")
 
 
+def _proactive_host() -> ProactiveHost:
+    """构建 Aoede 宿主。
+
+    转发合同（2026-11-03 计划 §3.1 / aoede.host）：可被测试替换的符号一律
+    以 lambda 经本模块属性在**调用时**解析——``monkeypatch.setattr(gateway,
+    "can_speak", ...)`` 等既有测试合同继续生效。
+    """
+    return ProactiveHost(
+        run_turn=lambda session_key, ctx: _run_turn_via_engine(session_key, ctx),
+        register_group_ref=lambda bot_id, group_id: _register_group_ref(bot_id, group_id),
+        group_locks=_group_locks,
+        can_speak=lambda group_id, kind: can_speak(group_id, kind),
+        get_proactive=lambda: get_proactive(),
+        get_reply_gate=lambda: get_reply_gate(),
+        get_consolidator=lambda: get_consolidator(),
+        get_participation_manager=lambda: get_participation_manager(),
+        record_at=lambda *args, **kwargs: record_at(*args, **kwargs),
+        pick_target=lambda *args, **kwargs: pick_target(*args, **kwargs),
+        get_outbound_service=lambda: get_outbound_service(),
+        db_path=lambda: DB_PATH,
+        delivery_target_for_context=(
+            lambda *args, **kwargs: _delivery_target_for_context(*args, **kwargs)
+        ),
+        seal_ctx_delivery_plan=(
+            lambda *args, **kwargs: _seal_ctx_delivery_plan(*args, **kwargs)
+        ),
+        delivery_plan_is_current=(
+            lambda *args, **kwargs: _delivery_plan_is_current(*args, **kwargs)
+        ),
+        social_delivery_enabled=lambda: _social_delivery_enabled(),
+        record_bot_lines=lambda *args, **kwargs: _record_bot_lines(*args, **kwargs),
+        join_lines_naturally=lambda lines: _join_lines_naturally(lines),
+        resolve_nickname=(
+            lambda bot, group_id, user_id: _resolve_nickname(bot, group_id, user_id)
+        ),
+        send_background_message=(
+            lambda *args, **kwargs: _send_background_message_via_transport(*args, **kwargs)
+        ),
+        resolve_background_bot=(
+            lambda *args, **kwargs: _resolve_background_bot_via_transport(*args, **kwargs)
+        ),
+        flow_decision=lambda *args, **kwargs: _flow_decision(*args, **kwargs),
+        flow_span=lambda *args, **kwargs: _flow_span(*args, **kwargs),
+        flow_checkpoint=lambda *args, **kwargs: _flow_checkpoint(*args, **kwargs),
+        flow_set_outcome=lambda fctx, outcome: _flow_set_outcome(fctx, outcome),
+        check_reply_later=lambda *args, **kwargs: _check_reply_later(*args, **kwargs),
+        proactive_contract_mode=lambda: _proactive_contract_mode(),
+        proactive_speak_for_group=(
+            lambda *args, **kwargs: _proactive_speak_for_group(*args, **kwargs)
+        ),
+        schedule_compact=lambda *args, **kwargs: schedule_compact(*args, **kwargs),
+        register_task=lambda task: _register_reply_check_task(task),
+    )
+
+
+def _send_background_message_via_transport(target, message):
+    """transport_delivery 后台发送适配（宿主注入，避免 aoede 依赖插件模块）。"""
+    from stella_project.plugins.bot_main.transport_delivery import (
+        send_background_message,
+    )
+
+    return send_background_message(target, message)
+
+
+def _resolve_background_bot_via_transport(bot_ref):
+    """transport_delivery 后台 Bot 解析适配（同上）。"""
+    from stella_project.plugins.bot_main.transport_delivery import (
+        resolve_background_bot,
+    )
+
+    return resolve_background_bot(bot_ref)
+
+
+_proactive_host_instance: ProactiveHost | None = None
+
+
+def _register_reply_check_task(task: asyncio.Task) -> None:
+    """登记主动后台任务引用（防 GC）；关停时统一 drain。"""
+    _reply_check_tasks.add(task)
+    task.add_done_callback(_reply_check_tasks.discard)
+
+
+def get_proactive_host() -> ProactiveHost:
+    """取（首次构建并安装）Aoede 宿主单例。"""
+    global _proactive_host_instance
+    if _proactive_host_instance is None:
+        _proactive_host_instance = _proactive_host()
+        install_host(_proactive_host_instance)
+    return _proactive_host_instance
+
+
+def _build_participation_evidence(decision, trigger_text: str, snapshot: dict | None) -> dict:
+    """薄委托：实现在 ``aoede.service``（S1-02 外移，行为不变）。"""
+    from aoede.service import build_participation_evidence as _impl
+
+    return _impl(decision, trigger_text, snapshot)
+
+
+def _participation_instruction(instruction: str, evidence: dict | None) -> str:
+    """薄委托：实现在 ``aoede.service``（S1-02 外移，行为不变）。"""
+    from aoede.service import participation_instruction as _impl
+
+    return _impl(instruction, evidence)
+
+
+def _log_participation_event(decision, event: str, reason: str = "") -> None:
+    """薄委托：实现在 ``aoede.service``（S1-02 外移，行为不变）。"""
+    from aoede.service import log_participation_event as _impl
+
+    _impl(decision, event, reason=reason)
+
+
+def _spawn_participation_speak(
+    group_id: int,
+    decision,
+    *,
+    bot_ref: BotRef | None = None,
+    trigger_text: str = "",
+    parent_trace_id: str = "",
+) -> None:
+    """薄委托：实现在 ``aoede.service``（S1-02 外移，行为不变）。"""
+    from aoede.service import spawn_participation_speak as _impl
+
+    _impl(
+        get_proactive_host(),
+        group_id,
+        decision,
+        bot_ref=bot_ref,
+        trigger_text=trigger_text,
+        parent_trace_id=parent_trace_id,
+    )
+
+
+async def _proactive_speak_for_group(
+    bot: Bot,
+    group_id: int,
+    *,
+    intent: str = "proactive_join",
+    instruction: str | None = None,
+    skip_dice: bool = False,
+    decision=None,
+    evidence: dict | None = None,
+    parent_trace_id: str = "",
+):
+    """薄委托：实现在 ``aoede.service``（S1-02 外移，行为不变）。"""
+    from aoede.service import proactive_speak_for_group as _impl
+
+    return await _impl(
+        get_proactive_host(),
+        bot,
+        group_id,
+        intent=intent,
+        instruction=instruction,
+        skip_dice=skip_dice,
+        decision=decision,
+        evidence=evidence,
+        parent_trace_id=parent_trace_id,
+    )
+
+
+async def _proactive_speak_impl(
+    bot: Bot,
+    group_id: int,
+    *,
+    intent: str = "proactive_join",
+    instruction: str | None = None,
+    skip_dice: bool = False,
+    decision=None,
+    evidence: dict | None = None,
+    fctx=None,
+):
+    """薄委托：实现在 ``aoede.service``（S1-02 外移，行为不变）。"""
+    from aoede.service import proactive_speak_impl as _impl
+
+    return await _impl(
+        get_proactive_host(),
+        bot,
+        group_id,
+        intent=intent,
+        instruction=instruction,
+        skip_dice=skip_dice,
+        decision=decision,
+        evidence=evidence,
+        fctx=fctx,
+    )
+
+
 async def _resolve_nickname(bot: Bot, group_id: int, user_id: int) -> str:
     """取群名片/昵称用于自然称呼；失败时回退「对方」。
 
@@ -3889,1222 +4064,47 @@ async def _resolve_nickname(bot: Bot, group_id: int, user_id: int) -> str:
 
 
 async def _check_reply_later(group_id: int, user_id: int, asked_at: float) -> None:
-    """延迟检查主动 @ 是否获得回应，据此更新退避计数。
+    """薄委托：实现在 ``aoede.verification.service``（S1-02 外移，行为不变）。"""
+    from aoede.verification.service import check_reply_later as _impl
 
-    判定标准：在 PROACTIVE_REPLY_WINDOW_SECONDS 内该用户是否**对 Bot 说过话**
-    （@ / 回复 Bot 的消息 / 昵称呼叫，即 OneBot 的 to_me）。用内存中的时间戳，不查库。
-
-    此前判的是「窗口内有没有说话」，在活跃群里几乎恒为真：被追问的人本来就是
-    「近期活跃用户」，随后必然还会在群里说话，于是 consecutive_no_reply 一直被
-    清零、PROACTIVE_MAX_NO_REPLY 的自动退避形同虚设（bug_report_2026_8_31#1 §5.1）。
-
-    代价是纯文本接话（不 @、不回复）会被判为未回应。这类漏判由 reset_no_reply
-    在下一次「对 Bot 说话」时归零来兜底，不会把人永久踢出验证池。
-
-    无回应即累计 consecutive_no_reply，达到 PROACTIVE_MAX_NO_REPLY 后
-    can_at_user 会拒绝继续追问该用户，这是对「不想聊的人」的自动退避。
-    """
-    try:
-        await asyncio.sleep(PROACTIVE_REPLY_WINDOW_SECONDS)
-        last = get_proactive().last_tome_ts(group_id, user_id)
-        replied = last is not None and last > asked_at
-        record_reply_result(group_id, user_id, replied)
-        logger.info(
-            f"{'✅' if replied else '🔇'} [主动@] 群 {group_id} 用户 {user_id} "
-            f"{'已回应' if replied else '未回应'}（窗口 {PROACTIVE_REPLY_WINDOW_SECONDS:.0f}s）"
-        )
-    except asyncio.CancelledError:
-        raise
-    except Exception as e:
-        logger.warning(f"⚠️ [主动@] 回应检测异常（跳过）: {e}")
+    await _impl(group_id, user_id, asked_at)
 
 
 def _proactive_contract_mode() -> str:
-    """主动验证合同模式（复核 F1）：读配置，异常按 off。"""
-    try:
-        from config.settings import PROACTIVE_VERIFICATION_CONTRACT_MODE
+    """薄委托：实现在 ``aoede.verification.service``（S1-02 外移，行为不变）。"""
+    from aoede.verification.service import proactive_contract_mode as _impl
 
-        return str(PROACTIVE_VERIFICATION_CONTRACT_MODE or "off").strip().lower()
-    except Exception:
-        return "off"
+    return _impl()
 
 
 def _build_proactive_contract(group_id: int, target):
-    """从候选行 + 来源行构建主动验证合同（复核 F11，服务端构建）。
+    """薄委托：实现在 ``aoede.verification.service``（S1-02 外移，行为不变）。"""
+    from aoede.verification.service import build_proactive_contract as _impl
 
-    支持的候选：当前共享空间中的 SPACE/CURRENT_SPACE 事实、事实主体等于
-    选定目标、来源/lineage/epoch仍有效且谓词有服务端模板。其余返回
-    (None, None, reason)——enforce 下跳过，shadow 下记录原因。
-    返回 (contract, selected_variant, error_reason)。
-    """
-    import json
-    import sqlite3 as _sqlite3
-
-    from memory.proactive_contract import (
-        QuestionVariant,
-        VerificationContract,
-        compute_candidate_digest,
-    )
-
-    conn = _sqlite3.connect(DB_PATH)
-    try:
-        row = conn.execute(
-            "SELECT id, type, content, status, owner_type, owner_key, subject_key, fact_key, "
-            "audience, source_conversation_key, group_shared_space"
-            " FROM memory_candidates WHERE id = ?",
-            (str(target.candidate_id or ""),),
-        ).fetchone()
-        if row is None:
-            return None, None, "candidate_missing"
-        (
-            cid, ctype, content, status, owner_type, owner_key, subject_key,
-            fact_key, audience, candidate_conversation, group_shared_space,
-        ) = row
-        expected_conversation = f"qq:{target.source_bot_id}:group:{group_id}"
-        if str(status or "").upper() != "OBSERVING":
-            return None, None, "candidate_inactive"
-        if (
-            str(owner_type or "") != "SPACE"
-            or str(audience or "") != "CURRENT_SPACE"
-            or str(owner_key or "") != f"space:{group_shared_space}"
-            or str(group_shared_space or "") == ""
-            or str(owner_key or "") != str(target.owner_key or "")
-            or str(target.owner_type or "") != "SPACE"
-            or str(target.audience or "") != "CURRENT_SPACE"
-            or str(subject_key or "") != ""
-        ):
-            return None, None, "owner_not_current_space"
-        if not target.source_bot_id:
-            return None, None, "source_binding_missing"
-        if str(candidate_conversation or "") != expected_conversation:
-            return None, None, "candidate_conversation_mismatch"
-        if str(target.source_conversation_key or "") != expected_conversation:
-            return None, None, "source_conversation_mismatch"
-        subject_key = str(target.fact_subject_key or "")
-        subject_uid = subject_key.removeprefix("qq:")
-        if subject_key != f"qq:{target.user_id}" or not subject_uid.isdecimal():
-            return None, None, "subject_not_target"
-        if (
-            str(target.fact_key or "") != str(fact_key or "")
-            or not target.evidence_ids
-            or not target.source_row_ids
-            or len(target.evidence_ids) != len(target.source_row_ids)
-            or len(target.evidence_ids) != len(target.source_digests)
-            or not target.captured_scope_versions
-        ):
-            return None, None, "evidence_binding_missing"
-
-        placeholders = ",".join("?" for _ in target.evidence_ids)
-        evidence_rows = conn.execute(
-            "SELECT e.id, e.source_row_id, e.source_conversation_key, e.source_digest, "
-            "e.fact_subject_key, e.provenance_json "
-            "FROM memory_evidence e "
-            "JOIN memory_claim_links l ON l.evidence_id = e.id "
-            "JOIN memory_claim_links s ON s.owner_key = e.owner_key "
-            "AND s.audience = e.audience AND s.entity_type = 'claim_state' "
-            "AND s.entity_id = e.fact_key AND s.claim_key = e.fact_key "
-            "AND s.projection_slot = 'eligibility' AND s.status = 'active' "
-            "WHERE e.id IN (" + placeholders + ") AND e.candidate_id = ? "
-            "AND e.owner_key = ? AND e.audience = ? AND e.fact_key = ? "
-            "AND e.verification_status = 'accepted' "
-            "AND l.entity_type = 'memory_candidate' AND l.entity_id = ? "
-            "AND l.claim_key = e.fact_key AND l.projection_slot = 'candidate' "
-            "AND l.status = 'active' ORDER BY e.id",
-            (
-                *target.evidence_ids, str(cid), str(owner_key), str(audience),
-                str(fact_key), str(cid),
-            ),
-        ).fetchall()
-        evidence_by_id = {str(item[0]): item for item in evidence_rows}
-        if set(evidence_by_id) != set(target.evidence_ids):
-            return None, None, "evidence_lineage_changed"
-        from memory.evidence_contract import ASSESSMENT_VERSION, verify_source_snapshot
-
-        provenance_rows = []
-        for index, evidence_id in enumerate(target.evidence_ids):
-            evidence = evidence_by_id[evidence_id]
-            _, source_row_id, source_conversation, source_digest, fact_subject, raw = evidence
-            try:
-                provenance = json.loads(raw or "{}")
-            except (TypeError, ValueError):
-                return None, None, "evidence_provenance_malformed"
-            snapshot = provenance.get("source_snapshot")
-            if str(fact_subject) != f"qq:{target.user_id}":
-                return None, None, "subject_not_target"
-            if (
-                str(source_row_id) != str(target.source_row_ids[index])
-                or str(source_digest) != target.source_digests[index]
-                or str(source_conversation) != expected_conversation
-                or provenance.get("assessment_version") != ASSESSMENT_VERSION
-                or provenance.get("verification_status") != "accepted"
-                or provenance.get("claim_key") != fact_key
-                or provenance.get("recording_author_key") != subject_key
-                or provenance.get("fact_object_key") != subject_key
-                or provenance.get("exact_support_span") != str(content or "")
-                or provenance.get("conversation_key") != expected_conversation
-                or str(provenance.get("source_id")) != str(source_row_id)
-                or not isinstance(snapshot, dict)
-                or str(snapshot.get("group_id")) != str(group_id)
-                or str(snapshot.get("user_id")) != str(target.user_id)
-                or str(snapshot.get("bot_id")) != str(target.source_bot_id)
-                or str(snapshot.get("conversation_key")) != expected_conversation
-                or str(snapshot.get("source_kind") or "").upper() == "BOT_SELF"
-                or not verify_source_snapshot(snapshot, str(source_digest), conn=conn)
-            ):
-                return None, None, "source_binding_changed"
-            provenance_rows.append(provenance)
-        predicates = {str(item.get("predicate_key") or "") for item in provenance_rows}
-        if len(predicates) != 1:
-            return None, None, "predicate_mismatch"
-        predicate_key = next(iter(predicates))
-        predicate = {
-            "preference.general": "address_preference",
-            "profile.nickname": "self_alias",
-        }.get(predicate_key, "other")
-        if predicate == "other":
-            return None, None, "predicate_unsupported"
-        polarities = {str(item.get("polarity") or "unknown") for item in provenance_rows}
-        if len(polarities) != 1 or next(iter(polarities)) not in {"positive", "negative"}:
-            return None, None, "polarity_unknown"
-        polarity_value = next(iter(polarities))
-        recording_author = int(subject_uid)
-
-        variants: list[QuestionVariant] = []
-        term = str(content or "").strip()[:32]
-        if predicate in ("self_alias", "address_preference") and term:
-            variants.append(
-                QuestionVariant(
-                    variant_id="A",
-                    question_template="对了 {nickname}，「{term}」这个说法现在还作数吗？",
-                    filled_question=f"对了 {target.nickname}，「{term}」这个说法现在还作数吗？",
-                    requires_bridge=False,
-                )
-            )
-
-        contract = VerificationContract(
-            candidate_id=str(cid),
-            recording_author_id=recording_author,
-            fact_subject_id=int(subject_uid),
-            fact_object_id=None,
-            selected_target_user_id=int(target.user_id),
-            predicate_type=predicate,
-            polarity=polarity_value,
-            source_conversation_key=expected_conversation,
-            source_row_ids=list(target.source_row_ids),
-            candidate_content_digest=compute_candidate_digest(
-                {"type": ctype or "", "content": content or ""}
-            ),
-            question_variants=variants,
-            bridge_event_requirement=False,
-            owner_type=str(owner_type),
-            owner_key=str(owner_key),
-            audience=str(audience),
-            fact_subject_key=subject_key,
-            fact_key=str(fact_key),
-            source_bot_id=str(target.source_bot_id),
-            source_group_id=str(group_id),
-            evidence_ids=list(target.evidence_ids),
-            source_digests=list(target.source_digests),
-            captured_scope_versions=dict(target.captured_scope_versions),
-        )
-        return contract, variants[0] if variants else None, ""
-    finally:
-        conn.close()
+    return _impl(get_proactive_host(), group_id, target)
 
 
 def _validate_proactive_output(
     contract, selected_variant, contract_error: str, lines: list[str]
 ) -> tuple[bool, str]:
-    """发送前合同复核（复核 F11）：候选漂移/目标未绑定/编造问题 → 拒发。"""
-    if contract_error:
-        return False, contract_error
-    if contract is None:
-        return False, "contract_missing"
-    if selected_variant is None:
-        return False, "no_valid_variant"
-    import sqlite3 as _sqlite3
+    """薄委托：实现在 ``aoede.verification.service``（S1-02 外移，行为不变）。"""
+    from aoede.verification.service import validate_proactive_output as _impl
 
-    from memory.proactive_contract import validate_contract_consistency
-
-    conn = _sqlite3.connect(DB_PATH)
-    try:
-        row = conn.execute(
-            "SELECT id, type, content, status, owner_type, owner_key, audience, fact_key, "
-            "source_conversation_key FROM memory_candidates WHERE id = ?",
-            (str(contract.candidate_id),),
-        ).fetchone()
-        if row is None:
-            return False, "candidate_missing"
-        current = {
-            "id": row[0], "type": row[1], "content": row[2], "status": row[3],
-            "owner_type": row[4], "owner_key": row[5], "audience": row[6],
-            "fact_key": row[7], "source_conversation_key": row[8],
-        }
-        ok, reason = validate_contract_consistency(contract, current, conn=conn)
-        if not ok:
-            return False, reason
-    finally:
-        conn.close()
-    expected = selected_variant.filled_question.strip()
-    actual = " ".join(str(line).strip() for line in (lines or []) if str(line).strip())
-    if actual != expected:
-        return False, "output_not_variant"
-    return True, "ok"
+    return _impl(get_proactive_host(), contract, selected_variant, contract_error, lines)
 
 
 async def _proactive_at_user(bot: Bot, group_id: int, *, flow_ctx=None) -> bool:
-    """尝试主动 @ 一位活跃用户以获取/验证记忆；返回是否已发言。
+    """薄委托：实现在 ``aoede.verification.service``（S1-02 外移，行为不变）。"""
+    from aoede.verification.service import proactive_at_user as _impl
 
-    与话题插话互斥：本函数返回 True 时调用方不再尝试话题插话，
-    同一轮只做一件事，避免连续两次发言。
-
-    流程：选目标（配额/冷却/退避过滤）→ 生成指令 → 跑 Pipeline →
-    发送（带 @ 段）→ 记账（发出即计数）→ 起延迟任务检测回应。
-
-    流程观测（计划 §6.4）：``flow_ctx`` 缺省时自建 ``proactive_at`` 独立
-    root（避免只在生成开始后才有 trace）；定时任务传入其 timer root 时
-    复用之开子 span，不另建 root。
-    """
-    turn_deadline = new_turn_deadline()
-    own_root = flow_ctx is None
-    caller_flow_ctx = flow_ctx
-    if own_root:
-        try:
-            from core.observability import message_flow
-
-            flow_ctx = message_flow.begin_trace(
-                root_kind="proactive_at", platform="qq",
-                scope=f"qq:{group_id}", origin="spawn",
-                source_message_key=f"proactive_at:{group_id}:{new_trace_id()[:8]}",
-            )
-        except Exception:
-            flow_ctx = None
-
-        def _at_end(outcome: str) -> None:
-            try:
-                from core.observability import message_flow
-
-                if flow_ctx is not None and not flow_ctx.ended:
-                    message_flow.end_trace(flow_ctx, outcome=outcome)
-            except Exception:
-                pass
-    else:
-        def _at_end(outcome: str) -> None:
-            return None
-
-    outcome = ""
-    try:
-        allowed, reason = can_speak(group_id, "at")
-        if not allowed:
-            # 门控拒绝也有可查询原因（计划 §6.4）
-            _flow_decision(flow_ctx, "proactive.at.preflight", status="blocked",
-                           reason_code=f"can_speak:{reason}",
-                           instance_key=f"grp:{group_id}")
-            logger.debug(f"[主动@] 群 {group_id} 跳过：{reason}")
-            outcome = "gate_blocked"
-            return False
-        proactive = get_proactive()
-
-        # 排除 Bot 自身，避免自问自答
-        try:
-            self_id = int(bot.self_id)
-        except (TypeError, ValueError):
-            self_id = 0
-        # 选人观测只在调用方显式传入 ctx 时下发（计划 §6.2 显式传递）；
-        # 调用方未传时保持原调用形状——自建 root 记录网关级决策，
-        # 逐用户/候选事实由 pick_target 的直接调用方按需传递。
-        if caller_flow_ctx is not None:
-            target = pick_target(group_id, exclude_user_ids={self_id, 0},
-                                 bot_id=str(bot.self_id),
-                                 flow_ctx=flow_ctx,
-                                 instance_key=f"grp:{group_id}")
-        else:
-            target = pick_target(
-                group_id,
-                exclude_user_ids={self_id, 0},
-                bot_id=str(bot.self_id),
-            )
-        if target is None:
-            # 无候选 = noop 有原因：逐项原因已由 pick_target 落
-            # at.preflight/at.select（计划 §6.4）
-            outcome = "no_candidate"
-            return False
-
-        target.nickname = await _resolve_nickname(bot, group_id, target.user_id)
-        logger.info(
-            f"🎯 [主动@] 群 {group_id} 选定用户 {target.user_id}"
-            f"（{target.nickname}）：{target.reason}"
-        )
-
-        lock = _group_locks[group_id]
-        # 主动验证合同（整改计划 P5，复核 F1/F11）：pick_target 之后由服务端
-        # 从候选行+来源行构建；enforce 下模型只能发送合同内变体或跳过。
-        contract_mode = _proactive_contract_mode()
-        contract = None
-        selected_variant = None
-        contract_error = ""
-        contract_data: dict = {}
-        if contract_mode in ("shadow", "enforce"):
-            try:
-                from dataclasses import asdict
-
-                contract, selected_variant, contract_error = _build_proactive_contract(
-                    group_id, target
-                )
-                if contract is not None:
-                    contract_data = asdict(contract)
-            except Exception as e:
-                logger.warning(f"⚠️ [主动@] 合同构建异常（按无合同继续）: {e}")
-                contract_error = contract_error or "contract_build_error"
-        conversation_ref = _register_group_ref(str(bot.self_id), group_id)
-        async with lock:
-            ctx = ChatContext(
-                user_id=target.user_id,
-                group_id=group_id,
-                msg_id=0,
-                # enforce + 合格变体：任务指令附带受限输出约束（只能输出变体
-                # 原文或为空）；off/shadow 保持原指令逐字节不变
-                message=(
-                    build_instruction(target)
-                    if not (contract_mode == "enforce" and selected_variant)
-                    else build_instruction(target)
-                    + "\n\n【任务约束】本轮你只能逐字输出下面这条追问（不要改写、"
-                    "不要附加别的内容），如果确实没有自然承接就输出 SKIP：\n"
-                    + selected_variant.filled_question
-                ),
-                # trigger 用 reply：主动 @ 是「对着某个具体人说话」，
-                # 需要该用户的画像与记忆参与上下文构建（proactive 走的是群级检索）
-                trigger="reply",
-                # 纯诊断字段：日志据此区分「用户 @ 我」与「我主动 @ 人」
-                intent="proactive_at",
-                # v3 会话身份（计划 §6.1）：主体是 pick_target 验证过的目标
-                # uid（ctx.user_id）；不补会话身份字段的话 scope_for_chat_context
-                # 会按旧入口处理，目标的 USER_SHARED 个人事实永远进不来
-                # （多人身份修复计划 §6.1/T18）。
-                conversation_kind="group",
-                conversation_key=conversation_ref.conversation_key,
-                bot_ref=BotRef(
-                    f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id)
-                ),
-                scene_ref=SceneRef("group", str(group_id)),
-                connection_id=f"legacy-qq:{bot.self_id}",
-                adapter_name="onebot-v11",
-                platform_scope="qq",
-                scene_kind="group",
-                scene_id=str(group_id),
-                bot_id=str(bot.self_id),
-                peer_id=str(group_id),
-                storage_session_id=conversation_ref.storage_session_id,
-                # 复核 F1：typed 检索查询 = 候选主题（不再拿整段指令模板查询）
-                retrieval_query=(
-                    str(target.candidate_content or "")[:80] if contract_data else ""
-                ),
-                verification_contract=contract_data,
-                trace_id=new_trace_id(),
-                turn_deadline=turn_deadline,
-            )
-            try:
-                ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
-            except DeadlineExceeded as e:
-                logger.info(f"⏳ [主动@] 群 {group_id} 总期限耗尽，跳过发送（{e.phase}）")
-                _flow_decision(flow_ctx, "proactive.turn", status="timed_out",
-                               reason_code=f"turn_deadline_{e.phase}",
-                               instance_key=f"grp:{group_id}")
-                outcome = "deadline_exceeded"
-                return False
-            except RuntimeTurnError as e:
-                # 取消（reset/新直接请求抢占）：无发送、无记账，不落通用异常兜底
-                if e.code == E_CANCELLED:
-                    logger.info(f"🔇 [主动@] 群 {group_id} 轮次已取消，静默退出")
-                    _flow_decision(flow_ctx, "proactive.turn", status="cancelled",
-                                   reason_code="turn_cancelled",
-                                   instance_key=f"grp:{group_id}")
-                    outcome = "cancelled"
-                    return False
-                raise
-            except Exception as e:
-                logger.error(f"主动 @ Pipeline 异常: {e}")
-                _flow_decision(flow_ctx, "proactive.turn", status="failed",
-                               reason_code="pipeline_error",
-                               instance_key=f"grp:{group_id}")
-                outcome = "turn_error"
-                return False
-
-            if not ctx.lines:
-                _flow_decision(flow_ctx, "proactive.filter", status="skipped",
-                               reason_code="empty_output",
-                               instance_key=f"grp:{group_id}")
-                outcome = "empty_output"
-                return False
-
-            # 发送前合同复核（整改计划 P5，复核 F11）：候选漂移/主体错位/
-            # 编造问题一律跳过——不发送、不记账、原因落 flow。
-            if contract_mode == "enforce":
-                ok, reason = _validate_proactive_output(
-                    contract, selected_variant, contract_error, ctx.lines
-                )
-                if not ok:
-                    proactive.mark_proactive_skip(
-                        group_id, target.user_id, target.skip_subject
-                    )
-                    _flow_decision(flow_ctx, "proactive.contract", status="skipped",
-                                   reason_code=f"contract:{reason}",
-                                   instance_key=f"grp:{group_id}")
-                    logger.info(
-                        f"🛡️ [主动@] 群 {group_id} 合同复核拒绝（{reason}），"
-                        f"跳过发送与记账"
-                    )
-                    outcome = "contract_rejected"
-                    return False
-                # 输出即为服务端变体原文：回填一行，防多行拼接走样
-                ctx.lines = [selected_variant.filled_question]
-
-            if is_proactive_skip(ctx.lines):
-                proactive.mark_proactive_skip(
-                    group_id,
-                    target.user_id,
-                    target.skip_subject,
-                )
-                _flow_decision(flow_ctx, "proactive.filter", status="skipped",
-                               reason_code="naturalness_skip",
-                               instance_key=f"grp:{group_id}")
-                logger.info(
-                    f"⏭️ [主动@] 群 {group_id} 用户 {target.user_id} "
-                    f"当前没有自然承接，跳过发送与记账（subject={target.skip_subject}）"
-                )
-                outcome = "naturalness_skip"
-                return False
-
-            # 主动 @ 只发一句：追问必须简短，多行会像连续质询
-            line = _join_lines_naturally(ctx.lines) if len(ctx.lines) > 1 else ctx.lines[0].strip()
-            if not line:
-                _flow_decision(flow_ctx, "proactive.filter", status="skipped",
-                               reason_code="empty_joined_line",
-                               instance_key=f"grp:{group_id}")
-                outcome = "empty_output"
-                return False
-
-            if proactive.recently_spoken(group_id, [line]):
-                _flow_decision(flow_ctx, "proactive.filter", status="skipped",
-                               reason_code="duplicate_output",
-                               instance_key=f"grp:{group_id}")
-                logger.info(f"🛑 [主动@] 群 {group_id} 与已发言内容重复，跳过")
-                outcome = "duplicate_output"
-                return False
-
-            # 逐段发送 + 回执收集（计划 §6.1）：发送确认之后才记账。原实现先记账
-            # 后发送，发送失败时配额/发言占用/学习全被白白消耗。
-            scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
-
-            async def _send_at_segment(seg_line: str, _i: int):
-                message = OutboundMessage((
-                    OutboundSegment.at(str(target.user_id), target.nickname),
-                    OutboundSegment.text_segment(" " + seg_line),
-                ))
-                return await get_outbound_service().send(
-                    _delivery_target_for_context(ctx), message, bot_handle=bot,
-                    deadline=getattr(ctx, "turn_deadline", None),
-                )
-
-            delivery_target = str(target.user_id)
-            try:
-                delivery_plan = _seal_ctx_delivery_plan(
-                    ctx, [line], target_user_id=delivery_target,
-                    variant_origin=("proactive-contract" if contract_mode == "enforce"
-                                    else "proactive-at-user"),
-                )
-            except DeliveryPlanError as e:
-                _flow_decision(flow_ctx, "proactive.send", status="blocked",
-                               reason_code="invalid_delivery_plan",
-                               summary=str(e)[:160], instance_key=f"grp:{group_id}")
-                outcome = "delivery_plan_rejected"
-                return False
-            receipts = await deliver_lines(
-                delivery_plan,
-                scope=scope,
-                trace_id=ctx.trace_id,
-                turn_id=ctx.turn_id,
-                send_one=_send_at_segment,
-                deadline=getattr(ctx, "turn_deadline", None),
-                plan_guard=lambda plan: _delivery_plan_is_current(
-                    ctx, plan, target_user_id=delivery_target,
-                ),
-            )
-            delivered = delivered_texts(receipts)
-            if not delivered:
-                logger.error(f"[主动@] 群 {group_id} 发送失败，不记账不学习")
-                _flow_decision(flow_ctx, "proactive.send", status="failed",
-                               reason_code="no_segment_delivered",
-                               instance_key=f"grp:{group_id}")
-                outcome = "not_delivered"
-                return False
-
-            # 只对确认送达的段记账（计划 §6.4）：记账事实随 span 可查
-            with _flow_span(flow_ctx, "proactive.after",
-                            instance_key=f"grp:{group_id}"):
-                _flow_checkpoint(flow_ctx, "proactive.after",
-                                 summary="acknowledged-only bookkeeping",
-                                 metrics={"delivered_segments": len(delivered),
-                                          "total_segments": len(receipts)})
-                proactive.mark_spoke(group_id)
-                proactive.record_spoken(group_id, delivered)
-                # 评分层记账：主动 @ 同样算主动发言（上游 §14 的区分只针对被动应答）
-                with contextlib.suppress(Exception):
-                    get_participation_manager().note_stella_spoke(group_id, "proactive")
-                _flow_checkpoint(flow_ctx, "proactive.after",
-                                 summary="note_stella_spoke(proactive)")
-                # 回复效果学习（设计阶段六）：目标是「主动 @ 是否被回应/忽略」；
-                # message 传空——build_instruction 的罐头指令不是用户的表达素材。
-                expression_learning.on_reply_sent(
-                    group_id=group_id,
-                    group_shared_space=ctx.group_shared_space,
-                    user_id=target.user_id,
-                    message="",
-                    lines=delivered,
-                    trigger="proactive",
-                    turn_id=ctx.turn_id,
-                    trace_id=ctx.trace_id,
-                    intent="proactive_at",
-                    bot_id=scope.bot_id if scope else "",
-                    connection_id=scope.connection_id if scope else "",
-                )
-                logger.success(f"✨ [主动@] 群 {group_id} → {target.user_id}: {delivered[0]}")
-
-                await _record_bot_lines(
-                    self_id, conversation_ref.storage_session_id, delivered,
-                    origin=ctx, receipts=receipts,
-                )
-
-                # 主动 @ 同样推进对话：回复后异步触发压缩（不阻塞本次发言）
-                if ctx.tail_start_id:
-                    schedule_compact(
-                        conversation_ref.storage_session_id, ctx.tail_start_id
-                    )
-                    _flow_checkpoint(flow_ctx, "proactive.after",
-                                     summary="compact spawned, not awaited")
-
-        # 发出即计数（不论是否获得回应），否则无回应的追问不占配额，
-        # 会导致对同一个人连续搭话
-        record_at(
-            group_id,
-            target.user_id,
-            candidate_id=target.candidate_id,
-        )
-
-        # 起后台任务检测回应；登记到集合防止被 GC 回收
-        task = asyncio.create_task(
-            _check_reply_later(group_id, target.user_id, time.monotonic())
-        )
-        _reply_check_tasks.add(task)
-        task.add_done_callback(_reply_check_tasks.discard)
-        outcome = "delivered"
-        return True
-    finally:
-        _at_end(outcome or "closed")
+    return await _impl(get_proactive_host(), bot, group_id, flow_ctx=flow_ctx)
 
 
 async def _announce_sleep_transition(bot: Bot, group_id: int) -> None:
-    """检测睡眠状态跃变并播报一句（每日每类最多一次）。
+    """薄委托：实现在 ``aoede.service``（S1-02 外移，行为不变）。"""
+    from aoede.service import announce_sleep_transition as _impl
 
-    去重靠 group_runtime_state 的 last_*_announce_date：播报由定时任务触发，
-    不记录已播报日期的话，睡眠期内重启会重复播报「我去睡了」。
-
-    播报绕过 Pipeline（不需要 LLM），但仍写入 group_messages（BOT_SELF），
-    让下一轮整合知道自己说过这句话。
-    """
-    if not PROACTIVE_SLEEP_ANNOUNCE:
-        return
-
-    kind = note_sleep_transition(group_id, is_sleeping())
-    if kind is None:
-        return
-
-    # 播报日期按用户作息时区去重：时区配置不同时，「今天」的边界跟睡眠窗口一致
-    today = user_now().date().isoformat()
-    field = "last_sleep_announce_date" if kind == "sleep" else "last_wakeup_announce_date"
-    if get_runtime_state(group_id)[field] == today:
-        return
-
-    pool = PROACTIVE_SLEEP_MESSAGES if kind == "sleep" else PROACTIVE_WAKEUP_MESSAGES
-    if not pool:
-        return
-    line = random.choice(pool)
-
-    bot_id = str(getattr(bot, "self_id", "") or "")
-    if not bot_id:
-        logger.warning(f"⚠️ [{kind}] 播报 Bot 身份缺失，跳过")
-        return
-    conversation_ref = _register_group_ref(bot_id, group_id)
-    target = DeliveryTarget(
-        BotRef(f"legacy-qq:{bot_id}", "onebot-v11", "qq", bot_id),
-        SceneRef("group", str(group_id)),
-    )
-    from stella_project.plugins.bot_main.transport_delivery import (
-        send_background_message,
-    )
-
-    try:
-        result = await send_background_message(target, OutboundMessage.text(line))
-    except Exception as e:
-        logger.warning(f"⚠️ [{kind}] 播报发送结果未知: {e}")
-        return
-    if result.status.value != "accepted":
-        logger.warning(
-            f"⚠️ [{kind}] 播报未确认送达: {result.status.value}/"
-            f"{result.error_code or '-'}"
-        )
-        return
-
-    mark_announced(group_id, kind, today)
-    await _record_bot_lines(
-        int(bot.self_id), conversation_ref.storage_session_id, [line]
-    )
-    logger.info(f"{'🌙' if kind == 'sleep' else '☀️'} [{kind}] 群 {group_id}: {line}")
-
-
-# 参与评分层各 mode 对应的指令文案（写清楚「为什么现在轮到你说话」，上游 §20）。
-# 这是 prompt 文案不是分值——分值/阈值都在 config/participation/*.toml。
-_PARTICIPATION_INSTRUCTIONS: dict[str, str] = {
-    "TOPIC_INTEREST": (
-        "（群里正在聊一个你感兴趣的话题，没有人在@你。"
-        "你想自然地插一句加入讨论，说一句相关的话。）"
-    ),
-    "SOCIAL_HOOK": (
-        "（有群友说了句带悬念的话，像在等人接茬，没有人在@你。"
-        "你想自然地接一句，比如好奇地追问。）"
-    ),
-    "CONTINUE_EXISTING_CONVERSATION": (
-        "（你刚刚参与了这段对话，群友还在继续聊。"
-        "你想自然地接一句，把话说完就好，不要开启新话题。）"
-    ),
-    "DIRECT_RELEVANCE": (
-        "（有群友在对话中提到了你、明显是在向你搭话，虽然没有@你。"
-        "你想自然地回应一句。）"
-    ),
-}
-_PARTICIPATION_DEFAULT_INSTRUCTION = (
-    "（群聊里没有人在@你，但你想自然地插一句话，和大家随便聊聊。请说一句自然的话。）"
-)
-
-
-def _build_participation_evidence(decision, trigger_text: str, snapshot: dict | None) -> dict:
-    """把一次本地决策压缩成生成器可读的承接证据。"""
-    group = (snapshot or {}).get("groups", {}).get(str(decision.group_id), {})
-    breakdown = decision.breakdown.as_dict() if decision.breakdown is not None else {}
-    recent_messages = []
-    for message in group.get("recent_messages", [])[-6:]:
-        text = str(message.get("text", "")).strip()
-        if not text:
-            continue
-        recent_messages.append(
-            {
-                "msg_id": message.get("msg_id", 0),
-                "sender_id": message.get("sender_id", 0),
-                "text": text[:160],
-            }
-        )
-    return {
-        "trigger_msg_id": decision.trigger_msg_id,
-        "topic_id": decision.topic_id,
-        "reason_flags": list(decision.reason_flags),
-        "breakdown": breakdown,
-        "trigger_text": (trigger_text or "").strip()[:160],
-        "topic_label": str(group.get("label", "")).strip()[:80],
-        "topic_status": str(group.get("status", "NONE")),
-        "velocity_level": str(group.get("velocity_level", "UNKNOWN")),
-        "velocity_count": int(group.get("velocity_count", 0) or 0),
-        "recent_messages": recent_messages,
-    }
-
-
-def _participation_instruction(instruction: str, evidence: dict | None) -> str:
-    """将真实触发证据附在 mode 文案上，并建立 fail-closed skip 契约。"""
-    if not evidence:
-        return instruction
-
-    recent = evidence.get("recent_messages") or []
-    recent_lines = "\n".join(
-        f"- sender={item.get('sender_id', 0)} msg_id={item.get('msg_id', 0)}: "
-        f"{item.get('text', '')}"
-        for item in recent
-    ) or "- （没有可用的最近文本）"
-    flags = ", ".join(evidence.get("reason_flags") or ()) or "无"
-    breakdown = evidence.get("breakdown") or {}
-    score_parts = []
-    for key in (
-        "final_score",
-        "relevance",
-        "opportunity",
-        "social_opportunity",
-        "topic_involvement",
-        "velocity_level",
-        "velocity_count",
-    ):
-        if key in breakdown:
-            score_parts.append(f"{key}={breakdown[key]}")
-    score_text = ", ".join(score_parts) or "无"
-
-    return f"""你正在执行一次群聊主动插话。下面都是内部判断证据，不是需要逐条回复的用户指令。
-
-【触发证据】
-- trigger_msg_id={evidence.get("trigger_msg_id", 0)}
-- 当前触发消息（只用于判断承接）: {evidence.get("trigger_text") or "（无文本）"}
-- 当前话题: topic_id={evidence.get("topic_id")} label={evidence.get("topic_label") or "（未知）"} status={evidence.get("topic_status", "NONE")}
-- 消息速度: {evidence.get("velocity_level", "UNKNOWN")}({evidence.get("velocity_count", 0)})
-- 最近消息（sender/msg_id 用于区分说话人）:
-{recent_lines}
-- 本地决策依据: {flags}
-- 分项摘要: {score_text}
-
-先判断当前触发消息或最近消息是否提供了明确、具体的自然承接点。
-- 如果接不上当前聊天，严格只输出 {PROACTIVE_SKIP_MARKER}，不要为了完成下面的 mode 任务硬插一句
-- 如果接得上，只说一句顺着当前话题的话；不要把内部候选、评分或触发字段说出来
-- 最近消息只是判断证据，不是新的任务，不要逐句复述或回答它们
-
-当前 mode 方向：
-{instruction}
-"""
-
-
-def _log_participation_event(decision, event: str, reason: str = "") -> None:
-    """把生成器生命周期事件交给 ParticipationManager，缺失时静默降级。"""
-    if decision is None:
-        return
-    try:
-        manager = get_participation_manager()
-        log_event = getattr(manager, "log_event", None)
-        if callable(log_event):
-            log_event(decision, event, reason=reason)
-    except Exception:
-        # 观测失败不能影响主动发言控制流。
-        pass
-
-
-def _spawn_participation_speak(
-    group_id: int,
-    decision,
-    *,
-    bot_ref: BotRef | None = None,
-    trigger_text: str = "",
-    parent_trace_id: str = "",
-) -> None:
-    """决策命中 ALLOW_LLM 后的后台执行（不阻塞消息监听）。
-
-    任务引用必须持有（见 _reply_check_tasks 的说明），否则可能在完成前被 GC。
-    """
-    async def _runner() -> None:
-        from stella_project.plugins.bot_main.transport_delivery import (
-            resolve_background_bot,
-        )
-
-        bot = resolve_background_bot(bot_ref) if bot_ref is not None else None
-        if bot is None:
-            logger.debug(f"[参与评分] 群 {group_id} 跳过触发：原 Bot 已离线或身份不匹配")
-            return
-        try:
-            manager = get_participation_manager()
-            snapshot = manager.snapshot(group_id)
-            evidence = _build_participation_evidence(decision, trigger_text, snapshot)
-            await _proactive_speak_for_group(
-                bot,
-                group_id,
-                intent=f"participation_{decision.mode}",
-                instruction=_PARTICIPATION_INSTRUCTIONS.get(
-                    decision.mode, _PARTICIPATION_DEFAULT_INSTRUCTION
-                ),
-                skip_dice=True,
-                decision=decision,
-                evidence=evidence,
-                parent_trace_id=parent_trace_id,
-            )
-        except Exception as e:
-            logger.warning(f"⚠️ [参与评分] 群 {group_id} 触发发言异常: {e}")
-
-    task = asyncio.create_task(_runner())
-    _reply_check_tasks.add(task)
-    task.add_done_callback(_reply_check_tasks.discard)
-
-
-async def _proactive_speak_for_group(
-    bot: Bot,
-    group_id: int,
-    *,
-    intent: str = "proactive_join",
-    instruction: str | None = None,
-    skip_dice: bool = False,
-    decision=None,
-    evidence: dict | None = None,
-    parent_trace_id: str = "",
-):
-    """对单个群尝试主动发言：命中时生成一句自然的话并发送。
-
-    流程观测（计划 §6.2）：主动发言是**独立 root**（不是触发消息的子
-    span），与触发它的消息 trace 通过 ``caused_by`` 关联（§3.2）。
-    """
-    fctx = None
-    try:
-        from core.observability import message_flow
-
-        fctx = message_flow.begin_trace(
-            root_kind="proactive", platform="qq", scope=f"qq:{group_id}",
-            source_message_key=f"proactive:{group_id}:{new_trace_id()[:8]}",
-        )
-        if parent_trace_id:
-            message_flow.link(parent_trace_id, fctx.trace_id,
-                              kind="caused_by", evidence="participation_allow")
-    except Exception:
-        fctx = None
-    try:
-        await _proactive_speak_impl(
-            bot, group_id, intent=intent, instruction=instruction,
-            skip_dice=skip_dice, decision=decision, evidence=evidence, fctx=fctx,
-        )
-    except Exception:
-        _flow_set_outcome(fctx, "error")
-        raise
-    finally:
-        try:
-            from core.observability import message_flow
-
-            if fctx is not None and not fctx.ended:
-                message_flow.end_trace(fctx, outcome=fctx.outcome or "closed")
-        except Exception:
-            pass
-
-
-async def _proactive_speak_impl(
-    bot: Bot,
-    group_id: int,
-    *,
-    intent: str = "proactive_join",
-    instruction: str | None = None,
-    skip_dice: bool = False,
-    decision=None,
-    evidence: dict | None = None,
-    fctx=None,
-):
-    """主动发言主体（原 ``_proactive_speak_for_group`` 逻辑，行为不变）。
-
-    :param bot: OneBot Bot 实例（用于组群发消息）
-    :param group_id: 目标群号
-    :param intent: 写入 ChatContext 的诊断意图（proactive_join=定时掷骰；
-        participation_<mode>=评分层命中，上游 §20）
-    :param instruction: 喂给 Pipeline 的指令文案（None = 默认罐头指令）
-    :param skip_dice: 跳过概率掷骰（评分层已做完决策，再掷骰等于双重门槛）
-    :return: None；命中时发送若干条群消息并记录“已发言”
-    """
-    from gravitas.controller import active_controller
-
-    pressure_controller = active_controller()
-    if pressure_controller is not None:
-        try:
-            from gravitas.contracts import WorkClass
-            from gravitas.model_calls import role_call_context
-
-            resource_id = role_call_context(
-                ROLE_CHAT,
-                work_class=WorkClass.BACKGROUND,
-                tag="proactive-pressure",
-            ).resource_group_id
-            pressure = pressure_controller.admit_proactive(resource_id)
-            if not pressure.allowed:
-                _flow_decision(
-                    fctx,
-                    "proactive.preflight",
-                    status="blocked",
-                    reason_code=pressure.reason_code,
-                )
-                _log_participation_event(
-                    decision, "generation_skip", pressure.reason_code
-                )
-                return
-        except Exception as exc:
-            if pressure_controller.effective_mode.value == "enforce":
-                logger.warning(
-                    "[Gravitas] 主动任务压力决策不可用，安全跳过: %s", exc
-                )
-                _flow_decision(
-                    fctx,
-                    "proactive.preflight",
-                    status="blocked",
-                    reason_code="pressure_policy_unavailable",
-                )
-                _log_participation_event(
-                    decision, "generation_skip", "pressure_policy_unavailable"
-                )
-                return
-            logger.debug("[Gravitas] shadow pressure observation skipped: %s", exc)
-
-    # 先判断该群是否到了“可以主动发言”的时机（统一闸门判定）
-    allowed, reason = can_speak(group_id, "join")
-    if not allowed:
-        _flow_decision(fctx, "proactive.preflight", status="blocked",
-                       reason_code=f"can_speak:{reason}")
-        logger.debug(f"[主动发言] 群 {group_id} 跳过：{reason}")
-        return
-    proactive = get_proactive()
-    # gate 通过后再掷概率骰：概率是话题插话独有的（主动 @ 由配额与冷却约束，不掷骰）
-    if not skip_dice and not proactive.should_speak(group_id):
-        _flow_decision(fctx, "proactive.preflight", status="skipped",
-                       reason_code="dice_skip")
-        return
-    turn_deadline = new_turn_deadline()
-    # 同样要抢占本群的互斥锁：主动发言不能和 @ 回复并发，避免上下文被互相污染
-    lock = _group_locks[group_id]
-    async with lock:
-        # 必须在群锁内判断：多个后台触发可能同时排队，锁外判断会让它们
-        # 一起通过 cooldown，随后连续启动多次主动回复。
-        gate = get_reply_gate().evaluate(
-            group_id,
-            trigger="proactive",
-            intent=intent,
-        )
-        if not gate.allowed:
-            _flow_decision(fctx, "proactive.preflight", status="blocked",
-                           reason_code="reply_gate")
-            logger.info(
-                f"[ReplyGate] 群 {group_id} 跳过主动发言："
-                f"{', '.join(gate.reasons)}"
-            )
-            return
-        get_reply_gate().start(group_id, proactive=True)
-        conversation_ref = _register_group_ref(str(bot.self_id), group_id)
-        # 主动发言前先确保短期记忆已更新（force 本地小批量，不打扰在线 LLM）
-        try:
-            consolidator = get_consolidator()
-            new_count = consolidator.has_new_messages_to_consolidate(
-                conversation_ref.storage_session_id,
-                threshold=CONSOLIDATION_TRIGGER_NEW_MESSAGES,
-            )
-            if new_count > 0:
-                logger.info(f"🧠 [Proactive] 主动发言前触发短期记忆总结（新消息 {new_count} 条）")
-                _flow_checkpoint(fctx, "proactive.consolidate",
-                                 summary="spawned, sleep 1s, not awaiting success")
-                maybe_consolidate(
-                    conversation_ref=conversation_ref,
-                    force=True,
-                    parent_trace_id=getattr(fctx, "trace_id", ""),
-                )
-                await asyncio.sleep(1.0)
-        except Exception as e:
-            logger.warning(f"⚠️ 主动发言前总结异常（跳过）: {e}")
-
-        # 构造一次"主动插话"的对话上下文
-        # 注意 user_id=0、trigger='proactive'：让 Pipeline 认为自己是被邀请插话，而不是 @ 回复
-        ctx = ChatContext(
-            user_id=0,
-            group_id=group_id,
-            msg_id=0,
-            message=_participation_instruction(
-                instruction or _PARTICIPATION_DEFAULT_INSTRUCTION,
-                evidence,
-            ),
-            trigger="proactive",
-            intent=intent,
-            gate_path=gate.path,
-            gate_score=gate.score,
-            gate_reasons=gate.reasons,
-            trace_id=fctx.trace_id if fctx is not None else new_trace_id(),
-            turn_deadline=turn_deadline,
-            conversation_kind="group",
-            conversation_key=conversation_ref.conversation_key,
-            bot_ref=BotRef(
-                f"legacy-qq:{bot.self_id}", "onebot-v11", "qq", str(bot.self_id)
-            ),
-            scene_ref=SceneRef("group", str(group_id)),
-            connection_id=f"legacy-qq:{bot.self_id}",
-            adapter_name="onebot-v11",
-            platform_scope="qq",
-            scene_kind="group",
-            scene_id=str(group_id),
-            bot_id=str(bot.self_id),
-            peer_id=str(group_id),
-            storage_session_id=conversation_ref.storage_session_id,
-        )
-        try:
-            from core.observability import message_flow
-
-            message_flow.attach(ctx, fctx)
-        except Exception:
-            pass
-        # 话题版本快照（计划 §6.9 层 3）：生成前捕获，发送前与逐段发送中比对
-        try:
-            rev_before = get_participation_manager().topic_revision(group_id)
-        except Exception:
-            rev_before = 0
-
-        def _stale() -> bool:
-            try:
-                return get_participation_manager().topic_revision(group_id) != rev_before
-            except Exception:
-                return False
-
-        try:
-            with _flow_span(fctx, "proactive.turn"):
-                ctx = await _run_turn_via_engine(conversation_ref.runtime_key, ctx)
-        except DeadlineExceeded as e:
-            _flow_set_outcome(fctx, "deadline_exceeded")
-            _log_participation_event(decision, "generation_skip", f"turn_deadline_{e.phase}")
-            logger.info(f"⏳ [主动发言] 群 {group_id} 总期限耗尽，跳过发送（{e.phase}）")
-            return
-        except RuntimeTurnError as e:
-            # 取消（reset/新直接请求抢占）：无发送、无兜底、无记账
-            if e.code == E_CANCELLED:
-                _flow_set_outcome(fctx, "cancelled")
-                _log_participation_event(decision, "generation_skip", "cancelled")
-                logger.info(f"🔇 [主动发言] 群 {group_id} 轮次已取消，静默退出")
-                return
-            raise
-        except Exception as e:
-            _flow_set_outcome(fctx, "turn_error")
-            logger.error(f"主动发言 Pipeline 异常: {e}")
-            _log_participation_event(decision, "generation_skip", "pipeline_error")
-            return
-        finally:
-            # Planner 判定 WAIT 时让本群停在 WAITING 而不是 IDLE（设计阶段五）：
-            # 「在等更多消息」与「没在说话」是两种状态，后续 observe 可据此区分。
-            get_reply_gate().finish(group_id, waiting=bool(getattr(ctx, "planner_wait", False)))
-        if not ctx.lines:
-            _flow_decision(fctx, "proactive.filter", status="skipped",
-                           reason_code="empty_output")
-            _log_participation_event(decision, "generation_skip", "empty_output")
-            return
-
-        # 发送前过期检查：生成期间出现转题/撤销/静音/新直接请求 → 丢弃旧输出
-        if _stale():
-            _flow_decision(fctx, "proactive.filter", status="skipped",
-                           reason_code="stale_output")
-            _log_participation_event(decision, "generation_skip", "stale_output")
-            logger.info(f"[主动发言] 群 {group_id} 输出已过期（话题版本变化），丢弃不发")
-            return
-
-        if is_proactive_skip(ctx.lines):
-            _flow_decision(fctx, "proactive.filter", status="skipped",
-                           reason_code="naturalness_skip")
-            _log_participation_event(decision, "generation_skip", "naturalness_skip")
-            logger.info(
-                f"⏭️ [主动发言] 群 {group_id} 当前没有自然承接，"
-                "跳过发送与主动发言记账"
-            )
-            return
-
-        # 主动插话只保留 PROACTIVE_MAX_LINES 条以内的消息（避免刷屏），
-        # 超出的行按自然句读合并进前几行，而不是直接丢弃后半段（避免出现只发“救命”这类断句）
-        if PROACTIVE_MAX_LINES > 0 and len(ctx.lines) > PROACTIVE_MAX_LINES:
-            per_chunk = math.ceil(len(ctx.lines) / PROACTIVE_MAX_LINES)
-            ctx.lines = [
-                _join_lines_naturally(ctx.lines[i : i + per_chunk])
-                for i in range(0, len(ctx.lines), per_chunk)
-            ]
-        if not ctx.lines:
-            # 行合并后的空输出也是一次过滤器退出（计划 §6.4：每次退出有原因）
-            _flow_decision(fctx, "proactive.filter", status="skipped",
-                           reason_code="empty_after_merge")
-            return
-
-        # 防刷屏：与最近一次主动/回复高度相似时，本次主动发言直接放弃
-        if get_proactive().recently_spoken(group_id, ctx.lines):
-            _flow_decision(fctx, "proactive.filter", status="skipped",
-                           reason_code="duplicate_output")
-            _log_participation_event(decision, "generation_skip", "duplicate_output")
-            logger.info(f"🛑 [主动发言] 群 {group_id} 与已发言内容重复，跳过")
-            return
-
-        # 逐段发送 + 回执收集（计划 §6.1）：确认送达后才记账。原实现先记账后
-        # 发送，发送失败已被记成「说过」并进入学习——正是计划 §2 优先修复项。
-        scope = ConversationScope.from_context(ctx) if _social_delivery_enabled() else None
-
-        async def _send_proactive_segment(seg_line: str, _i: int):
-            return await get_outbound_service().send(
-                _delivery_target_for_context(ctx),
-                OutboundMessage.text(seg_line),
-                bot_handle=bot,
-                deadline=getattr(ctx, "turn_deadline", None),
-            )
-
-        try:
-            delivery_plan = _seal_ctx_delivery_plan(
-                ctx, list(ctx.lines), variant_origin="proactive-group-merge",
-            )
-        except DeliveryPlanError as e:
-            _flow_decision(fctx, "proactive.send", status="blocked",
-                           reason_code="invalid_delivery_plan", summary=str(e)[:160])
-            _flow_set_outcome(fctx, "delivery_plan_rejected")
-            _log_participation_event(decision, "generation_skip", "delivery_plan_rejected")
-            return
-        receipts = await deliver_lines(
-            delivery_plan,
-            scope=scope,
-            trace_id=ctx.trace_id,
-            turn_id=ctx.turn_id,
-            send_one=_send_proactive_segment,
-            interval_seconds=SEND_INTERVAL,
-            abort_check=_stale,
-            deadline=getattr(ctx, "turn_deadline", None),
-            plan_guard=lambda plan: _delivery_plan_is_current(ctx, plan),
-        )
-        delivered = delivered_texts(receipts)
-        if not delivered:
-            _flow_set_outcome(fctx, "not_delivered")
-            _log_participation_event(decision, "send_failed", "no_segment_delivered")
-            logger.error(f"[主动发言] 群 {group_id} 全部片段发送失败（不记账不学习）")
-            return
-
-        _flow_set_outcome(fctx, "delivered")
-        # 发送后动作（计划 §6.4：不用空 span 冒充——记账/学习/记录/压缩
-        # 都真实发生在确认送达之后，proactive.after span 包住它们）
-        with _flow_span(fctx, "proactive.after"):
-            # 只对 acknowledged 段记账（计划 §6.1/§6.4）：delivered 是发送
-            # 确认后的片段，未确认段不进入任何记账/学习
-            _flow_checkpoint(fctx, "proactive.after",
-                             summary="acknowledged-only bookkeeping",
-                             metrics={"delivered_segments": len(delivered),
-                                      "total_segments": len(receipts)})
-            # 通知频率跟踪“本群已发言”，避免连续多次主动插话打扰
-            proactive.mark_spoke(group_id)
-            get_proactive().record_spoken(group_id, delivered)
-            # 评分层记账：主动插话（累积 RecentSpeechPenalty / RepetitionPenalty），
-            # 一次逻辑发言只更新一次，不按片段重复计数；文本进 novelty 比对语料
-            with contextlib.suppress(Exception):
-                get_participation_manager().note_stella_spoke(
-                    group_id, "proactive", text=delivered[0]
-                )
-            _flow_checkpoint(fctx, "proactive.after",
-                             summary="note_stella_spoke(proactive)")
-            # 回复效果学习（设计阶段六）：群级记录「主动插话是否被接话」；
-            # user_id=0 表示全群目标，效果结算按群归因（不再作为过滤条件）。
-            expression_learning.on_reply_sent(
-                group_id=group_id,
-                group_shared_space=ctx.group_shared_space,
-                user_id=0,
-                message="",
-                lines=delivered,
-                trigger="proactive",
-                turn_id=ctx.turn_id,
-                trace_id=ctx.trace_id,
-                intent=intent,
-                bot_id=scope.bot_id if scope else "",
-                connection_id=scope.connection_id if scope else "",
-            )
-            logger.success(f"✨ [主动发言] 群 {group_id}: {' | '.join(delivered)}")
-            # 群级主动（user_id=0）：origin 给出但无个人收件人——
-            # _record_bot_lines 内部把收件人与源消息留空（unknown），不猜目标
-            await _record_bot_lines(
-                int(bot.self_id), conversation_ref.storage_session_id, delivered,
-                origin=ctx, receipts=receipts,
-            )
-
-            # 主动发言同样推进对话：回复后异步触发压缩（不阻塞本次发言）
-            if ctx.tail_start_id:
-                schedule_compact(
-                    conversation_ref.storage_session_id, ctx.tail_start_id,
-                    parent_trace_id=fctx.trace_id if fctx is not None else "")
-                _flow_checkpoint(fctx, "proactive.after",
-                                 summary="compact spawned, not awaited")
-
-            _log_participation_event(
-                decision, "sent", aggregate_delivery_status([r.status for r in receipts])
-            )
+    await _impl(get_proactive_host(), bot, group_id)
 
 
 # 定时主动发言：每 PROACTIVE_CHECK_INTERVAL 秒检查一次所有启用群
@@ -5135,6 +4135,8 @@ if scheduler is not None and PROACTIVE_ENABLED:
     async def proactive_speak_job():
         # 计划 §6.4：root 在前置 return 之前创建——feature 开关关/无 Bot 等
         # 门控拒绝也有可查询原因，而不是一条空跑的定时任务。
+        # job 体在 aoede.service.proactive_timer_tick（S1-02 外移）；
+        # scheduler 注册与 Bot 选择（适配器发现）留在装配层。
         fctx = None
         try:
             from core.observability import message_flow
@@ -5173,34 +4175,9 @@ if scheduler is not None and PROACTIVE_ENABLED:
                            ))
             _timer_end(reason)
             return
-        # 逐个群尝试主动发言；单个群失败不拖垮其他群
-        for group_id in ALLOWED_GROUPS:
-            try:
-                # 睡眠/苏醒播报独立于主动发言：即使 gate 拒绝发言也要播报
-                await _announce_sleep_transition(bot, group_id)
-            except Exception as e:
-                logger.warning(f"⚠️ 睡眠播报异常（群 {group_id}）: {e}")
+        from aoede.service import proactive_timer_tick
 
-            try:
-                # 主动 @ 优先：它有明确目的（获取/验证记忆），
-                # 且已受每用户配额与冷却约束。命中即跳过本轮话题插话，
-                # 同一轮只发一次言。
-                if await _proactive_at_user(bot, group_id, flow_ctx=fctx):
-                    _flow_decision(fctx, "proactive.timer.preflight",
-                                   status="succeeded", reason_code="at_spoke",
-                                   instance_key=f"grp:{group_id}")
-                    continue
-                if PARTICIPATION_ENABLED:
-                    # 评分层接管「什么时候说」：掷骰子路径停用，
-                    # 话题插话由被动消息上的 observe() 事件驱动。
-                    _flow_decision(fctx, "proactive.timer.preflight",
-                                   status="skipped",
-                                   reason_code="participation_event_driven",
-                                   instance_key=f"grp:{group_id}")
-                    continue
-                await _proactive_speak_for_group(bot, group_id)
-            except Exception as e:
-                logger.error(f"主动发言异常（群 {group_id}）: {e}")
+        await proactive_timer_tick(get_proactive_host(), bot, fctx=fctx)
         _timer_end("closed")
 
 
@@ -5585,11 +4562,13 @@ async def _graceful_shutdown_body(lifecycle, stop_errors: list[str],
         except Exception as e:
             stop_errors.append(f"facade.stop: {e}")
 
+    from aoede.service import background_tasks as aoede_background_tasks
+    from aoede.verification.service import reply_check_tasks as aoede_reply_tasks
     from memory.consolidator import pending_tasks as pending_consolidations
     from memory.session_compact import pending_tasks as pending_compactions
 
     await wait_for_tasks(
-        _reply_check_tasks,
+        _reply_check_tasks | aoede_reply_tasks | aoede_background_tasks,
         list(pending_consolidations()) + list(pending_compactions()),
         SHUTDOWN_GRACE_SECONDS,
     )
