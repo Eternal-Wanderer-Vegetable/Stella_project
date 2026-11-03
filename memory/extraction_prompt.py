@@ -161,6 +161,28 @@ EXTRACTION_PROMPT = """你将读到一段群聊记录。已经有初步判断认
   predicate_key 一律 preference.general）：
   - 「我喜欢X」「我偏好X」→ polarity=positive；「我不喜欢X」「我讨厌X」→ polarity=negative
   - 「I like X」「I prefer X」→ polarity=positive；「I don't like X」「I dislike X」→ polarity=negative
+- 身份与拥有（statement_kind=identity_state，type 必须是 FACT，polarity 一律 positive）：
+  - 「我是X」（身份/状态，如「我是单亲家长」「我是跨性别女性」）→ predicate_key=identity.state
+  - 「我有X」（所有物/家人/宠物，如「我有两个孩子」）→ predicate_key=identity.have
+  - 「I am X」→ predicate_key=identity.state.en；「I have X」→ predicate_key=identity.have.en
+- 计划与意图（statement_kind=plan_intent，type 必须是 PLAN，polarity 一律 positive）：
+  - 「我打算X」「我想X」「我要X」「我正在X」→ predicate_key=plan.intend / plan.want /
+    plan.will / plan.doing
+  - 「I'm going to X」「I'm planning on/to X」→ predicate_key=plan.going_to.en；
+    「I want to X」→ predicate_key=plan.want_to.en
+- 能力（statement_kind=ability_habit，type 必须是 FACT，polarity 一律 positive）：
+  - 「我会X」→ predicate_key=ability.can；「I can X」→ predicate_key=ability.can.en；
+    「I play X」「I sing X」→ predicate_key=ability.play.en
+- 过去事件（statement_kind=past_event，type 必须是 FACT，polarity 一律 positive）：
+  - 「我以前/曾经X」→ predicate_key=past.used_to；「I used to X」→ predicate_key=past.used_to.en
+  - 「I went to X」→ predicate_key=past.went_to.en；「I had X」→ predicate_key=past.had.en
+- 第一人称陈述取**逐字原文**：发言者用第一人称说的事实（含缩略/过去式，如
+  「I painted that lake sunrise last year」），整句作为 exact_support_span 原样提取，
+  不要改写成三人称——三人称改写无法通过逐字绑定。
+
+值段硬规则（全部刻板句型通用，违反任何一条契约都不会 accepted，候选本身照常输出）：
+- 值段内不得出现「你/您」（夸赞他人的「我喜欢你画画」不是说话者的偏好）
+- 值段不得是占位符 X 或短于 2 个字符
 
 span 与值段硬规则（违反任何一条契约都不会 accepted，候选本身照常输出）：
 - exact_support_span 只取刻板句本身，遇到逗号/分号/后续分句立即截断：
@@ -176,6 +198,7 @@ span 与值段硬规则（违反任何一条契约都不会 accepted，候选本
 - ✗ span=「我叫小艾，以后多指教」（整句带尾巴）→ 应截为「我叫小艾」
 - ✗ 自我介绍「我叫小艾」标成 PREFERENCE → 应为 self_report + FACT + profile.nickname
 - ✗ canonical_value=「杭州，西湖区」（值段含逗号）→ 应为「杭州」
+- ✗ 「我喜欢你的画」标成说话者偏好 → 值段含「你」，是夸赞他人，不输出契约
 
 与称呼要求的边界：发言者介绍自己「我叫X」按 self_report / FACT / profile.nickname
 输出；发言者要求别人怎么称呼 TA（「以后叫我X」「别再叫我Y」）维持 PREFERENCE

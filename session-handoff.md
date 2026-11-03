@@ -1,4 +1,14 @@
-## Current Handoff — MBENCH-005 memory reliability productionization (2026-11-02)
+## Current Handoff — MEMWRT-001 evidence contract expansion productionization (2026-11-03)
+
+- Status: **done（隔离评测达标）** on `codex/evidence-contract-expansion`（独立 PR，base main=含 PR #127）。报告：`docs/reports/2026-11-03-contract-expansion-production.md`（.en 同步）。feature MEMWRT-001 done。
+- 交付：evidence_contract.py 四族新 kind（identity_state/plan_intent/ability_habit/past_event，plan_intent→PLAN 绑定 14 天 TTL）+ A2 值段过滤器（第二人称宾语/占位符/过短值，全 kind 生效）+ extraction_prompt 契约块扩枚举（第一人称逐字原文指引）；contract_study.py 新增 shipped 配置（直调生产语义，消双实现漂移）。**生产行为变化=本 PR 本体**（验收放宽是功能本体，无灰度旗标——写侧召回 10 倍提升经 202 样本标注集验证）。
+- 关键数字（gold 202，MUST 143/MAY 40/MUST_NOT 19）：MUST 召回 21.0%（A0 2.1% 的 10 倍）、MUST_NOT 误收 1/19（基线水平）、精度代理 97.1%；分类别召回见 MBENCH-004 P1 报告。
+- Restartable：① live 整合重跑验证提取模型在新提示词下的行为（NOT READY 项，P4-3 真实写侧端到端的前置）；② ASSESSMENT_VERSION bump + 结构化候选重设计（版本级归因+主体归一化，随 Rust 常量级联一起做）；③ LongMemEval 扩展与中文语料灰度。
+- 注意：本分支不含 MBENCH-005 可靠性旗标（T3 表示/充分性验证器在 codex/memory-benchmark / PR #127）；两 PR 均入 main 后=完整 P4 验收形态。PR #127 的 judge 人工复核（90% 一致率零过宽）已完成。
+- Gates：tests 32 passed（合同/提示词/可靠性/eval/consistency）+ 硬门禁 43 passed（cross_user_isolation/personal_memory_sharing/private_chat_ingress/memory_rust_promotion/memory_cas_contract）；ruff 全清；check_docs 123/0。Rust 零改动（语义合同 Python 独有实现，版本常量未动）。
+- 前置条件：live 重跑需 Strata 8081。
+
+## Previous Handoff — MBENCH-005 memory reliability productionization (2026-11-02)
 
 - Status: **done（集成完成，生产默认未改）** on `codex/memory-benchmark` / PR #127（draft）。报告：`docs/reports/2026-11-02-mbench005-production-integration.md`（.en 同步）；runbook：`docs/guides/memory-tuning.md`（.en 同步）。
 - 交付：`MEMORY_PACK_METADATA_MODE`（off/full，T3 记忆包元数据渲染）与 `MEMORY_SUFFICIENCY_GUARD_MODE`（off/shadow/enforce，三态充分性守护 + INSUFFICIENT 硬短路弃答，delivery_source_kind=memory-sufficiency-abstention）两灰度旗标 + `memory/sufficiency_guard.py`（全路径 fail-open）；feature MEMRELP-001 done。

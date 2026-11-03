@@ -141,6 +141,28 @@ The TTL is **tiered by type** (`MEMORY_CANDIDATE_MAX_OBSERVING_DAYS_BY_TYPE`): 3
 
 > A uniform 30 days costs more than a larger candidate pool: that `EVENT` stays inside the proactive-verification selection range for a full month, being picked again and again to ask the same person about. See [`bug_report_2026_8_31#1.md`](../../design_docs/bug_report/bug_report_2026_8_31%231.md), Symptom 2.
 
+### Evidence-contract acceptance families (MBENCH-004 P1 expansion, 2026-11-03)
+
+Before promotion, candidates must pass the server-side acceptance in
+`memory/evidence_contract.py`: the `verification_contract`'s `exact_support_span` must match
+the source message verbatim and its statement_kind/predicate must hit a **supported stereotyped
+family**. Six supported families (kind → type binding, all positive-only; the A2 value filters —
+second-person objects / placeholders / too-short values — apply to all families):
+
+| kind | example forms | type |
+| --- | --- | --- |
+| self_report | 我住在X / 我来自X / 我叫X / 我在X工作 (+ .en) | FACT |
+| explicit_preference | 我喜欢X / 我不喜欢X (+ .en) | PREFERENCE |
+| identity_state | 我是X / 我有X (+ .en) | FACT |
+| plan_intent | 我打算X / 我想X / 我要X / 我正在X (+ en variants) | PLAN |
+| ability_habit | 我会X / I can X / I play X | FACT |
+| past_event | 我以前/曾经X / I used to X / I went to X / I had X | FACT |
+
+Expansion basis and false-promotion audit: [contract expansion report](../reports/2026-11-03-contract-expansion-production.en.md)
+(202-sample annotation set: MUST recall 2.1%→21.0%, MUST_NOT false accepts steady at 1,
+precision proxy 97.1%); the contrast harness `memory_eval/contract_study.py` and the
+annotation set landed with PR #127 — see that report for the recomputation command.
+
 ## Promotion Layer: Gate 1 Three Tiers
 
 The decision logic in `memory/memory_manager.py` is:

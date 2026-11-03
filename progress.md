@@ -17,6 +17,15 @@
 - 门禁：`ruff check .` 全清；`check_docs.py` 123 files / 0 errors；GitNexus impact 对 build_conversation_section/prepare_turn 返回 UNKNOWN，按门禁以源码清点补证（生产调用方=turn_service.py:402/pipeline.py）。
 - 生产默认未改（两旗标 off）；灰度顺序与回退条件（退化 >5pp 即回退）见 runbook。
 
+## 2026-11-03 — MEMWRT-001 证据合同扩展生产化（独立 PR）
+
+- Scope: `memory/evidence_contract.py` 验收句型族扩容（精确镜像 MBENCH-004 P1 离线对照的 A1+A2）：新增 identity_state/plan_intent/ability_habit/past_event 四族 statement_kind（plan_intent→PLAN 绑定自动获得 14 天观察 TTL），A2 值段过滤器（第二人称宾语/占位符/过短值，全 kind 生效）进 assess_candidate 语义段；kind↔type 绑定改表驱动；extraction_prompt.py 契约硬规则块同步扩枚举（+第一人称逐字原文指引、「我喜欢你的画」新反例）。分支 `codex/evidence-contract-expansion`（基于已合并 PR #127 的 main）。
+- 验收数字（gold 202 样本，shipped=生产语义直调，`memory_eval/contract_study.py` 新增 shipped 配置消双实现漂移）：MUST 召回 **30/143（21.0%，A0 基线 2.1% 的 10 倍）**、MUST_NOT 误收 **1/19**（维持扩容前水平）、精度代理 **97.1%**——三项验收全过。
+- 设计决策：ASSESSMENT_VERSION 不 bump（避免 Rust promotion.rs 常量级联 + .pyd 重编译；家族归因经 predicate_key——claim_key 哈希含谓词）；主体归一化不做（32 例三人称漏检留待结构化重设计，提示词已教模型取第一人称逐字原文缓解）；提取模型行为变化 NOT READY（需 live 整合重跑）。
+- 验证：tests/test_memory_evidence_contract.py 新族正例+A2 反例逐 reason 断言；test_extraction_prompt_contract.py 谓词枚举扩至 25；硬门禁（cross_user_isolation/personal_memory_sharing/private_chat_ingress/memory_rust_promotion/memory_cas_contract/candidate_reinforcement）43 passed——Rust 零改动（语义合同 Python 独有实现）。
+- 过程修复：shipped 对照初版 EN 偏好谓词标签误用 preference.general.en（生产要求 preference.general）导致 2 例 MUST 差异，定位为标签 bug 修复后与 A2 对齐；plan.going_to.en 正则精确镜像研究 A1 变体集（thinking of working/putting/creating/building）。
+- 报告：`docs/reports/2026-11-03-contract-expansion-production.md`（.en 同步）；memory-system.md（.en）新增句型族清单小节。
+
 ## Current State — 2026-10-30
 
 - Active feature: `SETTINGS-DOCTOR-MODEL-CONFIG-RECOVERY` is in progress, pending user choice on the local model service/provider and the external desired configuration revision. `SETTINGS-DOCTOR-MANAGED-PORT-ACCURACY` is complete.

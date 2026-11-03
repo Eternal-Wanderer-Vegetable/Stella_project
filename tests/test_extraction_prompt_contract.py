@@ -23,6 +23,23 @@ _AUDITABLE_PREDICATE_KEYS = (
     "profile.origin.en",
     "profile.nickname.en",
     "preference.general",
+    "identity.state",
+    "identity.have",
+    "identity.state.en",
+    "identity.have.en",
+    "plan.intend",
+    "plan.want",
+    "plan.will",
+    "plan.doing",
+    "plan.going_to.en",
+    "plan.want_to.en",
+    "ability.can",
+    "ability.can.en",
+    "ability.play.en",
+    "past.used_to",
+    "past.used_to.en",
+    "past.went_to.en",
+    "past.had.en",
 )
 
 
@@ -36,7 +53,11 @@ def test_prompt_states_kind_type_polarity_bindings():
     """self_report→FACT 与 explicit_preference→PREFERENCE 的绑定措辞必须在。"""
     assert "statement_kind=self_report" in EXTRACTION_PROMPT
     assert "statement_kind=explicit_preference" in EXTRACTION_PROMPT
-    for phrase in ("type 必须是 FACT", "type 必须是 PREFERENCE",
+    assert "statement_kind=identity_state" in EXTRACTION_PROMPT
+    assert "statement_kind=plan_intent" in EXTRACTION_PROMPT
+    assert "statement_kind=ability_habit" in EXTRACTION_PROMPT
+    assert "statement_kind=past_event" in EXTRACTION_PROMPT
+    for phrase in ("type 必须是 FACT", "type 必须是 PREFERENCE", "type 必须是 PLAN",
                    "polarity=positive", "polarity=negative"):
         assert phrase in EXTRACTION_PROMPT, f"契约硬规则块丢失绑定措辞：{phrase}"
 

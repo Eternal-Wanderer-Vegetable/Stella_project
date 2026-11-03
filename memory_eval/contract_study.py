@@ -160,11 +160,79 @@ def _a3_accept(content: str) -> tuple[bool, str, str, str, str]:
     return True, family, value, fact_time, subject
 
 
+def _shipped_accept(content: str) -> tuple[bool, str, str, str, str]:
+    """shipped 配置：直接走生产合同语义（消双实现漂移）。
+
+    推断 kind/predicate/value 后调用生产 ``_semantic_contract_matches``，
+    再套生产 A2 值段过滤器（len<2 / 占位符 / 第二人称宾语）——与
+    assess_candidate 的语义段同源。
+    """
+    import re as _re
+
+    from memory import evidence_contract as ec
+    from memory.evidence_contract import (
+        _MIN_VALUE_LEN,
+        _semantic_contract_matches,
+    )
+
+    t = content.strip()
+    second_person = _re.compile(r"你|您|you|your", _re.IGNORECASE)
+    placeholder = _re.compile(r"X(?![a-zA-Z])")
+
+    families: list[tuple[str, str, Any]] = [
+        ("self_report", predicate, pattern)
+        for predicate, pattern in ec._SELF_REPORT_PATTERNS.items()
+    ]
+    families.append(("explicit_preference", "preference.general", ec._PREFERENCE_PATTERN))
+    families.append(
+        ("explicit_preference", "preference.general", ec._PREFERENCE_PATTERN_EN)
+    )
+    for kind in ("identity_state", "plan_intent", "ability_habit", "past_event"):
+        table = {
+            "identity_state": ec._IDENTITY_STATE_PATTERNS,
+            "plan_intent": ec._PLAN_INTENT_PATTERNS,
+            "ability_habit": ec._ABILITY_HABIT_PATTERNS,
+            "past_event": ec._PAST_EVENT_PATTERNS,
+        }[kind]
+        families.extend((kind, predicate, pattern) for predicate, pattern in table.items())
+
+    for kind, predicate, pattern in families:
+        matched, value = ec._match_value_pattern(pattern, t)
+        if not matched:
+            continue
+        polarity = "positive"
+        if kind == "explicit_preference":
+            m2 = pattern.fullmatch(t) or pattern.search(t)
+            cue_text = (m2.groupdict().get("cue") or "").lower() if m2 else ""
+            polarity = (
+                "negative"
+                if cue_text in {"不喜欢", "讨厌", "don't like", "dislike"}
+                else "positive"
+            )
+        # 生产 A2 值段过滤器
+        if len(value) < _MIN_VALUE_LEN:
+            return False, "shipped:too_short", value, "", ""
+        if placeholder.search(value):
+            return False, "shipped:placeholder", value, "", ""
+        if second_person.search(value):
+            return False, "shipped:second_person", value, "", ""
+        if _semantic_contract_matches(
+            t, predicate=predicate, canonical_value=value,
+            polarity=polarity, statement_kind=kind,
+        ):
+            return True, f"shipped:{predicate}", value, "unspecified", "self"
+    return False, "", "", "", ""
+
+
+SHIPPED_CONFIGS = {"A0": _a0_accept, "A1": _a1_accept, "A2": _a2_accept, "A3": _a3_accept}
+
+
 def evaluate(gold_path: Path, pool_path: Path) -> dict[str, Any]:
     gold = [json.loads(ln) for ln in gold_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
     pool = {json.loads(ln)["sample_key"]: json.loads(ln)
             for ln in pool_path.read_text(encoding="utf-8").splitlines() if ln.strip()}
     configs = {"A0": _a0_accept, "A1": _a1_accept, "A2": _a2_accept, "A3": _a3_accept}
+    configs["shipped"] = _shipped_accept
     out: dict[str, Any] = {"gold_size": len(gold), "configs": {}}
     for name, fn in configs.items():
         must_n = must_hit = 0
