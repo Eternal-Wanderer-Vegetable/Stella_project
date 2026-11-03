@@ -13,12 +13,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from memory.participation.decision import ParticipationDecision
+from memory.participation.scorer import ScoreBreakdown
 
 import memory.proactive as proactive_module
 from core.context import ChatContext
 from memory import addressing, pre_processors
-from memory.participation.decision import ParticipationDecision
-from memory.participation.scorer import ScoreBreakdown
 from memory.proactive import ProactiveController
 from memory.proactive_prompt import PROACTIVE_SKIP_MARKER
 from memory.proactive_state import get_state, record_at, record_reply_result
