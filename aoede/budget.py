@@ -80,10 +80,20 @@ class BudgetDecision:
 
 
 def budget_scope_key(bot_ref, group_id: int) -> str:
-    """连接 + Bot + 精确会话 目标的预算桶键（计划 §6.5 scope 规则）。"""
+    """连接 + Bot + 精确会话 目标的预算桶键（计划 §6.5 scope 规则）。
+
+    裸 OneBot Bot 对象的 ``connection_id`` 是惰性 API 属性（callable，
+    f-string 会得到 functools.partial 的 repr）——此时按装配层的 legacy
+    命名合成 ``legacy-qq:{self_id}``，保证定时路径与入口路径（BotRef
+    模型）落到**同一个桶**，且键跨重启稳定。
+    """
+    connection = getattr(bot_ref, "connection_id", "")
+    self_id = str(getattr(bot_ref, "self_id", "") or "")
+    if not isinstance(connection, str) or callable(connection) or not connection:
+        connection = f"legacy-qq:{self_id}"
     return (
-        f"{getattr(bot_ref, 'connection_id', '')}|"
-        f"{getattr(bot_ref, 'self_id', '')}|group:{int(group_id)}"
+        f"{connection}|"
+        f"{self_id}|group:{int(group_id)}"
     )
 
 

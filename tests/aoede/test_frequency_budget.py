@@ -223,6 +223,34 @@ def test_scope_keys_differ_per_bot_and_group(tmp_path) -> None:
     assert budget_scope_key(bot_a, 1) != budget_scope_key(bot_b, 1)
 
 
+def test_scope_key_normalizes_raw_onebot_bot(tmp_path) -> None:
+    """裸 OneBot Bot 的 connection_id 是惰性 partial：必须合成 legacy-qq 键。
+
+    真实缺陷（2026-11-03 灰度实测）：定时路径 resolve_background_bot 返回
+    裸 Bot，scope_key 落成 "functools.partial(<bound method ...>)|..." ——
+    修复后与入口 BotRef 路径（legacy-qq:{self_id}）落到同一桶。
+    """
+    from functools import partial
+    from types import SimpleNamespace
+
+    class FakeOneBotBot:
+        def __init__(self, self_id: str):
+            self.self_id = self_id
+            self.connection_id = partial(self._call_api, "connection_id")
+
+        def _call_api(self, name: str):
+            return name
+
+    raw = FakeOneBotBot("1694717255")
+    key_from_raw = budget_scope_key(raw, 950238216)
+    assert key_from_raw.startswith("legacy-qq:1694717255|"), key_from_raw
+    # 与入口 BotRef 路径同桶
+    bot_ref = SimpleNamespace(
+        connection_id="legacy-qq:1694717255", self_id="1694717255"
+    )
+    assert key_from_raw == budget_scope_key(bot_ref, 950238216)
+
+
 def test_frequency_config_validation() -> None:
     """NaN/Inf/负数/超范围回退默认并诊断；合法值保留。"""
     import importlib
