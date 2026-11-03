@@ -229,6 +229,12 @@ class ProactiveController:
         return self._last_speak.get(group_id, 0.0)
 
     def in_cooldown(self, group_id: int) -> bool:
+        # 进程内从未发言过的群没有冷却可言。旧写法以 last_spoke_at()=0.0
+        # 参与运算：fresh 进程的 monotonic()≈uptime（新容器/刚重启时远小于
+        # 600）会被误判为「刚说过话」，主动发言静默死掉 10 分钟（2026-11-03
+        # 灰度实测 + CI Linux 矩阵同源缺陷）。
+        if group_id not in self._last_speak:
+            return False
         return (time.monotonic() - self.last_spoke_at(group_id)) < PROACTIVE_COOLDOWN
 
     def messages_since_spoke(self, group_id: int) -> int:

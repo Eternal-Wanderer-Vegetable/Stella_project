@@ -88,7 +88,7 @@ def _install_host(tmp_path: Path, monkeypatch):
         "INSERT OR REPLACE INTO aoede_proactive_budget (scope_key, tokens,"
         " last_refill_utc, config_frequency, updated_at_utc)"
         " VALUES (?, 1.0, ?, 1.0, ?)",
-        ("||group:1", now_iso, now_iso),  # bot_ref=None in submit
+        ("legacy-qq:||group:1", now_iso, now_iso),  # bot_ref=None: empty connection synthesizes legacy prefix
     )
     conn.commit()
     conn.close()
