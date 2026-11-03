@@ -416,7 +416,7 @@ def test_schema_22_dry_run_and_upgrade_preserve_legacy_rows(tmp_path):
 
     preview = schema.migrate_to_latest(db_path, ctx=migration_ctx, dry_run=True)
     assert preview.ok
-    assert preview.from_version == 22 and preview.to_version == 23
+    assert preview.from_version == 22 and preview.to_version == 24
     conn = sqlite3.connect(db_path)
     try:
         assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (22,)
@@ -431,7 +431,7 @@ def test_schema_22_dry_run_and_upgrade_preserve_legacy_rows(tmp_path):
     assert [step.version for step in migrated.steps] == [23]
     conn = sqlite3.connect(db_path)
     try:
-        assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (23,)
+        assert conn.execute("SELECT version FROM schema_meta WHERE k='version'").fetchone() == (24,)
         assert conn.execute("SELECT content FROM group_messages WHERE id=1").fetchone() == (
             "untouched legacy body",
         )
