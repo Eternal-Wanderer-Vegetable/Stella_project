@@ -23,7 +23,7 @@ from datetime import date
 from nonebot import logger
 
 from config import DB_PATH
-from memory.schema import create_group_runtime_state_table, create_proactive_state_table
+from mneme.schema import create_group_runtime_state_table, create_proactive_state_table
 
 
 def _connect() -> sqlite3.Connection:
@@ -148,7 +148,7 @@ def count_user_messages_24h(group_id: int, user_id: int) -> int:
     用于 @ 配额的频率奖励。只统计用户自己的发言，AT_MENTION 与 PASSIVE 都算，
     BOT_SELF 不算（那不是用户说的）。
     """
-    from memory.timeutil import db_timestamp_str
+    from mneme.timeutil import db_timestamp_str
 
     since = db_timestamp_str(offset_hours=-24)
     try:

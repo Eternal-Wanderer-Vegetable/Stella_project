@@ -187,7 +187,7 @@ class ParticipationManager:
                 MEMORY_EMBEDDING_MODEL,
                 MEMORY_EMBEDDING_TIMEOUT,
             )
-            from memory.embeddings import EmbeddingService
+            from mneme.embeddings import EmbeddingService
 
             svc = EmbeddingService(
                 MEMORY_EMBEDDING_BASE_URL,
@@ -204,7 +204,7 @@ class ParticipationManager:
         if svc is None:
             return None
         try:
-            from memory.embeddings import cosine_similarity
+            from mneme.embeddings import cosine_similarity
 
             a = await svc.embed(text)
             b = await svc.embed(other)
@@ -550,7 +550,7 @@ class ParticipationManager:
             import sqlite3
 
             from config import DB_PATH
-            from memory.schema import create_participation_topics_table
+            from mneme.schema import create_participation_topics_table
 
             conn = sqlite3.connect(DB_PATH)
             try:

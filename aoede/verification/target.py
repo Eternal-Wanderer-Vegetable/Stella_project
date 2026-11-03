@@ -117,7 +117,7 @@ def _cooldown_elapsed(last_at_at: str | None) -> bool:
     此前用 datetime.now()（本地时间）比较导致该冷却在 UTC+8 下永不生效。
     解析失败时保守放行——宁可多等一轮，不如因脏数据永久卡死。
     """
-    from memory.timeutil import seconds_since
+    from mneme.timeutil import seconds_since
 
 
     if not last_at_at:
@@ -203,7 +203,7 @@ def _fetch_observing_candidate(
     if not bot_id or group_id <= 0 or not expected_conversation:
         return None
     try:
-        from memory.evidence_contract import (
+        from mneme.evidence_contract import (
             supports_assessment_version,
             verify_source_snapshot,
         )

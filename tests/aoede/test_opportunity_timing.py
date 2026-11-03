@@ -12,6 +12,7 @@ new path's preflight.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from types import SimpleNamespace
 
 import pytest
@@ -38,10 +39,8 @@ class FakeHandle:
     def cancel(self) -> None:
         if not self._cancelled:
             self._cancelled = True
-            try:
+            with contextlib.suppress(ValueError):
                 self._loop.pending.remove(self._entry)
-            except ValueError:
-                pass
 
 
 class FakeLoop:

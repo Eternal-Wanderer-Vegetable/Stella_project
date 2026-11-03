@@ -174,7 +174,7 @@ def validate_contract_consistency(
 
     if conn is not None:
         try:
-            from memory.evidence_contract import (
+            from mneme.evidence_contract import (
                 supports_assessment_version,
                 verify_source_snapshot,
             )
