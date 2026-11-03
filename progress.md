@@ -1,3 +1,10 @@
+## 2026-11-03 — PR #129 起草与首轮验收
+
+- Scope / Current State：分支推远端并创建 **draft PR #129**（base main）。验收首轮完成：payload import smoke、native wheel schema24 重建与 parity、docker 镜像 smoke 合同补齐、全量复跑、flow 漂移门禁收口。
+- Evidence：① standalone-python payload 含 aoede/mneme/memory，解压树内 canonical 导入与兼容层身份验证通过（python 变体不含 memory_rust 为设计行为）；② cargo fmt/clippy clean，cargo test 26 passed（测试夹具随 schema24 更新，463612e），隔离 venv 安装新 wheel 导出 24、收 24 拒 23（'unsupported memory schema: expected 24, got 23'），`validate_rust_fullchain.py` PASS 且 python/native differ=false，仓库运行时 `_native.pyd` 已由新 wheel 刷新（gitignore 制品，原为 schema20）；③ docker-publish 镜像内 import 清单补 aoede/mneme（1dd77d8），镜像构建由 CI 在 PR 上执行；④ 全量 4302 passed，19F+4E 均为基线/环境既有（windows/test_process_tree 为记忆在档的基线失败）；⑤ flow manifest 在最终 HEAD 重生成（c809776）——319b9ff 的导入改写曾使旧 manifest 漂移，drift gate 正确拦截。
+- What's Next：CI 在 PR 上跑（含 docker smoke）；剩余 NOT READY——真模型/QQ 灰度、Windows 安装回滚 VM 验收、时机/自然度标注协议冻结。PR 过审后移除 draft。
+- Files：feature_list.json（验收证据）；提交 463612e、1dd77d8、c809776。
+
 ## 2026-11-03 — Aoede / Mneme 阶段二实施（S2-01…S2-04）
 
 - Scope / Current State：分支 `codex/aoede-mneme-proactive`。阶段二四个工作包代码面完成：S2-01 求证持久生命周期（ae463ae）、S2-02 统一机会流程（a1e4767）、S2-03 PROACTIVE_FREQUENCY 持久预算（12af2da）、S2-04 行为验收与双语文档（本提交）。

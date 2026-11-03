@@ -1,3 +1,10 @@
+## Current Handoff — PR #129 draft + acceptance round 1 (2026-11-03)
+
+- Status: **draft PR #129 已建**（base main，14 提交）。首轮验收通过：payload smoke、native wheel schema24（隔离安装 parity + fullchain PASS + 门禁收 24 拒 23）、docker smoke 合同补齐、全量 4302 passed（余量均基线/环境既有）、flow 门禁最终 HEAD 收口。
+- Current Objective：等 CI 结果；剩余 NOT READY 为外部验收（真模型/QQ 灰度、Windows VM 安装回滚、自然度标注协议）——按计划 §7 Gate G2 逐级灰度前必须冻结标注协议。
+- Blockers：无真模型与真实 QQ 环境；Windows 干净 VM；CI 的 docker smoke 首次覆盖 mneme/aoede 导入，如镜像构建失败按日志修。
+- Recommended Next Step：盯 PR #129 CI；CI 绿后按计划 §7 G2 灰度清单准备影子验收配置；验收通过后去 draft。
+
 ## Current Handoff — Aoede / Mneme stage 2 code complete (2026-11-03)
 
 - Status: **S1-00…S2-04 全部工作包代码完成** on `codex/aoede-mneme-proactive`（10 提交，837a089→S2-04）。G2 验收矩阵未跑满：真模型/QQ 灰度/Windows/native wheel/全量复跑未做——**overall NOT READY**（按计划 §13 不以源码存在替代验收）。
