@@ -1,3 +1,11 @@
+## 2026-11-03 — Aoede / Mneme 两阶段工程计划
+
+- Scope / Current State：仅制定计划；生产代码、测试、配置、数据库与服务均未改。交付 [Aoede / Mneme 工程计划](docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)，源码锚定 `837a0892e4f33e9341e0ecd1ac33049afad82271`。`AOEDE-MNEME-PLAN` 登记为规划完成；现有 active feature 的在途状态保留，不启动实施。
+- What's Done：分享讨论正文与当前源码交叉核验；两阶段分别为行为等价拆分命名、统一主动参与与一次性求证。列出接口、持久化事务、UNKNOWN 回执、预算、配置、native/schema、打包、离线/模型/QQ 分层验收及阶段提交。
+- Evidence：基线 `python scripts/check_docs.py` 为 123 文件 / 1333 链接 / 577 锚点 / 0 错误，`git diff --check` 通过。GitNexus 1.6.12 `analyze --index-only --pdg --workers 1` 刷新成功（122051 nodes / 308804 edges / 1253 clusters / 805 flows），实际 workspace index 的 runner 身份一致；初读旧 meta 的身份不匹配判断已撤回。核心符号已解析，retrieve_memories 为 CRITICAL / 8 direct，PDG controls 145条完整返回。新鲜 detect all：3 files / 2 symbols / 0 flows / LOW；compare main：101 / 524 / 20 / CRITICAL，无 partial/truncated。`progress.md` 首次 pre-edit HIGH 保留为历史，刷新后 MEDIUM / 5 direct；大文件跳过与图覆盖限制保留。最终 docs 123/1335/577/0，diff check通过。
+- What's Next：按计划 S1-00 在当前合适 checkout 重新锚定源码与图谱，执行阶段一；阶段一验收通过后才执行阶段二。尚未运行新业务测试、真实模型或 QQ 灰度；整体实现 **NOT READY**。
+- Files：本轮只新增计划并更新任务状态三文件；原有 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1` 保留。
+
 ## 2026-10-31 — MBENCH-002 记忆系统公开数据集基准评测
 
 - Scope: 新建 `memory_eval/` 评测包（隔离回放真实摄入→检索→作答→judge 全链路）+ `scripts/fetch_locomo.py`/`adapt_locomo.py`（pin+sha256，数据不入库）+ 12 个单测；分支 `codex/memory-benchmark`（基于 cf63061）。按 ChatGPT「研究Hy记忆」讨论的 SMB 结论执行。

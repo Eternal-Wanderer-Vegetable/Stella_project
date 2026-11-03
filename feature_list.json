@@ -2277,6 +2277,53 @@
       "acceptance": "shipped（生产语义直调）对 202 样本：MUST 召回 30/143（21.0%，A0 基线 10 倍）、MUST_NOT 误收 1/19（维持基线）、精度代理 97.1%；plan_intent→PLAN 绑定让计划类自动获得 14 天时效 TTL。",
       "evidence": "docs/reports/2026-11-03-contract-expansion-production.md",
       "branch": "codex/evidence-contract-expansion"
+    },
+    {
+      "id": "AOEDE-MNEME-PLAN",
+      "name": "Aoede / Mneme 子系统拆分与主动发言改造计划",
+      "description": "根据分享讨论与当前源码制定两阶段落地计划；仅交付计划，不实施业务改动。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "计划明确 Aoede/Mneme 代码、数据和接口边界与兼容策略",
+        "阶段一行为等价拆分，阶段二覆盖上下文参与、一次性求证、统一预算、时机与文档",
+        "每个工作包含目标文件、验收、迁移、回滚与提交检查点，图局限和外部验收缺口明确"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md",
+          "result": "Pinned to 837a0892e4f33e9341e0ecd1ac33049afad82271. Discussion/current source reviewed. GitNexus 1.6.12 analyze --index-only --pdg --workers 1 completed (122051 nodes / 308804 edges / 1253 clusters / 805 flows). Core impacts resolved: pick_target LOW/1 direct; retrieve_memories CRITICAL/8 direct; all consumers accounted. Complete 145-edge controls slice plus target/replied flows checked. Docs 123 files / 1335 links / 577 anchors / 0 errors; diff check passed. Fresh detect all: 3 files / 2 symbols / 0 flows / LOW; compare main: 101 files / 524 symbols / 20 flows / CRITICAL, neither partial nor truncated. Skipped large files and graph coverage limits retained. Planning only; runtime/implementation NOT READY."
+        }
+      ]
+    },
+    {
+      "id": "AOEDE-MNEME-IMPL",
+      "name": "Aoede / Mneme 子系统拆分与主动发言改造实施",
+      "description": "按 2026-11-03 计划两阶段实施：S1 行为等价拆分（aoede/mneme 包 + 兼容层 + 发布），S2 上下文优先参与、一次性求证持久生命周期与统一预算。",
+      "status": "in_progress",
+      "dependencies": ["AOEDE-MNEME-PLAN"],
+      "scope": [
+        "stella_contracts/aoede.py（新）",
+        "aoede/（新）、mneme/（新）、memory/（兼容层）",
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "scripts/build_release_package.py、docs/architecture/aoede|mneme（新）",
+        "tests/aoede/（新）等定向测试"
+      ],
+      "done_criteria": [
+        "G1：aoede/mneme 正式包与 memory 兼容层同一模块/单例身份加载，行为等价基线不变，发布 payload 与双语命名文档同步",
+        "G2：context-only/context+memory 同一决策流程；一次性求证持久终态与 tombstone 防复活；PROACTIVE_FREQUENCY 持久预算；被动/预约合同独立",
+        "缺离线回归、真模型、QQ 灰度或 Windows 安装验收时保留 NOT READY，不以源码存在替代验收"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md",
+          "result": "S1-00 baseline on branch codex/aoede-mneme-proactive at 837a089: targeted proactive suite 106 passed / 2 errored (tests/runtime/test_proactive_native.py fixture needs nonebot_plugin_alconna, missing in current interpreter - environmental, pre-existing). Fresh GitNexus impact re-confirmed at this HEAD: pick_target LOW/2, _proactive_at_user LOW/1, _check_reply_later LOW/2, ParticipationManager LOW/13, retrieve_memories CRITICAL/19 (reported; behaviour-equivalent split + all 8 direct consumers regressed per plan)."
+        }
+      ]
     }
   ]
 }

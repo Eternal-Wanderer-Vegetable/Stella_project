@@ -1,3 +1,11 @@
+## Current Handoff — Aoede / Mneme plan (2026-11-03)
+
+- Current Objective：本轮规划交付完成，实施未启动。完整计划：[Aoede / Mneme 两阶段工程计划](docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)。任务 `AOEDE-MNEME-PLAN`；原有 active feature 保留，勿据此启动其遗留运行操作。
+- Files：计划、`feature_list.json`、`progress.md`、本交接；无生产源码/配置/数据修改。源 HEAD `837a0892e4f33e9341e0ecd1ac33049afad82271`，分支 `codex/evidence-contract-expansion`。
+- Evidence：讨论已从分享页 streamed JSON 提取并与源码核对；基线 docs 123/1333/577/0、diff check 通过。GitNexus 1.6.12 已刷新至本轮 HEAD（122051 nodes / 308804 edges / 1253 clusters / 805 flows）；实际 runner 身份一致，旧 meta 初判已纠正。retrieve_memories 为 CRITICAL / 8 direct，PDG controls 全部145条返回；图覆盖限制详见计划 §4–5。新鲜 detect all LOW（3文件/2符号/0流程），compare main CRITICAL（101/524/20），无partial/truncated；最终 docs123/1335/577/0、diff check通过。计划写入使用 gitnexus-plan 安全 helper（WSL Linux）；原生 win32 writer 不支持已披露。
+- Blockers：没有代码实施证据；离线回归、真实模型、真实 QQ 与 Windows 发布验收均待执行。不能以计划完成宣布主动发言问题修复。保留当前工作树的四组既有未跟踪修改。
+- Recommended Next Step：读计划 §7，先 S1-00 再逐包提交。先隔离 Aoede/Mneme 并验行为等价，再实现统一上下文参与、持久求证终态与预算；不降低现有记忆晋升/隐私门槛，不动生产库或本机配置。执行测试前显式设置临时 `STELLA_HOME`。
+
 ## Current Handoff — MEMWRT-001 evidence contract expansion productionization (2026-11-03)
 
 - Status: **done（隔离评测达标）** on `codex/evidence-contract-expansion`（独立 PR，base main=含 PR #127）。报告：`docs/reports/2026-11-03-contract-expansion-production.md`（.en 同步）。feature MEMWRT-001 done。
