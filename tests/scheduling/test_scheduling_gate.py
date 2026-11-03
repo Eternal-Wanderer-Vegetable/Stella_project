@@ -62,13 +62,13 @@ def test_scheduled_gate_allows_when_all_gates_pass(permissive_env):
 
 
 def test_scheduled_gate_ignores_new_message_heuristic(permissive_env, monkeypatch):
-    """群里不热闹（新消息门槛不过）不影响预约任务——这是唯一的豁免。"""
+    """新消息门槛对预约任务从未生效；2026-11-03 计划 §6.2 后交互路径
+    也已退役该门槛——两条通道都不再被「群不够热闹」拦下。"""
     permissive_env._enough = False
     allowed, _ = gate.can_speak_for_scheduled(12345)
     assert allowed
-    # 对照：交互版会被同一条门槛拦下
     interactive_allowed, _ = gate.can_speak(12345, "join")
-    assert not interactive_allowed
+    assert interactive_allowed
 
 
 @pytest.mark.parametrize(
