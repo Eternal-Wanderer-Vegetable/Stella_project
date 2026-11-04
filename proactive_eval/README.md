@@ -18,6 +18,8 @@ All reports retain total, completed, failed, skipped, and not-applicable counts.
 
 ## Commands
 
+Actor resume fingerprints include the selected actor plugin path alongside the pinned inputs, code commit, dirty-tree digest, protocol, resolved configuration, and seed. Scorer fingerprints include the scorer plugin path and gold hash; changing either plugin rejects resume before reusing results.
+
 Validate frozen adapter output with the exact file hashes recorded when those files were prepared:
 
 ```powershell

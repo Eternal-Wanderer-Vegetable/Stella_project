@@ -28,6 +28,17 @@
 - git diff --cached --check 与 git diff --check — PASS。
 - GitNexus pre-edit：VirtualClock upstream LOW（7 impacted / 3 direct / 0 processes）；core/evaluation/runner.py File MEDIUM（5 direct / 0 processes，未改）；memory_eval/scenarios.py File MEDIUM（6 direct / 0 processes，未改）；memory_eval.runner.py File LOW，但 run exact context 显示21个未解析调用点下界，未改。提交前 detect-changes scope=all：18 files / 6 indexed symbols / 0 processes / LOW；索引报告的6个符号都来自已跟踪 README 与状态文档，新加源码文件在当前索引中还没有符号，因此不将图中空结果解释为无调用者。scope=compare base_ref=main：338 files / 2649 symbols / 113 processes / CRITICAL；changed-symbol 列表 capped，为分支累计风险且保留不豁免。
 
+## B01 跟进硬化：actor 插件身份进入续跑指纹
+
+B01 推送后复核发现：CLI 的 actor 指纹包含 registry、协议、源码/工作区、scenario 文件、有效配置和 seed，但漏了所选 actor plugin 路径。同一 run 目录若换 actor plugin 再续跑，旧输出可能被复用。跟进修复把 actor plugin path 写入有效配置摘要；scorer plugin path 与 gold SHA-256 原已单独绑定。
+
+- 新增 CLI 回归：先以 fixture actor 完成一条样本，再用不同 actor plugin 对相同 run 目录请求 resume；必须返回 fingerprint mismatch，替代 actor 不得执行。
+- 定向 evaluation 五套测试复跑：**41 passed**（含上一版 40 项与该续跑回归）；pytest-asyncio loop scope 弃用警告仍存在。
+- Ruff：**PASS**；文档门禁：127 files / 1359 links / 577 anchors / 0 errors；git diff check：**PASS**。
+- GitNexus pre-edit：cli.py File LOW（1 direct / 0 processes）；fingerprint.py File LOW（1 direct / 0 processes）；测试文件为 UNKNOWN/0，源码搜索确认只由 pytest 发现与测试中的插件路径动态导入；session-handoff.md LOW（2 direct / 20 impacted，图推导180 processes / 20 modules，属于文档引用，不改执行源码）。函数级 context 对新 proactive_eval 符号仍 UNKNOWN，调用点通过源码搜索补证。
+- 跟进阶段 GitNexus detect-changes all：7 files / 7 indexed symbols / 0 processes / LOW。首次把回归插入旧 contracts 测试文件时，diff 映射到后续未改动的通用 calls 属性并报 CRITICAL / 794 flows；context 与源码对照确认是行位移导致的符号错配。将新测试移到独立文件后重跑，all 回到 LOW。此处是纠正错误映射，未豁免真实风险。
+- compare main repeated snapshots：339 files，changed symbols在791–1142间波动、affected processes为793–794，risk始终CRITICAL。--limit 5000/10000/50000 的重复调用有时仍 capped；已通过提高 limit 重跑，未截断样本包括339 files / 791 symbols / 794 processes（limit 50000）及339 / 940 / 794（limit 100000）。此为分支累计影响，计数有波动，按CRITICAL保留不豁免。后续提交刷新索引。
+
 ## 限制与后续
 
 B01 的输入为本地合成夹具；没有下载/解析公开测试集，没有启动模型、Bot、服务或平台，也没有读写生产聊天、数据库或用户配置。CLI 的临时 E2E 只证明合同与隔离边界可运行，不证明公开数据转换准确、真实组件决策正确或产品效果提升。
@@ -36,4 +47,4 @@ B00 的检索基线仍 PARTIAL；embedding/hybrid 与新 LoCoMo judge 未运行�
 
 ## 恢复点
 
-当前提交只涵盖 B01。回滚本包可 revert 英文提交 feat(eval): add isolated proactive evaluation runner；B00 协议/来源冻结提交独立保留。原有未跟踪 .zcode/、debug.log、extensions/ligamina_bridge/、scripts/start_managed_stella.ps1 不属于本包。
+B01主体提交为1dea6c4，actor插件指纹硬化独立提交；按需要分别 revert feat(eval): add isolated proactive evaluation runner 与 follow-up fix。B00协议/来源冻结提交独立保留。原有未跟踪 .zcode/、debug.log、extensions/ligamina_bridge/、scripts/start_managed_stella.ps1 不属于本包。

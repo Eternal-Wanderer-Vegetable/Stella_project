@@ -129,6 +129,7 @@ def _run(args: argparse.Namespace, registry: dict[str, Any], dataset: dict[str, 
         effective_config={
             "dataset_id": args.dataset_id,
             "dataset_revision": (dataset.get("source") or {}).get("revision"),
+            "actor_plugin": args.actor,
             "scenario_sha256": scenario_hash,
             "seed": args.seed,
             "resolved": effective_config,

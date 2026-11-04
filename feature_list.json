@@ -2408,6 +2408,10 @@
         {
           "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b01.md",
           "result": "B01 complete on codex/proactive-memory-benchmark-implementation. Five isolated evaluation suites: 40 passed (pytest-asyncio loop-scope deprecation warning); synthetic CLI validate/run passed with wrong gold hash rejected before worker startup, separate actor/scorer subprocesses each completed 1/1. Ruff and docs passed. Only generic JSONL contracts were exercised; When2Speak/Social source adapters, public data, models, product outcomes and platform acceptance remain NOT RUN / NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b01.md",
+          "result": "B01 follow-up hardening: actor plugin path is now included in the actor resume fingerprint. CLI regression verifies a different actor plugin is rejected before it can produce a result. Five isolated evaluation suites: 41 passed (pytest-asyncio loop-scope deprecation warning); Ruff and docs passed. Commit and bilingual PR comment recorded separately."
         }
       ]
     }
