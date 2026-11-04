@@ -1,3 +1,14 @@
+## 2026-11-04 — 主动参与与记忆 Benchmark B01
+
+- Scope / Current State：B01 已单独实现并验证，branch codex/proactive-memory-benchmark-implementation；PR #130 base codex/aoede-mneme-proactive。AOEDE-MNEME-BENCH-IMPL 是唯一 in_progress feature；B00/B01 完成不代表 benchmark 或产品验收通过。
+- What's Done：建立 JSONL registry/schema/hash adapter、actor/scorer 隔离子进程 CLI、指纹/断点续跑/恢复审计、虚拟时间事件排序、参与指标与只读旧报告适配。保留 memory_eval 历史 runner/scenario/report 不变；旧 memory_eval.runner.run 图调用下界包含21个未解析调用点。
+- Evaluation：隔离 Python 3.12.14 五套 evaluation 测试 **40 passed**；synthetic CLI E2E validate 通过、错误 gold hash 提前拒绝、actor/scorer 独立进程各1/1完成；Ruff通过；check_docs 127/1361/577/0。pytest-asyncio 有 loop scope 弃用警告。所有数据为合成夹具，没运行公开集或模型。
+- GitNexus pre-edit：VirtualClock LOW（7 impacted / 3 direct / 0 processes）；core/evaluation/runner.py MEDIUM（5 direct）但未改；memory_eval/scenarios.py MEDIUM（6 direct）但未改。旧 runner 的精确 run 调用关系为21个未解析调用点下界。提交前 GitNexus all：18 files / 6 indexed symbols / 0 processes / LOW；新源码仍未进入索引，空边不作为无调用者证明。compare main：338 files / 2649 symbols / 113 processes / CRITICAL，列表 capped，作为分支累计风险保留。
+- Final gates：文档、40项定向测试、Ruff、合成CLI、cached diff check 与 GitNexus detect-changes all/compare 完成。
+- Blockers：B02公开数据源格式 adapter 与无记忆原样基线未运行；B00完整检索基线PARTIAL；B06标注资源未安排；B08目标/授权/7日观察未满足。机制与产品效果仍 NOT READY。
+- Next：提交B01英文独立commit并在PR #130写中英文评测结论；随后进入B02 When2Speak token 与 Social AI adapter/基线。
+- Files：proactive_eval/、core/evaluation/events.py、tests/evaluation/test_proactive_eval_contracts.py、B01报告及状态文件。
+
 ## 2026-11-04 — 主动参与与记忆 Benchmark B00
 
 - Scope / Current State：新分支 `codex/proactive-memory-benchmark-implementation`；切换 active feature 为 `AOEDE-MNEME-BENCH-IMPL` / in_progress；原 `AOEDE-MNEME-IMPL` 记为 blocked（implementation follow-up 暂停于独立评测任务期间，产品仍 NOT READY）。完成 B00 协议与来源冻结；未触及业务源码。

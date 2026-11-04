@@ -1,10 +1,11 @@
-## Current Handoff — proactive / memory benchmark B00 (2026-11-04)
+## Current Handoff — proactive / memory benchmark B01 (2026-11-04)
 
-- Current Objective：B00 已单独提交，按计划继续 B01–B07 的离线工作；每包评测完成后独立提交英文 commit，并在 PR 评论中记录中英文结论。B06 需人工标注资源；B08 在用户给出平台/范围并明确授权至少7天观察前不运行。`AOEDE-MNEME-IMPL` 原有 G2/发布 VM 门禁仍 NOT READY。
-- Files：[计划](docs/plans/2026-11-04-proactive-memory-benchmark-plan.md)、[B00报告](docs/reports/2026-11-04-proactive-memory-benchmark-b00.md)、`proactive_eval/`、任务状态三文件。保留既有未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`，不要纳入 benchmark commit。
-- Verification Evidence：冻结14条数据 registry、来源许可/hash/revision与分母；6个schema、registry、actor gold隔离、零分母指标均通过校验。PITCH窗口交集329/384（旧计划296/384未复现）；PersonaMem rule/FTS各5000/5000 case pass，但precision33.4%、pollution66.6%，不可称端到端成功。完整基线PARTIAL：缺11,115向量fixture，embedding/hybrid及新LoCoMo judge未跑。无模型、Bot、生产数据/配置或服务访问。详见 progress.md B00 section 与 baseline lock。
-- Blockers：G0 fixture重放/resume/零样本行为待B01；B06暂无两名标注员+裁决排期；B08 scope/明确授权/七天观察未满足。跨层与产品验收NOT READY。
-- Next：完成 B01 数据适配器、actor/scorer隔离、隔离命令行和失败安全/续跑验证；基于计划每包重查impact与门禁。PR base为 `codex/aoede-mneme-proactive`。
+- Current Objective：B01 实现及评测已完成，按计划进入 B02 数据适配与无记忆基线；每包独立英文提交，评测后在 PR #130 写中英文结论。PR base codex/aoede-mneme-proactive。
+- Files：计划 docs/plans/2026-11-04-proactive-memory-benchmark-plan.md、B00/B01 报告、proactive_eval/、core/evaluation/events.py、tests/evaluation/test_proactive_eval_contracts.py 与任务状态文件。既有未跟踪 .zcode/、debug.log、extensions/ligamina_bridge/、scripts/start_managed_stella.ps1 不纳入提交。
+- Verification Evidence：evaluation定向回归40 passed（带pytest-asyncio loop scope弃用警告）；CLI合成样本 validate通过、错gold hash预启动拒绝、分离actor/scorer子进程1/1完成；Ruff通过；check_docs.py 127/1359/577/0；GitNexus all 18 files / 6 indexed symbols / 0 processes / LOW，新增源码尚未索引；compare main 338 files / 2649 symbols / 113 processes / CRITICAL（列表 capped，累计风险）。未运行公开数据集、真实模型、Bot、生产数据/配置或平台。
+- Blockers：B00检索基线PARTIAL；B02真实公开文件适配待做；B06中文双标/裁决资源未排期；B08指定目标、明确授权和七天观察未满足。效果、平台与发布验收NOT READY。
+- Next：提交B01后评论PR #130；开始B02 When2Speak token与Social AI无记忆基线，并先复查分支/impact。
+- Active feature切换时 AOEDE-MNEME-IMPL 暂记 blocked，其发布、模型、QQ与Windows VM门禁仍 NOT READY。恢复原实现工作前需重新协调唯一 active feature。
 
 ## Current Handoff — PR #129 Rust/Mneme 文档收尾 (2026-11-04)
 

@@ -2400,10 +2400,14 @@
         {
           "report": "docs/plans/2026-11-04-proactive-memory-benchmark-plan.md",
           "result": "Planned only. B00-B08 not started; original AOEDE-MNEME-IMPL remains the sole active feature. No model, Bot, production data/configuration or service operations performed."
-      },
-      {
-        "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b00.md",
-        "result": "B00 complete on codex/proactive-memory-benchmark-implementation. Frozen 14-source registry, actor/scorer/report schemas, endpoints, G0-G7 preregistered targets, annotation and call budgets, and a partial PersonaMem baseline. Both rule and FTS reruns completed 5000/5000 with 33.4% memory precision, 100% retrieval recall, 66.6% pollution, 98.1% mode accuracy, and 0/1558 forbidden activation. Embedding/hybrid and new LoCoMo judge run NOT RUN because fixture/service was not available or authorized. All six schemas and registry validated; actor gold leakage and scored zero denominator were rejected. G0 runner replay/resume checks remain for B01; implementation and product acceptance NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b00.md",
+          "result": "B00 complete on codex/proactive-memory-benchmark-implementation. Frozen 14-source registry, actor/scorer/report schemas, endpoints, G0-G7 preregistered targets, annotation and call budgets, and a partial PersonaMem baseline. Both rule and FTS reruns completed 5000/5000 with 33.4% memory precision, 100% retrieval recall, 66.6% pollution, 98.1% mode accuracy, and 0/1558 forbidden activation. Embedding/hybrid and new LoCoMo judge run NOT RUN because fixture/service was not available or authorized. All six schemas and registry validated; actor gold leakage and scored zero denominator were rejected. G0 runner replay/resume checks remain for B01; implementation and product acceptance NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b01.md",
+          "result": "B01 complete on codex/proactive-memory-benchmark-implementation. Five isolated evaluation suites: 40 passed (pytest-asyncio loop-scope deprecation warning); synthetic CLI validate/run passed with wrong gold hash rejected before worker startup, separate actor/scorer subprocesses each completed 1/1. Ruff and docs passed. Only generic JSONL contracts were exercised; When2Speak/Social source adapters, public data, models, product outcomes and platform acceptance remain NOT RUN / NOT READY."
         }
       ]
     }
