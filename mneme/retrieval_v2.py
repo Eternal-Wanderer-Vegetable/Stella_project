@@ -1,0 +1,806 @@
+# SPDX-License-Identifier: AGPL-3.0
+# Copyright (c) 2026 Stella Project Contributors
+# 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
+"""记忆检索 v2（Context-aware Memory Activation）。
+
+对应设计文档《Memory Retrieval Specification v1.0》。与旧 Retriever 的关键区别：
+旧的是“找最相关的文本”，v2 是“找当前 Stella 行为真正需要的记忆”。
+
+流程（Policy 优先于 Similarity）：
+    Mode Detection → Policy Filter → Visibility Access → Hybrid Search
+    → Rank（Policy 权重）→ 分离聊天素材与行为约束 → 动态上限
+
+与旧 Retriever 的关系：双轨并存。旧 get_group_memories / get_user_memories 保留
+（MEMORY_V2_ENABLED=False 时回退）；本模块是 v2 的检索入口。
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+from nonebot import logger
+
+from config import (
+    DB_PATH,
+    LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
+    MEMORY_SCORE_MIN,
+    MEMORY_V2_ENABLED,
+    RAG_ENABLED,
+    RAG_TOP_K,
+)
+from mneme import scope_versions
+from mneme.cache_keys import memory_history_version, topic_hash
+from mneme.ownership import MemoryAccessScope, owner_scope_sql
+from mneme.policy import (
+    MODE_CONFLICT_AVOID,
+    VISIBILITY_INTERNAL,
+    VISIBILITY_OPEN,
+    VISIBILITY_RESTRICTED,
+    detect_mode,
+    mode_limit,
+    normalize_mode,
+    rank_memories,
+    split_behavior_constraints,
+    usage_allowed,
+)
+from mneme.text_similarity import is_similar, merge_content, same_normalized_text
+from mneme.timeutil import log_sqlite_error
+
+
+@dataclass
+class RetrievalResult:
+    """一次 v2 检索的完整结果（含决策轨迹，供 Evaluation & Debug）。"""
+
+    mode: str = ""
+    conversation_memories: list[dict[str, Any]] = field(default_factory=list)
+    behavior_constraints: list[dict[str, Any]] = field(default_factory=list)
+    trace: dict[str, Any] = field(default_factory=dict)
+
+
+def _connect() -> sqlite3.Connection:
+    return sqlite3.connect(DB_PATH)
+
+
+def _parse_usage_tags(value: Any) -> list[str]:
+    """从库里的 usage_tags（JSON 字符串或 None）解析为列表。"""
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
+def _row_to_memory(row: tuple[Any, ...]) -> dict[str, Any]:
+    """把 v2 检索 SQL 行转成记忆 dict。
+
+    行结构：id, group_shared_space, user_id, type, content, importance, confidence,
+            visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at,
+            last_confirmed_at
+
+    两个时间戳都带上：排序的新鲜度维度读 last_confirmed_at（证据有多新），
+    last_accessed_at 只在旧库缺 last_confirmed_at 时作为回退（见 policy._mem_timestamp）。
+
+    v16 起（多人身份修复计划 §6.1）追加归属列（owner_type/owner_key/subject_key/
+    audience，按列可用性防御读取）：prompt 渲染用它区分「当前用户的记忆」与
+    「其他成员的公开背景」。缺列（旧库回退/native 结果）时键不存在——渲染侧
+    按 legacy SPACE 语义降级，不得据此伪造归属。
+    """
+    mem = {
+        "id": row[0],
+        "group_shared_space": row[1],
+        "user_id": row[2],
+        "type": row[3] or "FACT",
+        "content": row[4] or "",
+        "importance": row[5],
+        "confidence": row[6],
+        "visibility": row[7] or VISIBILITY_OPEN,
+        "usage_tags": _parse_usage_tags(row[8]),
+        "trigger_data": row[9],
+        "behavior_rule": row[10],
+        "last_accessed_at": row[11],
+        "last_confirmed_at": row[12] if len(row) > 12 else None,
+    }
+    if len(row) > 16:
+        mem["owner_type"] = row[13] or ""
+        mem["owner_key"] = row[14] or ""
+        mem["subject_key"] = row[15] or ""
+        mem["audience"] = row[16] or ""
+    return mem
+
+
+def _select_columns() -> str:
+    return (
+        "id, group_shared_space, user_id, type, content, importance, confidence, "
+        "visibility, usage_tags, trigger_data, behavior_rule, last_accessed_at, "
+        "last_confirmed_at"
+    )
+
+
+# 归属呈现列（多人身份修复计划 §6.1）：只加在 Python 主检索路径的 SELECT 尾部，
+# _row_to_memory 按行长度防御读取。列是否存在以 PRAGMA 探测为准——v2 形状表
+# （无 owner 列）继续走原 13 列查询与原评分行为，不因多出的列跌进 legacy 回退。
+_OWNER_COLUMNS = "m.owner_type, m.owner_key, m.subject_key, m.audience"
+_OWNER_COLUMN_NAMES = ("owner_type", "owner_key", "subject_key", "audience")
+
+
+def _owner_columns_available(cursor: sqlite3.Cursor, table: str = "memories") -> bool:
+    try:
+        cursor.execute(f"PRAGMA table_info({table})")
+        cols = {row[1] for row in cursor.fetchall()}
+    except sqlite3.OperationalError:
+        return False
+    return set(_OWNER_COLUMN_NAMES) <= cols
+
+
+def _select_clause(cursor: sqlite3.Cursor) -> str:
+    base = _select_columns()
+    if _owner_columns_available(cursor):
+        base += ", " + _OWNER_COLUMNS
+    return base
+
+
+# 候选池排序用的新鲜度表达式：证据新鲜度优先，旧库/测试夹具只有 last_accessed_at 时回退。
+# 不用 last_accessed_at 本身——它自 2026-08-31 起在检索命中时刷新，用它排序会让
+# 「被取过一次的记忆」永久占住候选池（富者愈富），新记忆反而进不来。
+_FRESHNESS = "COALESCE(m.last_confirmed_at, m.last_accessed_at)"
+
+
+def _allowed_visibility_clause(mode: str) -> str:
+    """根据模式生成 SQL 级 Visibility 预过滤。
+
+    原理（正确检索顺序）：先决定“什么东西有资格被找到”，再在合法范围内找最相关。
+    除 CONFLICT_AVOID 外，RESTRICTED/INTERNAL 一律不进候选池，避免污染；
+    CONFLICT_AVOID 是 Behavior Guard 入口，允许 RESTRICTED 进入候选（随后被分离为行为约束），
+    仅把 INTERNAL（仅供系统决策，禁止进 LLM Prompt）挡在门外。
+    """
+    mode = normalize_mode(mode)
+    if mode == MODE_CONFLICT_AVOID:
+        return "m.visibility IS NULL OR m.visibility != ?"
+    return "m.visibility IS NULL OR m.visibility NOT IN (?, ?)"
+
+
+def _fetch_candidates(
+    cursor: sqlite3.Cursor,
+    group_shared_space: str,
+    user_id: str | int | None,
+    mode: str,
+    query: str,
+    pool_limit: int,
+    access_scope: "MemoryAccessScope | None" = None,
+) -> list[dict[str, Any]]:
+    """拉取候选记忆行（先按 Visibility 过滤，再按证据新鲜度倒序）。
+
+    检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+    include_user 为 None 表示空间级（主动发言）；否则限定该用户（@ 回复）。
+    这是“Policy 优先于 Similarity”的第一步：在合法范围内取候选。
+
+    ``access_scope``（计划 §6.6）：可信代码生成的 owner/audience 范围。给定时
+    空间过滤升级为 owner 谓词（SPACE 行 + 允许受众内的 PERSON 行）——授权在
+    候选构造层下推，不是先全库召回再过滤。PERSON 行写在 personal:* 兼容
+    namespace 里，靠 group_shared_space = ? 永远查不到，谓词必须换轨。
+    """
+    scope_sql = ""
+    scope_params: list[Any] = []
+    if access_scope is not None and access_scope.space_key:
+        scope_sql, scope_params = owner_scope_sql(access_scope, alias="m")
+    where = "m.status = 'active'"
+    params: list[Any] = []
+    if scope_sql:
+        where += scope_sql
+        params.extend(scope_params)
+    elif user_id is None:
+        where += " AND m.group_shared_space = ?"
+        params.append(group_shared_space)
+    else:
+        where += " AND m.group_shared_space = ? AND m.user_id = ?"
+        params.extend([group_shared_space, str(user_id)])
+
+    # Visibility 预过滤
+    where += f" AND ({_allowed_visibility_clause(mode)})"
+    if mode == MODE_CONFLICT_AVOID:
+        # 只挡 INTERNAL（Behavior Guard 需要 RESTRICTED 进入候选）
+        params.append(VISIBILITY_INTERNAL)
+    else:
+        params.extend([VISIBILITY_RESTRICTED, VISIBILITY_INTERNAL])
+
+    # 有关键词时优先走 FTS（语义/关键词混合）
+    fts_rows: list[tuple[Any, ...]] = []
+    if query and RAG_ENABLED:
+        fts_rows = _query_fts(cursor, group_shared_space, user_id, query, max(pool_limit, RAG_TOP_K), mode, access_scope)
+
+    # 新鲜度头部查询：FTS 未命中时是唯一候选池；FTS 命中时与 FTS 行并集
+    # （FTS 命中不窄化候选池，2026-10-17）——OR 召回的行排在前（bm25 序），
+    # 再并入新鲜度头部（按 id 去重）。只保留 FTS 行会让池里只剩「恰与查询
+    # 共享分词片段」的记忆——竞争者变少后，旧值/干扰项反而更容易穿过
+    # LIMIT 截断与分数门槛（基准 temporal/conflict 用例 forbidden 硬零被破
+    # 的根因）；并入新鲜度头部 = 修复前生产实际运行的池（严格超集），
+    # FTS 只增不减。
+    sql = (
+        f"SELECT {_select_clause(cursor)} FROM memories m WHERE {where} "
+        f"ORDER BY {_FRESHNESS} DESC LIMIT ?"
+    )
+    params.append(pool_limit)
+    try:
+        recency_rows = cursor.execute(sql, tuple(params)).fetchall()
+    except sqlite3.OperationalError as e:
+        # 旧库可能还没有 v2 列：退化为不带新列的查询。表缺失是惰性建表的
+        # 正常情况（debug）；若连旧列都没有/其他原因，则必须告警留痕
+        log_sqlite_error("RetrievalV2._fetch_candidates", e)
+        return _fetch_candidates_legacy(cursor, group_shared_space, user_id, mode, pool_limit)
+
+    if fts_rows:
+        seen_ids = {r[0] for r in fts_rows}
+        rows = fts_rows + [r for r in recency_rows if r[0] not in seen_ids]
+    else:
+        rows = recency_rows
+    return [_row_to_memory(r) for r in rows]
+
+
+def _fetch_candidates_legacy(
+    cursor: sqlite3.Cursor,
+    group_shared_space: str,
+    user_id: int | None,
+    mode: str,
+    pool_limit: int,
+) -> list[dict[str, Any]]:
+    """旧库（无 v2 列）回退：只按 status/空间/用户取，不按 Visibility 过滤。
+
+    这里只能用 last_accessed_at 排序：走到本函数就说明主查询的列缺失，
+    last_confirmed_at 很可能也不存在，再引用它会连回退路径一起打空。
+    """
+    if user_id is None:
+        sql = (
+            "SELECT id, group_shared_space, user_id, type, content, importance, confidence, "
+            "'OPEN', NULL, NULL, NULL, last_accessed_at FROM memories m "
+            "WHERE m.group_shared_space = ? AND m.status = 'active' "
+            "ORDER BY m.last_accessed_at DESC LIMIT ?"
+        )
+        params: list[Any] = [group_shared_space, pool_limit]
+    else:
+        sql = (
+            "SELECT id, group_shared_space, user_id, type, content, importance, confidence, "
+            "'OPEN', NULL, NULL, NULL, last_accessed_at FROM memories m "
+            "WHERE m.group_shared_space = ? AND m.user_id = ? AND m.status = 'active' "
+            "ORDER BY m.last_accessed_at DESC LIMIT ?"
+        )
+        params = [group_shared_space, str(user_id), pool_limit]
+    try:
+        return [_row_to_memory(r) for r in cursor.execute(sql, tuple(params)).fetchall()]
+    except sqlite3.OperationalError as e:
+        # 旧库回退路径同样不留痕：no such table → debug，其余 → warning
+        log_sqlite_error("RetrievalV2._fetch_candidates_legacy", e)
+        return []
+
+
+def _touch_accessed(ids: list[str]) -> None:
+    """把这批记忆的 last_accessed_at 刷成当前时间（"被检索命中并送进 Prompt"）。
+
+    在此之前 last_accessed_at 是与 last_confirmed_at 一起写的（建库、合并、复现
+    强化各写一次），检索路径从不刷新它——于是这一列实际记录的是「最后一次被确认
+    的时间」，与列名及 _quota_score 的注释都不符（bug_report_2026_8_31#1 §4.e）。
+
+    刷新它的前提是先把所有「证据有多新」的读取方改读 last_confirmed_at，否则
+    「用过一次 → 更新 → 排更前 → 更容易再被用」会形成正反馈。改完之后只剩两个
+    读取方，两者要的都是真正的访问时间：
+      - memory_manager._quota_score 的 recency 项（老但仍被频繁调用 > 新但从未被用）
+      - compressor._archive_low_value_memories（重要度低且长期没被用到 → 归档）
+
+    只写 last_accessed_at，不动 updated_at / compressed_at：被读取不是对记忆内容
+    的修改。失败只告警——刷新访问时间失败不该让整次检索失败。
+    """
+    if not ids:
+        return
+    holes = ",".join("?" * len(ids))
+    try:
+        conn = _connect()
+        conn.execute(
+            f"UPDATE memories SET last_accessed_at = CURRENT_TIMESTAMP WHERE id IN ({holes})",
+            tuple(ids),
+        )
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        log_sqlite_error("RetrievalV2._touch_accessed", e)
+
+
+def _query_fts(
+    cursor: sqlite3.Cursor,
+    group_shared_space: str,
+    user_id: str | int | None,
+    query: str,
+    limit: int,
+    mode: str,
+    access_scope: "MemoryAccessScope | None" = None,
+) -> list[tuple[Any, ...]]:
+    """FTS5 语义检索候选（复用 memories_fts 索引，并做 Visibility 预过滤）。
+
+    检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+    scope 给定时（计划 §6.6）权限过滤切到 m 侧 owner 谓词——FTS 回退路径与
+    SQL 主路径同授权，绝不退回裸 space 过滤。
+    """
+    from mneme.retriever import _ensure_fts_table, _match_expression
+
+    if not _ensure_fts_table(cursor):
+        return []
+    query_expression = _match_expression(query)
+    if not query_expression:
+        return []
+    try:
+        params: list[Any] = []
+        owner_ok = _owner_columns_available(cursor)
+        sql = (
+            "SELECT m.id, m.group_shared_space, m.user_id, m.type, m.content, m.importance, m.confidence, "
+            "m.visibility, m.usage_tags, m.trigger_data, m.behavior_rule, m.last_accessed_at, "
+            "m.last_confirmed_at"
+            + (f", {_OWNER_COLUMNS} " if owner_ok else " ")
+            + "FROM memories_fts f "
+            "JOIN memories m ON f.mem_id = m.id "
+            "WHERE m.status = 'active' "
+        )
+        if access_scope is not None and access_scope.space_key:
+            fragment, scope_params = owner_scope_sql(access_scope, alias="m")
+            sql += fragment + " "  # fragment 自带前导 AND
+            params.extend(scope_params)
+        else:
+            sql += "AND f.group_shared_space = ? "
+            params.append(group_shared_space)
+            if user_id is not None:
+                sql += "AND m.user_id = ? "
+                params.append(str(user_id))
+        sql += f"AND ({_allowed_visibility_clause(mode)}) "
+        if mode == MODE_CONFLICT_AVOID:
+            params.append(VISIBILITY_INTERNAL)
+        else:
+            params.extend([VISIBILITY_RESTRICTED, VISIBILITY_INTERNAL])
+        sql += "AND f.content MATCH ? ORDER BY bm25(memories_fts) LIMIT ?"
+        params.extend([query_expression, limit])
+        return cursor.execute(sql, tuple(params)).fetchall()
+    except sqlite3.OperationalError as e:
+        # FTS 查询静默降级成空结果会表现为「检索永远无命中」，必须留痕分级
+        log_sqlite_error("RetrievalV2._query_fts", e)
+        return []
+
+
+def _merge_similar(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """同类记忆合并（Selection Rule 1）：同一用户、内容高度相似的记忆合并为一条。
+
+    必须比对 user_id：主动发言路径（include_user=None）取的是全群记忆，
+    不比归属会把不同人的记忆合并成一条送进 Prompt，导致回复张冠李戴。
+
+    类型条件分两档：同类型相似即合并；跨类型只在归一化后逐字相同时合并——
+    类型词表对「希望被称呼为X」这类内容两可，LLM 两次抽取可能给出 RELATION
+    与 PREFERENCE，纯同类型比对会让跨类型重复穿过写入侧去重后在 Prompt 里
+    重复出现（2026-09-27 缺陷）。合并结果沿用排名更高一方（先出现者）的类型。
+    """
+    merged: list[dict[str, Any]] = []
+    for mem in memories:
+        target = None
+        for existing in merged:
+            if (
+                existing.get("user_id") == mem.get("user_id")
+                and (
+                    existing["type"] == mem["type"]
+                    or same_normalized_text(existing["content"], mem["content"])
+                )
+                and is_similar(existing["content"], mem["content"])
+            ):
+                target = existing
+                break
+        if target is None:
+            merged.append(dict(mem))
+        else:
+            # 合并内容：取更完整的一方；置信度/重要度取较大值
+            target["content"] = merge_content(target["content"], mem["content"])
+            target["confidence"] = _max_float(target.get("confidence"), mem.get("confidence"))
+            target["importance"] = _max_float(target.get("importance"), mem.get("importance"))
+    return merged
+
+
+def _max_float(a: Any, b: Any) -> float:
+    def _f(v: Any) -> float:
+        try:
+            return float(v) if v is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    return max(_f(a), _f(b))
+
+
+def _backend_parity_report(
+    python_result: RetrievalResult,
+    rust_result: RetrievalResult,
+) -> dict[str, Any]:
+    """Compare observable retrieval output without logging memory contents."""
+
+    python_ids = [
+        str(memory.get("id"))
+        for memory in python_result.conversation_memories
+    ]
+    rust_ids = [
+        str(memory.get("id"))
+        for memory in rust_result.conversation_memories
+    ]
+    python_behavior_ids = [
+        str(memory.get("id"))
+        for memory in python_result.behavior_constraints
+    ]
+    rust_behavior_ids = [
+        str(memory.get("id"))
+        for memory in rust_result.behavior_constraints
+    ]
+    python_scores = {
+        str(memory.get("id")): float(memory.get("_score") or 0.0)
+        for memory in python_result.conversation_memories
+    }
+    rust_scores = {
+        str(memory.get("id")): float(memory.get("_score") or 0.0)
+        for memory in rust_result.conversation_memories
+    }
+    score_delta = max(
+        (
+            abs(python_scores[mid] - rust_scores[mid])
+            for mid in python_scores.keys() & rust_scores.keys()
+        ),
+        default=0.0,
+    )
+    return {
+        "match": (
+            python_ids == rust_ids
+            and python_behavior_ids == rust_behavior_ids
+            and score_delta <= 0.01
+        ),
+        "python_ids": python_ids,
+        "rust_ids": rust_ids,
+        "python_behavior_ids": python_behavior_ids,
+        "rust_behavior_ids": rust_behavior_ids,
+        "max_score_delta": round(score_delta, 4),
+    }
+
+
+def _retrieve_with_optional_backend(
+    group_shared_space: str,
+    user_id: str | int,
+    query: str,
+    trigger: str,
+    mode: str | None,
+    semantic_scores: dict[str, float] | None,
+    access_scope: MemoryAccessScope | None = None,
+) -> RetrievalResult:
+    from memory_rust.backend import RetrievalRequest
+    from memory_rust.selector import resolve_backend
+
+    resolved_mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
+    decision, backend = resolve_backend()
+    if decision.selected == "python":
+        return retrieve_memories(
+            group_shared_space,
+            user_id,
+            query,
+            trigger=trigger,
+            mode=resolved_mode,
+            semantic_scores=semantic_scores,
+            _bypass_backend=True,
+            access_scope=access_scope,
+        )
+
+    request = RetrievalRequest(
+        db_path=DB_PATH,
+        group_shared_space=group_shared_space,
+        user_id=str(user_id),
+        query=query,
+        trigger=trigger,
+        mode=resolved_mode,
+        pool_limit=max(
+            LONG_TERM_RELEVANCE_CANDIDATE_LIMIT,
+            mode_limit(resolved_mode) * 5,
+        ),
+        semantic_scores=semantic_scores or {},
+        # v2 owner scope（计划 §6.6/§6.7）：空值 = SPACE-only（native 侧同语义）
+        scope_space_key=access_scope.space_key if access_scope else "",
+        scope_person_owner_key=access_scope.person_owner_key if access_scope else "",
+        scope_subject_key=access_scope.subject_key if access_scope else "",
+        scope_person_audiences=(
+            tuple(access_scope.person_audiences) if access_scope else ()
+        ),
+    )
+    try:
+        rust_result = backend.retrieve(request)
+    except Exception as exc:
+        if decision.requested in {"auto", "shadow"}:
+            logger.warning(
+                f"[MemoryBackend] Rust retrieval fallback: {type(exc).__name__}: {exc}"
+            )
+            return retrieve_memories(
+                group_shared_space,
+                user_id,
+                query,
+                trigger=trigger,
+                mode=resolved_mode,
+                semantic_scores=semantic_scores,
+                _bypass_backend=True,
+                access_scope=access_scope,
+            )
+        raise
+
+    if not decision.shadow:
+        return rust_result
+
+    python_result = retrieve_memories(
+        group_shared_space,
+        user_id,
+        query,
+        trigger=trigger,
+        mode=resolved_mode,
+        semantic_scores=semantic_scores,
+        _bypass_backend=True,
+        access_scope=access_scope,
+    )
+    report = _backend_parity_report(python_result, rust_result)
+    python_result.trace["rust_shadow"] = report
+    if not report["match"]:
+        logger.warning(
+            f"[MemoryBackend] Rust shadow parity mismatch: ids={report['rust_ids']} "
+            f"behavior={report['rust_behavior_ids']} max_score_delta={report['max_score_delta']}"
+        )
+    return python_result
+
+
+def retrieve_memories(
+    group_shared_space: str,
+    user_id: str | int,
+    query: str,
+    trigger: str = "reply",
+    mode: str | None = None,
+    semantic_scores: dict[str, float] | None = None,
+    _bypass_backend: bool = False,
+    access_scope: MemoryAccessScope | None = None,
+) -> RetrievalResult:
+    """v2 记忆检索主入口。
+
+    检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+
+    :param group_shared_space: 群组共享空间标识（str，由 config.spaces.resolve_space 得到）
+    :param user_id: 原始外部用户 ID（字符串；旧调用可传数字，主动发言时传 0 或 "0"）
+    :param query: 当前消息/话题文本
+    :param trigger: "reply"（@ 回复）或 "proactive"（主动插话）
+    :param mode: 可显式指定行为模式；不传则自动检测
+    :param semantic_scores: 可选外部语义分（按记忆 id 索引，如 embedding 余弦分）；
+        不传则用规则版语义占位
+    :param access_scope: 可信代码生成的 owner/audience 范围（计划 §6.6）。
+        None / 无 PERSON 分支 = 旧 SPACE-only 行为——没有 scope 的旧调用
+        **绝不会**读到任何 PERSON 记录。
+    :return: RetrievalResult（含聊天素材、行为约束与决策轨迹）
+    """
+    if not MEMORY_V2_ENABLED or not DB_PATH.exists():
+        return RetrievalResult()
+
+    if not _bypass_backend:
+        from memory_rust.selector import configured_mode
+
+        if configured_mode() != "python":
+            return _retrieve_with_optional_backend(
+                group_shared_space,
+                user_id,
+                query,
+                trigger,
+                mode,
+                semantic_scores,
+                access_scope,
+            )
+
+    mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
+
+    # 语义检索缓存（设计阶段四）：key = 空间 + 用户 + 话题哈希 + 模式 + 记忆历史版本。
+    # - 话题哈希让「话题变了」立即换桶，杜绝 5 分钟内错误复用旧话题的检索结果；
+    # - 归一化按关键词（而非原文）计算，同一话题换个措辞仍能命中，保住命中率；
+    # - 历史版本在整合器写入记忆后递增，晋升/合并的新记忆立刻可见，不被 TTL 拖住；
+    # - 空间级检索（主动发言）user 位为空串，与限定用户的检索天然分桶。
+    # - v3（计划 §6.6）：scope 指纹 + **持久** scope 版本入键——共享撤销/回填
+    #   由其他进程落库后，本进程的下一轮检索读到新版本即换桶，不再等 TTL。
+    # key 必须用空间（而非 QQ 群）——同空间的两个群共享记忆，按群分桶只会白跑检索。
+    user_key = "" if trigger == "proactive" else str(user_id)
+    scope_fingerprint = access_scope.fingerprint() if access_scope else ""
+    scope_keys = [f"space:{group_shared_space}"]
+    if access_scope is not None and access_scope.has_person:
+        scope_keys.append(access_scope.person_owner_key)
+    cache_key = (
+        str(DB_PATH),
+        group_shared_space,
+        user_key,
+        topic_hash(query),
+        mode,
+        memory_history_version(),
+        scope_fingerprint,
+        scope_versions.current_version(scope_keys),
+    )
+    cached = _CACHE.get(cache_key)
+    if cached is not None and (time.monotonic() - cached[0]) < RETRIEVAL_CACHE_TTL:
+        _CACHE[cache_key] = cached  # 简单 LRU：命中即刷新计时
+        return cached[1]
+
+    limit = mode_limit(mode)
+    pool_limit = max(LONG_TERM_RELEVANCE_CANDIDATE_LIMIT, limit * 5)
+
+    conn = _connect()
+    cursor = conn.cursor()
+    try:
+        include_user: int | None = None if trigger == "proactive" else user_id
+        candidates = _fetch_candidates(
+            cursor, group_shared_space, include_user, mode, query, pool_limit,
+            access_scope=access_scope,
+        )
+    finally:
+        conn.close()
+
+    trace: dict[str, Any] = {
+        "mode": mode,
+        "candidate_count": len(candidates),
+        "candidates": [c.get("id") for c in candidates[:10]],
+    }
+
+    # 1) Usage 层过滤（Policy Filtering）
+    allowed = [m for m in candidates if usage_allowed(mode, m)[0]]
+    trace["allowed_count"] = len(allowed)
+
+    # 2) Ranking（Policy 权重）
+    ranked = rank_memories(allowed, mode, query=query, semantic_scores=semantic_scores)
+    trace["ranked_ids"] = [m.get("id") for m in ranked[:10]]
+
+    # 3) 同类合并
+    ranked = _merge_similar(ranked)
+    trace["merged_count"] = len(ranked)
+
+    # 4) 分离聊天素材与行为约束
+    behavior = split_behavior_constraints(ranked)
+    conversation = [m for m in ranked if m not in behavior]
+    trace["behavior_count"] = len(behavior)
+
+    # 5) 动态上限：安全优先（CONFLICT_AVOID 上限更大）
+    #    同时加分数门槛（宁缺毋滥）：低于 MEMORY_SCORE_MIN 的记忆不进 Prompt，
+    #    避免“合法候选足够多就填满 mode_limit”的超召回噪音（动态数量而非固定 Top-K）。
+    #    先按分数门槛切分（thresh cut），再按 mode_limit 截断（limit cut），
+    #    供 benchmark 区分两种淘汰原因。
+    conversation_pool = conversation
+    threshold_cut_ids = {
+        m.get("id")
+        for m in conversation_pool
+        if (m.get("_score") or 0.0) < MEMORY_SCORE_MIN
+    }
+    conversation = [
+        m
+        for m in conversation_pool
+        if (m.get("_score") or 0.0) >= MEMORY_SCORE_MIN
+    ][:limit]
+    trace["final_ids"] = [m.get("id") for m in conversation]
+    trace["rejected_ids"] = [m.get("id") for m in candidates if m.get("id") not in {x.get("id") for x in conversation}]
+    # 全部进入排序的候选（合并后、截断前）及其分数/淘汰原因，供 benchmark 诊断用：
+    # 上次 C01/C03 误诊成“continue 丢失”，就是因为只看 final 看不到被 mode_limit 截断的项。
+    final_id_set = {m.get("id") for m in conversation}
+    behavior_id_set = {m.get("id") for m in behavior}
+    trace["ranked_all"] = [
+        {
+            "id": m.get("id"),
+            "score": round(float(m.get("_score") or 0.0), 4),
+            # cut 区分淘汰原因：""（进会话）/ "limit"（超 mode_limit 截断）/
+            # "thresh"（低于 MEMORY_SCORE_MIN 被切掉）/ "behavior"（被路由为行为约束）
+            "cut": (
+                ""
+                if m.get("id") in final_id_set
+                else "behavior"
+                if m.get("id") in behavior_id_set
+                else "thresh"
+                if m.get("id") in threshold_cut_ids
+                else "limit"
+            ),
+            "parts": m.get("_score_parts") or {},
+        }
+        for m in ranked
+    ]
+
+    # 记账：真正进了 Prompt 的（两个分区都算）才算「被访问」。
+    # 命中缓存的那条 return 不走到这里 —— 5 分钟内的重复检索不重复计访问，
+    # 对天粒度的归档/配额判定无影响，也省掉每句话一次写库。
+    _touch_accessed([str(m.get("id")) for m in conversation + behavior if m.get("id")])
+
+    result = RetrievalResult(
+        mode=mode,
+        conversation_memories=conversation,
+        behavior_constraints=behavior,
+        trace=trace,
+    )
+    # 写回缓存
+    _CACHE[cache_key] = (time.monotonic(), result)
+    # 容量控制：只保留最近 _CACHE_MAX_ENTRIES 项
+    if len(_CACHE) > _CACHE_MAX_ENTRIES:
+        for key in list(_CACHE)[: len(_CACHE) - _CACHE_MAX_ENTRIES]:
+            _CACHE.pop(key, None)
+    return result
+
+
+# 短期检索缓存（进程内，key = (db, 空间, 用户, 话题哈希, 模式, 记忆历史版本)）
+# 设计参考：Memory Retrieval Specification §12 Retrieval Cache
+#   + 《拟人化插话与低成本运行改进方案》阶段四「缓存与快速路径」
+RETRIEVAL_CACHE_TTL = 300.0  # 5 分钟
+_CACHE_MAX_ENTRIES = 128
+_CACHE: dict[tuple[str, str, str, str, str, int], tuple[float, RetrievalResult]] = {}
+
+
+async def retrieve_memories_emb(
+    group_shared_space: str,
+    user_id: str | int,
+    query: str,
+    trigger: str = "reply",
+    mode: str | None = None,
+    service: Any = None,
+    access_scope: MemoryAccessScope | None = None,
+) -> RetrievalResult:
+    """Embedding 版检索：先用本地 LM Studio 编码查询与记忆、算余弦语义分，
+    再走生产核心路径 ``retrieve_memories``。服务/模型不可用时回退规则版，
+    保证主链路不因语义检索故障中断。
+
+    检索按**群组共享空间**：同一空间内的多个 QQ 群共享记忆。
+
+    :param group_shared_space: 群组共享空间标识（str）
+    :param service: 可注入的 EmbeddingService（测试用）；缺省按 config 构建。
+    """
+    from config import (
+        MEMORY_EMBEDDING_BASE_URL,
+        MEMORY_EMBEDDING_MODEL,
+        MEMORY_EMBEDDING_TIMEOUT,
+    )
+    from gravitas.contracts import WorkClass
+    from mneme.embeddings import EmbeddingService
+
+    resolved_mode = normalize_mode(mode or detect_mode(query, trigger=trigger))
+    if service is None:
+        service = EmbeddingService(
+            MEMORY_EMBEDDING_BASE_URL,
+            MEMORY_EMBEDDING_MODEL,
+            MEMORY_EMBEDDING_TIMEOUT,
+            work_class=(
+                WorkClass.BACKGROUND
+                if trigger == "proactive"
+                else WorkClass.INTERACTIVE
+            ),
+        )
+
+    semantic_scores: dict[str, float] = {}
+    try:
+        conn = _connect()
+        cursor = conn.cursor()
+        try:
+            include_user: int | None = None if trigger == "proactive" else user_id
+            limit = mode_limit(resolved_mode)
+            pool_limit = max(LONG_TERM_RELEVANCE_CANDIDATE_LIMIT, limit * 5)
+            candidates = _fetch_candidates(
+                cursor, group_shared_space, include_user, resolved_mode, query,
+                pool_limit, access_scope=access_scope,
+            )
+        finally:
+            conn.close()
+        for m in candidates:
+            mid = m.get("id")
+            if not mid:
+                continue
+            s = await service.similarity(query, m.get("content", ""))
+            if s is not None:
+                semantic_scores[mid] = s
+        if semantic_scores:
+            return retrieve_memories(
+                group_shared_space, user_id, query, trigger=trigger, mode=resolved_mode,
+                semantic_scores=semantic_scores, access_scope=access_scope,
+            )
+    except Exception as e:
+        logger.warning(f"[Embedding] 语义检索失败，回退规则版: {e}")
+    return retrieve_memories(
+        group_shared_space, user_id, query, trigger=trigger, mode=resolved_mode,
+        access_scope=access_scope,
+    )

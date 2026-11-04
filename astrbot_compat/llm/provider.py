@@ -184,7 +184,7 @@ class RerankProvider(AbstractProvider):
 
 def _estimate_message_tokens(m: dict) -> int:
     """估算单条消息的 token 数。复用 memory 侧现成的估算器，不引新依赖。"""
-    from memory.prompt_builder import estimate_tokens
+    from mneme.prompt_builder import estimate_tokens
 
     total = 0
     content = m.get("content")
@@ -207,7 +207,7 @@ def _estimate_messages_tokens(messages: list[dict]) -> int:
 
 
 def _estimate_tools_tokens(tools: list[dict]) -> int:
-    from memory.prompt_builder import estimate_tokens
+    from mneme.prompt_builder import estimate_tokens
 
     return estimate_tokens(json.dumps(tools, ensure_ascii=False)) if tools else 0
 

@@ -1,30 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0
 # Copyright (c) 2026 Stella Project Contributors
 # 本文件以 AGPL-3.0 许可证发布，详见项目根目录 LICENSE。
-"""整合日志：记录每次记忆整合的运行摘要与 LLM 调用详情，便于可视化管理。
+"""Compatibility alias: canonical implementation is :mod:`mneme.consolidation_log`.
 
-日志文件路径由 CONSOLIDATION_LOG_PATH 配置，默认 LOG_DIR（`logs/`）下的
-memory_consolidation_log.md。
+导入时自替换为规范模块，保证新旧导入路径得到同一 module 对象
+（2026-11-03 计划 §3.1 兼容策略）。不要在这里重复实现任何业务逻辑。
 """
-from nonebot import logger
 
-from config import CONSOLIDATION_LOG_PATH
+from __future__ import annotations
 
+import sys as _sys
 
-def append_consolidation_log(entry: str) -> None:
-    """把一段 Markdown 文本追加到整合日志文件。
+from mneme import consolidation_log as _canonical
 
-    参数:
-        entry: 要写入的日志片段（调用方自行拼好 Markdown 排版）。
-    文件不存在时自动补一个标题头；写入失败仅记录错误，不影响主流程。
-    """
-    try:
-        log_path = CONSOLIDATION_LOG_PATH
-        # LOG_DIR 默认被 .gitignore，新克隆里不存在；由写入方自己建
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        if not log_path.exists():
-            log_path.write_text("# 🤖 记忆整合日志\n\n", encoding="utf-8")
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(entry)
-    except Exception as e:
-        logger.error(f"整合日志写入失败: {e}")
+_sys.modules[__name__] = _canonical

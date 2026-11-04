@@ -2,6 +2,8 @@
 
 [中文](memory-system.md) | English · [Documentation](../README.en.md)
 
+The canonical implementation lives in the `mneme/` package (`memory/*` are explicit aliases to the same implementation; data paths unchanged); see [Mneme](mneme.en.md) for naming and code boundaries.
+
 This document explains **why Stella's memory system is designed this way** and the specific rules for each gate. See the [architecture documentation](README.en.md) for the directory structure and processing flow, and the [configuration reference](../reference/configuration.en.md) for configuration options.
 
 ## Conversation, personal memory, and attribution in 6.1.0
@@ -38,7 +40,7 @@ to `off`, with `shadow` and `enforce` available. Follow the dated
 enforcement. Missing proactive evidence, wrong targets, or changed candidates must
 prevent delivery. `tools/data_repair.py` provides source-driven preview/apply/revoke
 with column-level CAS; do not reassign an entire space to one person. See the
-[Rust guide](memory-rust-backend.en.md) for current-branch schema 19/API 3 compatibility.
+[Rust guide](memory-rust-backend.en.md) for current-branch schema 24/API 4 compatibility.
 
 ## Three Design Principles
 

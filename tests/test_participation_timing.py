@@ -17,10 +17,11 @@ import asyncio
 from dataclasses import replace
 from pathlib import Path
 
-from memory.participation import ParticipationManager
 from memory.participation.decision import CANDIDATE
 from memory.participation.scorer import compose_final_score
 from memory.participation.tables import TimingWeights, load_tables
+
+from memory.participation import ParticipationManager
 
 TABLES_DIR = Path(__file__).resolve().parent.parent / "config" / "participation"
 

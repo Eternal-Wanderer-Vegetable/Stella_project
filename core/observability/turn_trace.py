@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from gravitas.dependency_recovery import StorageDomain, connect_sqlite
-from memory.timeutil import log_sqlite_error, utc_now
+from mneme.timeutil import log_sqlite_error, utc_now
 
 TRACE_SCHEMA_VERSION = 1
 

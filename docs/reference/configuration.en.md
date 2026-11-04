@@ -583,7 +583,7 @@ The observation limit is **tiered by type**. The tier table is the code-level co
 
 ### Retrieval Backend: Python / Rust (`MEMORY_BACKEND`)
 
-The memory engine defaults to the Python implementation (`memory/`); an independent Rust retrieval backend can be installed optionally. The switch is the `MEMORY_BACKEND` environment variable, not a key in the table below: `python` (default) / `rust` / `auto` (use Rust when available, fall back on failure) / `shadow` (run Rust read-only beside Python, record parity diagnostics, return the Python result) / `strict` (require Rust and surface failures). See [memory-rust-backend.md](../architecture/memory-rust-backend.md) for the compatibility matrix, release assets, and rollback; the earlier `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` are equivalent to `shadow` / `strict`, and an explicit `MEMORY_BACKEND` takes precedence.
+The memory engine defaults to Mneme's Python implementation (`mneme/`; `memory/*` is a module-identity-preserving compatibility alias layer); an independent Rust retrieval backend can be installed optionally. The switch is the `MEMORY_BACKEND` environment variable, not a key in the table below: `python` (default) / `rust` / `auto` (use Rust when available, fall back on failure) / `shadow` (run Rust read-only beside Python, record parity diagnostics, return the Python result) / `strict` (require Rust and surface failures). See [memory-rust-backend.en.md](../architecture/memory-rust-backend.en.md) for the compatibility matrix, release assets, and rollback; the earlier `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` are equivalent to `shadow` / `strict`, and an explicit `MEMORY_BACKEND` takes precedence.
 
 ### RAG Switches
 
@@ -671,6 +671,7 @@ middle           → t = (SLOW - interval) / (SLOW - FAST)
 | Configuration | Default | Description |
 |---|---|---|
 | `PROACTIVE_ENABLED` | `true` | Global proactive-speaking switch |
+| `PROACTIVE_FREQUENCY` | `1.0` | The single user knob for ordinary proactive participation: maximum long-term refill rate per exact conversation (per hour, 0-6, fractions allowed). R=0 disables ordinary proactive participation and autonomous sleep/wakeup announcements; passive replies and user-scheduled tasks are unaffected. Restart to apply (S2-03) |
 | `PROACTIVE_INTERVAL_FAST` | `20.0` | Upper bound of the average interval considered “high frequency” (seconds) |
 | `PROACTIVE_INTERVAL_SLOW` | `180.0` | Lower bound of the average interval considered “quiet” (seconds) |
 | `PROACTIVE_PROB_AT_FAST` | `0.15` | Probability at the high-frequency end |

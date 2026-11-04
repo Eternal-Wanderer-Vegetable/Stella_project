@@ -17,9 +17,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 
-from memory.participation.buffer import BufferedMessage, MessageBuffer
-from memory.participation.signals import topic_shift_hit
-from memory.participation.tables import ParticipationTables
+from aoede.participation.buffer import BufferedMessage, MessageBuffer
+from aoede.participation.signals import topic_shift_hit
+from aoede.participation.tables import ParticipationTables
 
 
 class TopicStatus(str, Enum):

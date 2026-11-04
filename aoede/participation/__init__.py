@@ -31,28 +31,28 @@ from pathlib import Path
 
 from nonebot import logger
 
-from memory.participation.buffer import BufferedMessage, MessageBuffer
-from memory.participation.decision import (
+from aoede.participation.buffer import BufferedMessage, MessageBuffer
+from aoede.participation.decision import (
     ALLOW_LLM,
     CANDIDATE,
     OBSERVE,
     DecisionTracker,
     ParticipationDecision,
 )
-from memory.participation.observability import (
+from aoede.participation.observability import (
     log_decision,
     record_to_db,
 )
-from memory.participation.scorer import (
+from aoede.participation.scorer import (
     compose_final_score,
     ngram_jaccard,
 )
-from memory.participation.scorer import (
+from aoede.participation.scorer import (
     score as score_message,
 )
-from memory.participation.signals import extract as extract_signals
-from memory.participation.state import ConversationState
-from memory.participation.tables import ParticipationTableError, TableStore
+from aoede.participation.signals import extract as extract_signals
+from aoede.participation.state import ConversationState
+from aoede.participation.tables import ParticipationTableError, TableStore
 
 __all__ = [
     "BufferedMessage",
@@ -187,7 +187,7 @@ class ParticipationManager:
                 MEMORY_EMBEDDING_MODEL,
                 MEMORY_EMBEDDING_TIMEOUT,
             )
-            from memory.embeddings import EmbeddingService
+            from mneme.embeddings import EmbeddingService
 
             svc = EmbeddingService(
                 MEMORY_EMBEDDING_BASE_URL,
@@ -204,7 +204,7 @@ class ParticipationManager:
         if svc is None:
             return None
         try:
-            from memory.embeddings import cosine_similarity
+            from mneme.embeddings import cosine_similarity
 
             a = await svc.embed(text)
             b = await svc.embed(other)
@@ -550,7 +550,7 @@ class ParticipationManager:
             import sqlite3
 
             from config import DB_PATH
-            from memory.schema import create_participation_topics_table
+            from mneme.schema import create_participation_topics_table
 
             conn = sqlite3.connect(DB_PATH)
             try:

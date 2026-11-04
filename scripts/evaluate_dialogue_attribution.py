@@ -48,7 +48,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from memory.conversation_projection import (
+from mneme.conversation_projection import (
     PROJECTION_FORMAT_VERSION,
     TranscriptBubble,
     TranscriptRecord,
@@ -57,7 +57,7 @@ from memory.conversation_projection import (
 
 # 与生产 build_v2_named_sections 受保护区同源的规则文本（M3）。
 # 直接 import，避免两份文本漂移。
-from memory.prompt_builder import (
+from mneme.prompt_builder import (
     _ROLE_STATE_RULES,
     build_v2_named_sections,
     estimate_tokens,
@@ -278,7 +278,7 @@ def build_prompt(fixture: dict, variant: str, system_rules: bool) -> tuple[str, 
         ]
     by_name = dict(sections)
     from core.context_budget import ConversationPromptParts, fit_conversation_parts
-    from memory.prompt_builder import build_time_section
+    from mneme.prompt_builder import build_time_section
 
     parts = ConversationPromptParts(
         identity_block=by_name.get("identity", ""),
@@ -718,7 +718,7 @@ async def _execute_batch_job(
         TurnService,
     )
     from core.social.delivery import DeliveryPlanError, seal_delivery_plan
-    from memory.post_processors import (
+    from mneme.post_processors import (
         bad_phrase_filter,
         parse_output,
         parse_raw_output,
@@ -954,7 +954,7 @@ async def run_production_batch(args) -> int:
     old_guard_mode = getattr(settings, "REPLY_ATTRIBUTION_GUARD_MODE", None)
     with tempfile.TemporaryDirectory(prefix="stella-dialogue-attribution-eval-") as temp_dir:
         evaluation_db = Path(temp_dir) / "scope-versions.sqlite3"
-        from memory.schema import MEMORY_SCOPE_VERSIONS_TABLE_DDL
+        from mneme.schema import MEMORY_SCOPE_VERSIONS_TABLE_DDL
 
         scope_conn = sqlite3.connect(evaluation_db)
         try:
@@ -1185,8 +1185,8 @@ async def run_compact_evaluation(args) -> int:
     from core.llm.registry import ROLE_COMPACT, backend_for
     from core.llm.registry import describe as describe_backends
     from gravitas.model_calls import observe_model_backend
-    from memory import session_compact as compact
-    from memory import session_context as session_context_module
+    from mneme import session_compact as compact
+    from mneme import session_context as session_context_module
 
     fixture_path = Path(args.compact_fixture)
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))

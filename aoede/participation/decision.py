@@ -17,9 +17,9 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from memory.participation.scorer import ScoreBreakdown
-from memory.participation.signals import SignalSnapshot
-from memory.participation.tables import Thresholds
+from aoede.participation.scorer import ScoreBreakdown
+from aoede.participation.signals import SignalSnapshot
+from aoede.participation.tables import Thresholds
 
 # 可注入业务时钟（计划 §5/§6.4「移除业务逻辑的实时时钟漏洞」最小实现）：
 # decide 内部的缺省 now 与 candidate streak 起点统一走 _clock，默认

@@ -1,3 +1,46 @@
+## Current Handoff — PR #129 Rust/Mneme 文档收尾 (2026-11-04)
+
+- Status：Rust/Mneme 接线已核对，双语文档与当前 API 4/schema 24 同步；本机 isolated native fullchain 通过。文档/状态提交 `1d6e62c` 已推送；PR #129 为 open/ready-for-review/unmerged，新 head 上全部 14 项 hosted CI 通过。
+- Current Objective：跟进 PR review；实施与本地/CI 验收可供审查，真实模型/QQ、Release payload/Windows 干净 VM安装回滚与时机/自然度验收仍未完成，不据此宣告产品验收完成。
+- Files：7 组中英文文档（`memory-rust-backend`、`memory-system`、`contracts`、`aoede`、`deployment-docker`、`configuration`、`mneme`）与 `feature_list.json`、`progress.md`、本交接。保留未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+- Evidence：Python 与本机 native 导出 API 4/schema 24；`resolve_backend("rust")` 选中 native；定向测试 22 passed / 1 warning；临时库 `validate_rust_fullchain.py` PASS，Python/native promotion `differ=false`；`check_docs.py` 127/1358/577/0，JSON 和 diff check 通过。合同页 impact HIGH/14 direct/111 total/0 processes，其他文档 MEDIUM；文档 all LOW（17/24/0），状态 all LOW（3/2/0），compare main 对 PR 累计 diff 判 CRITICAL（变更清单有显示上限）；未改运行源码。
+- Blockers：G2 真实模型/QQ 灰度、Windows 干净 VM 安装回滚和自然度 rubric 仍待验收，整体产品验收保留 NOT READY。
+- Recommended Next Step：跟进 PR #129 review。验收缺口通过 PR 描述和矩阵保留；按计划单独完成，不把 PR ready 状态等同于真实模型/QQ/Windows 产品验收。
+
+## Previous Handoff — PR #129 CI 漂移与群 @ 修复 (2026-11-03)
+
+- Status：修复已提交并推送至 PR #129，HEAD `f42aa24`，PR 仍为 draft。flow-manifest、flow-closure、文档、lint、CLI、安全、Windows native reliability 及 Python 3.10/3.11/3.12 CI 均通过。
+- Current Objective：代码与 PR CI 修复完成；等待用户在群里 @ Stella 一次并提供大致时间，以核对真实触发与回复回执。Aoede/Mneme 外部 G2 gates 继续 NOT READY。
+- Files：`core/observability/flows/message-flow.9b19e90b7675.json`、`stella_project/plugins/bot_main/ai_gateway.py`、`tests/test_private_chat_ingress.py`、任务状态文件。保留既有未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+- Evidence：旧 HEAD `b71e809` 的三个矩阵各 4338 passed / 35 skipped / 1 failed，唯一失败 `TestDriftGate::test_committed_manifest_matches_source`；flow-manifest 同因旧内容寻址清单失败。新清单本地 Python 3.10/3.11/3.12 `--check` 均通过；`TestSharedAdmission` + drift test 4 passed；改动文件 Ruff、docs 与 `git diff --check` 通过；PR 新 HEAD 全部上述 CI 通过。托管重启后 Corona 33904 / Nucleus 33152 ready，OneBot healthy；本轮未发真实 QQ 消息。
+- Blockers：实际 QQ 回复仍未得到现场验收；重启前日志未捕获用户报告的原生 @ 消息。
+- Recommended Next Step：用户发出一次原生群 @ 后按时间戳检查脱敏 trace。保持真模型/QQ 灰度扩大、Windows 安装回滚与自然度标注协议 gates。
+
+## Current Handoff — Aoede / Mneme stage 2 code complete (2026-11-03)
+
+- Status: **S1-00…S2-04 全部工作包代码完成** on `codex/aoede-mneme-proactive`（10 提交，837a089→S2-04）。G2 验收矩阵未跑满：真模型/QQ 灰度/Windows/native wheel/全量复跑未做——**overall NOT READY**（按计划 §13 不以源码存在替代验收）。
+- Current Objective：全量复跑与补验收；G2 灰度前先重建 native wheel（schema24）并隔离安装 parity；QQ 影子→单群低频按计划 §7 每步绑定配置/模型/commit。
+- Evidence：阶段二各包定向回归 46/100/134/221 passed；detect-changes 各步已报告；文档/flow 门禁绿。S2-01 的 native wheel parity 与发布成品 import smoke 是 G1/G2 共同缺口。
+- Blockers：无真模型与真实 QQ 环境；Windows 安装器验收需干净 VM；rust 工具链在本会话未跑（NOT RUN 如实记录）。
+- Recommended Next Step：`python -m pytest tests -q` 全量复跑（临时 STELLA_HOME）；`cargo test --manifest-path memory_rust/native/Cargo.toml` + wheel 重建；然后按计划 §7 Gate G2 灰度清单逐项验收。
+
+## Current Handoff — Aoede / Mneme stage 1 complete (2026-11-03)
+
+- Status: **S1-00…S1-04 done（行为等价拆分）** on `codex/aoede-mneme-proactive`（5 提交，837a089→S1-04）。阶段二未实施；G1 全项验收缺安装环境/发布成品核对，整体 NOT READY。
+- Current Objective：续接按计划 §7 执行 S2-01（先修求证闭环；schema 下一版以执行时 latest+1 重核，native 常量同步）；G1 gate 未全绿前不影响 S2 编码开工，但发布成品（payload/Docker/import smoke）验收须在 G1 前补。
+- Files：见 progress.md 同日条目。计划：docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md。
+- Evidence：定向主动 106 passed 基线一致；全量 4201 passed，17 失败基线对照为环境/既有；ruff/docs/flow --check 全绿；CLI/导入身份合同由 tests/aoede + tests/mneme 固化。
+- Blockers：真实模型、QQ 灰度、Windows 成品安装/回滚、native wheel parity 未验收。保留工作树既有未跟踪文件（ligamina_bridge/debug.log/start_managed_stella.ps1/.zcode），未混入提交。
+- Recommended Next Step：读计划 §6.2/§7 S2-01；实施前重新 impact 求证主符号并冻结 schema 版本；继续临时 STELLA_HOME 隔离测试。
+
+## Current Handoff — Aoede / Mneme plan (2026-11-03)
+
+- Current Objective：本轮规划交付完成，实施未启动。完整计划：[Aoede / Mneme 两阶段工程计划](docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)。任务 `AOEDE-MNEME-PLAN`；原有 active feature 保留，勿据此启动其遗留运行操作。
+- Files：计划、`feature_list.json`、`progress.md`、本交接；无生产源码/配置/数据修改。源 HEAD `837a0892e4f33e9341e0ecd1ac33049afad82271`，分支 `codex/evidence-contract-expansion`。
+- Evidence：讨论已从分享页 streamed JSON 提取并与源码核对；基线 docs 123/1333/577/0、diff check 通过。GitNexus 1.6.12 已刷新至本轮 HEAD（122051 nodes / 308804 edges / 1253 clusters / 805 flows）；实际 runner 身份一致，旧 meta 初判已纠正。retrieve_memories 为 CRITICAL / 8 direct，PDG controls 全部145条返回；图覆盖限制详见计划 §4–5。新鲜 detect all LOW（3文件/2符号/0流程），compare main CRITICAL（101/524/20），无partial/truncated；最终 docs123/1335/577/0、diff check通过。计划写入使用 gitnexus-plan 安全 helper（WSL Linux）；原生 win32 writer 不支持已披露。
+- Blockers：没有代码实施证据；离线回归、真实模型、真实 QQ 与 Windows 发布验收均待执行。不能以计划完成宣布主动发言问题修复。保留当前工作树的四组既有未跟踪修改。
+- Recommended Next Step：读计划 §7，先 S1-00 再逐包提交。先隔离 Aoede/Mneme 并验行为等价，再实现统一上下文参与、持久求证终态与预算；不降低现有记忆晋升/隐私门槛，不动生产库或本机配置。执行测试前显式设置临时 `STELLA_HOME`。
+
 ## Current Handoff — MEMWRT-001 evidence contract expansion productionization (2026-11-03)
 
 - Status: **done（隔离评测达标）** on `codex/evidence-contract-expansion`（独立 PR，base main=含 PR #127）。报告：`docs/reports/2026-11-03-contract-expansion-production.md`（.en 同步）。feature MEMWRT-001 done。

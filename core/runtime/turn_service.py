@@ -401,7 +401,7 @@ class TurnService:
                 getattr(_guard_settings, "MEMORY_SUFFICIENCY_GUARD_MODE", "off") or "off"
             )
         if guard_mode != "off":
-            from memory.sufficiency_guard import judge_sufficiency
+            from mneme.sufficiency_guard import judge_sufficiency
 
             with _flow_span(fctx, "sufficiency.guard"):
                 question = getattr(ctx, "retrieval_query", "") or ctx.message or ""
@@ -444,7 +444,7 @@ class TurnService:
                 # v2：分区注入（聊天素材 / 行为约束分离），并附带决策轨迹。
                 # v16（多人身份修复计划 §6.4）：分节产出同时供结构化预算
                 # 使用——不截断时两条路径拼出的 prompt 逐字节一致。
-                from memory.prompt_builder import build_v2_named_sections
+                from mneme.prompt_builder import build_v2_named_sections
 
                 v2_sections = build_v2_named_sections(
                     getattr(ctx, "short_term", "") or "",
@@ -493,7 +493,7 @@ class TurnService:
                     context_text = "\n\n".join(text for _, text in v2_sections)
                     user_prompt = _compose_prompt(context_text, ctx)
             else:
-                from memory.prompt_builder import build_prompt_context
+                from mneme.prompt_builder import build_prompt_context
 
                 short_term = getattr(ctx, "short_term", "") or ""
                 user_profile = getattr(ctx, "user_profile", "") or ""
@@ -767,7 +767,7 @@ class TurnService:
         # 记忆系统 v2：记录本次回复的记忆决策轨迹（候选/过滤/最终/拒绝）
         if MEMORY_V2_ENABLED:
             try:
-                from memory.trace import record_trace
+                from mneme.trace import record_trace
 
                 conv = getattr(ctx, "conversation_memories", []) or []
                 behavior = getattr(ctx, "behavior_constraints", []) or []

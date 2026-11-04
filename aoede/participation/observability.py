@@ -21,13 +21,13 @@ from pathlib import Path
 
 from nonebot import logger
 
-from memory.participation.decision import (
+from aoede.participation.decision import (
     ALLOW_LLM,
     CANDIDATE,
     OBSERVE,
     ParticipationDecision,
 )
-from memory.participation.state import ConversationState
+from aoede.participation.state import ConversationState
 
 LOG_FULL = "full"
 LOG_SUMMARY = "summary"

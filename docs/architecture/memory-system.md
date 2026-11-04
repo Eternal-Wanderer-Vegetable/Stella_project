@@ -2,6 +2,8 @@
 
 中文 | [English](memory-system.en.md) · [文档总览](../README.md)
 
+正式实现位于 `mneme/` 包（`memory/*` 为同一实现的显式别名，数据路径不变），命名与代码边界见 [Mneme](mneme.md)。
+
 本文说明 Stella 的记忆系统**为什么这样设计**，以及各道闸门的具体规则。目录结构与处理流程见 [架构说明](README.md)，配置项见 [配置参考](../reference/configuration.md)。
 
 ## 6.1.0 会话、个人记忆与归属保护
@@ -32,7 +34,7 @@ Python、SQL/FTS、embedding、缓存和 Rust 后端，内容相似不会扩大�
 均默认 `off`，支持 `shadow` / `enforce`。启用前按 [QQ 灰度清单](../reports/2026-10-05-qq-gray-rollout-checklist.md)
 验证真实模型与发送链路；主动核验缺少候选来源、对象不符或候选已变更时不应发送。
 数据修复使用 `tools/data_repair.py` 的来源驱动 preview/apply/revoke 与列级 CAS，不能把
-整片 space 批量改成某个人。当前分支 schema 19 与 Rust API 3 见 [后端说明](memory-rust-backend.md)。
+整片 space 批量改成某个人。当前分支 schema 24 与 Rust API 4 见 [后端说明](memory-rust-backend.md)。
 
 ## 三条设计原则
 

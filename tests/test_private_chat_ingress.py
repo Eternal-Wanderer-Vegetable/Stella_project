@@ -18,7 +18,12 @@ from unittest.mock import AsyncMock, Mock
 
 import nonebot
 import pytest
-from nonebot.adapters.onebot.v11 import Message, PrivateMessageEvent
+from nonebot.adapters.onebot.v11 import (
+    GroupMessageEvent,
+    Message,
+    MessageSegment,
+    PrivateMessageEvent,
+)
 
 from core.context import ChatContext
 
@@ -159,6 +164,44 @@ class TestPluginIngress:
 
 
 class TestSharedAdmission:
+    @pytest.mark.asyncio
+    async def test_group_native_mention_inside_text_triggers_chat(self, monkeypatch):
+        message = Message([
+            MessageSegment.text("请帮我看一下"),
+            MessageSegment.at("10000"),
+            MessageSegment.text("这个问题"),
+        ])
+        event = GroupMessageEvent(
+            time=0,
+            self_id="10000",
+            post_type="message",
+            sub_type="normal",
+            user_id=20001,
+            message_type="group",
+            message_id=9002,
+            group_id=123,
+            message=message,
+            original_message=message.copy(),
+            raw_message="",
+            font=0,
+            sender={"nickname": "u", "role": "member"},
+        )
+        monkeypatch.setattr(gateway, "ALLOWED_GROUPS", {123})
+        monkeypatch.setattr(gateway, "vision_available", lambda: False)
+
+        # OneBot's default to_me flag only covers an @ at the first/last segment.
+        assert not event.is_tome()
+        assert await gateway.is_chat_trigger(event)
+
+        other_message = Message([
+            MessageSegment.text("请帮我看一下"),
+            MessageSegment.at("20002"),
+            MessageSegment.text("这个问题"),
+        ])
+        event.message = other_message
+        event.original_message = other_message.copy()
+        assert not await gateway.is_chat_trigger(event)
+
     @pytest.mark.asyncio
     async def test_group_pure_image_requires_vision_and_mention(self, monkeypatch):
         event = SimpleNamespace(

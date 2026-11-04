@@ -13,6 +13,8 @@
 | [LLM 成本与预算](llm-budget.md) | 分析模型排队、预算与成本 |
 | [插件、扩展和控制面](integrations.md) | 接入插件、扩展、状态 API 或桌面壳 |
 | [记忆系统](memory-system.md) | 修改捕获、晋升、检索与压缩 |
+| [Mneme（记忆正式命名）](mneme.md) | 核对记忆包命名、兼容层与数据路径 |
+| [Aoede（主动参与）](aoede.md) | 修改主动发言、参与评分与求证编排 |
 | [Rust 记忆后端](memory-rust-backend.md) | 选择 native 模式或核验后端合同 |
 | [能力系统](capability-system.md) | 修改 Router、Provider 与 Comes |
 | [知识库](knowledge-base.md) | 修改导入、ACL、检索和证据隔离 |

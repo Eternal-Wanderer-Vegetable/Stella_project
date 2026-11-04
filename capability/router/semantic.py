@@ -106,7 +106,7 @@ def reset_prototype_cache() -> None:
 def _get_service(work_class=None):
     """构造 EmbeddingService。复用 MEMORY_EMBEDDING_* 配置——同一个本地 embedding 实例。"""
     from gravitas.contracts import WorkClass
-    from memory.embeddings import EmbeddingService
+    from mneme.embeddings import EmbeddingService
 
     s = _settings()
     return EmbeddingService(
@@ -205,7 +205,7 @@ async def score_capabilities(
     与「打了分但都很低」（返回空列表或低分列表）是两种不同情形：
     前者要降级，后者是有效结论「不需要工具」。
     """
-    from memory.embeddings import cosine_similarity
+    from mneme.embeddings import cosine_similarity
 
     text = (message or "").strip()
     if not text:

@@ -49,7 +49,7 @@ from core.social.contracts import (
 )
 from core.transport.outbound import DeliveryResult, DeliveryStatus
 from gravitas.errors import DeadlineExceeded
-from memory import social_store
+from mneme import social_store
 
 if TYPE_CHECKING:
     from gravitas.contracts import Deadline
@@ -155,8 +155,8 @@ def delivery_draft_from_context(ctx: Any) -> dict[str, Any]:
     captured_versions: dict[str, int] = {}
     scope_versions_available = True
     try:
-        from memory.ownership import person_owner_key, space_owner_key
-        from memory.scope_versions import current_versions_strict
+        from mneme.ownership import person_owner_key, space_owner_key
+        from mneme.scope_versions import current_versions_strict
 
         keys: list[str] = []
         space = str(getattr(ctx, "group_shared_space", "") or "")

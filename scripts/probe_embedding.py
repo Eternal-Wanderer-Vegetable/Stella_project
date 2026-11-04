@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import httpx
 import numpy as np
 
-from memory.benchmark import load_cases
+from mneme.benchmark import load_cases
 
 BASE = "http://127.0.0.1:1234"
 MODEL = "text-embedding-qwen3-embedding-0.6b"

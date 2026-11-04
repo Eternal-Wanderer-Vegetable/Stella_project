@@ -27,11 +27,11 @@ class PythonMemoryBackend:
     schema_version = MEMORY_SCHEMA_VERSION
 
     def retrieve(self, request: RetrievalRequest) -> Any:
-        from memory.retrieval_v2 import retrieve_memories
+        from mneme.retrieval_v2 import retrieve_memories
 
         kwargs: dict[str, Any] = {}
         if request.scope_space_key:
-            from memory.ownership import MemoryAccessScope
+            from mneme.ownership import MemoryAccessScope
 
             kwargs["access_scope"] = MemoryAccessScope(
                 space_key=request.scope_space_key,

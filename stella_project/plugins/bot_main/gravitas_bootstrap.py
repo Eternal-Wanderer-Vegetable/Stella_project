@@ -99,7 +99,7 @@ class GravitasRuntime:
             await asyncio.gather(task, return_exceptions=True)
         if active_controller() is self.controller:
             set_active_controller(None)
-            from memory.pre_processors import set_capture_pressure_provider
+            from mneme.pre_processors import set_capture_pressure_provider
 
             set_capture_pressure_provider(None)
         if _ACTIVE_GRAVITAS_RUNTIME is self:
@@ -159,7 +159,7 @@ def setup_gravitas(driver, *, stella_home: str | Path, status_api) -> GravitasRu
         return snapshot()
 
     def capture_source() -> object:
-        from memory.capture_gate import status_snapshot
+        from mneme.capture_gate import status_snapshot
 
         return status_snapshot()
 
@@ -170,7 +170,7 @@ def setup_gravitas(driver, *, stella_home: str | Path, status_api) -> GravitasRu
         mode=mode,
     )
     set_active_controller(controller)
-    from memory.pre_processors import set_capture_pressure_provider
+    from mneme.pre_processors import set_capture_pressure_provider
 
     if controller.effective_mode is GravitasMode.ENFORCE:
         set_capture_pressure_provider(

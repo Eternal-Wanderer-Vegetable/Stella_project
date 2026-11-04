@@ -1,3 +1,59 @@
+## 2026-11-04 — PR #129 Rust/Mneme 接线与文档同步
+
+- Scope / Current State：只改了 7 组中英文文档及任务状态文件；未改运行代码。分支 `codex/aoede-mneme-proactive`，文档收尾提交 `1d6e62c` 已推送；PR #129 现为 open/ready-for-review/unmerged。
+- What's Done：确认 `mneme.retrieval_v2` 经 `memory_rust.selector` 选择 backend，native 检索结果重建为 Mneme `RetrievalResult`；`mneme.memory_manager` 保留 Python 晋升门槛和提交后副作用，仅委托有界 native 事务。同步 API 4/schema 24、Rust/Mneme 连接说明、本机 native 验证证据和未完成的 Release/VM 验收边界；更新 Aoede、Docker、配置与记忆架构中英文文档。日期化的 schema23/Linux wheel 旧证据保留为历史。
+- Evidence：Python/native 常量及本机 Windows `memory_rust._native` 均为 API 4/schema 24；`resolve_backend("rust")` 选中该模块。定向 selector/promotion/Mneme import tests 22 passed / 1 deprecation warning；`scripts/validate_rust_fullchain.py` 在临时库通过 native retrieve smoke，Python/native promotion parity `differ=false`。`python scripts/check_docs.py`：127 files / 1358 links / 577 anchors / 0 errors；`python -m json.tool feature_list.json` 与 `git diff --check` 通过。PR head `1d6e62c` 上 14 项 hosted CI 全部通过（Python 3.10/3.11/3.12、flow closure/manifest、Docker、Windows native reliability、security、lint、CLI、documentation、memory benchmark、notify）。
+- GitNexus：编辑前源码合同文档 impact HIGH（exact；14 direct / 111 impacted，0 processes），故将其限制为当前合同更新并保留历史证据；其他目标文档 MEDIUM。状态文件 impact：`feature_list.json` LOW（2 direct）、`progress.md` MEDIUM（5 direct）、`session-handoff.md` LOW（2 direct）。提交前文档 all：17 files / 24 symbols / 0 processes / LOW；最终状态 all：3 files / 2 symbols / 0 processes / LOW；compare main 对 PR 累计改动判为 CRITICAL；CLI 提示符号列表有显示上限且完整 counts/risk 已计算。文档引用图不表示运行流程影响；索引提取限制仍按既有记录理解。
+- Blockers：本机 fullchain 不等同于 Release payload/干净 Windows VM/安装回滚验收；真实模型/QQ 灰度和时机/自然度验收仍未完成。`AOEDE-MNEME-IMPL` 保持 in_progress / NOT READY。
+- Next：等待 PR review。按计划继续独立完成 Release payload/Windows VM、真模型/QQ 与时机/自然度 gate；产品验收仍 NOT READY。
+
+## 2026-11-03 — PR #129 flow 漂移与群 @ 回复修复
+
+- Scope / Current State：修复已提交并推送至 PR #129，HEAD `f42aa24`，PR 仍为 draft。新提交的 flow-manifest、flow-closure、文档、lint、CLI、安全、Windows native reliability 与 Python 3.10/3.11/3.12 CI 均通过。
+- PR 测试根因/修复：旧 HEAD `b71e809` 的三个矩阵各为 4338 passed / 35 skipped / 1 failed；唯一失败 `TestDriftGate::test_committed_manifest_matches_source`，flow-manifest 也因同一 stale content-addressed manifest 失败。源码变更后旧清单未重新生成；提交 `core/observability/flows/message-flow.9b19e90b7675.json` 后本地 3.10/3.11/3.12 `--check` 与远端所有相关门禁通过。
+- 群 @ 无回复根因/修复：OneBot 的 `to_me` 只识别消息首尾的 @，`is_chat_trigger` 原先只看该标志；中间位置的原生 `at` 段被拒为 `not_mentioned`。群触发现在扫描原生 @ 段并要求 `qq == event.self_id`；其他 Bot 的 @ 仍拒绝。回归测试先失败、修复后通过。
+- 验证：本地 `TestSharedAdmission` + flow drift test **4 passed**；改动文件 Ruff、docs、manifest `--check`、`git diff --check` 均通过。PR Python CI 3.10/3.11/3.12 全绿。托管重启后 Corona PID 33904 / Nucleus PID 33152 ready，API reachable，OneBot healthy。日志未捕获到用户报告的原生 @ 事件；本轮没有发送 QQ 消息，因此真实 QQ 回包仍待用户发一条群 @ 后验收。
+- What's Next：用户在群里 @ Stella 后给大致时间，以核对脱敏的触发、生成和发送结果。真模型/QQ 灰度扩大、Windows 干净 VM 与自然度协议仍按 Gate G2 保持 NOT READY。
+
+## 2026-11-03 — 真实环境启动与首轮灰度实测
+
+- Scope / Current State：在本分支（258f9da+dc808e8）以 `python bot.py` 启动生产 bot（Bot 1694717255 经 NapCat 已连接，WebUI 8080）。schema23→24 迁移带备份成功（`agent_memory.db.pre-v24-20261103-174926.bak`）；4 张新表落库；mneme 采集门/aoede 参与评分/预算层全部活跃。
+- 实测发现并已修复：**budget_scope_key 裸 Bot 缺陷**——定时路径的裸 OneBot Bot 的 `connection_id` 是惰性 partial，scope 键落成 `functools.partial(...)|...`。已修复合成 `legacy-qq:{self_id}`（dc808e8，含回归测试钉死与入口路径同桶）；生产库 5 行脏键迁移后又出现系旧进程临终 tick 所写（新进程只写干净键），重复脏行已删除。
+- 灰度行为实测：每分钟 tick 对 5 个白名单群各提交验证 ASK 机会，全部被 `budget_empty (R=1.0)` 正确拒绝（桶初始 0、按 R/3600 补充）——「单群低频」灰度语义按计划工作；参与评分在实时消息上持续出分（IGNORE 段正常）。
+- 既有问题记录（非本分支）：①「定时任务失败，600 秒后重试：UNKNOWN_ERROR」为用户预约任务经 cometa 执行失败（启动即触发，重试中）；② memories_fts 索引 2113 行 ≠ active 2112 行（迁移校验 warning，1 行陈旧索引）；③ ligamina_bridge 扩展加载失败（用户未跟踪扩展自身的 matcher 签名问题）。
+- What's Next：等待首个预算 token 满（约 1 小时）观察第一次真实主动机会（验证 ASK 或插话）；真模型/QQ 灰度扩大与 Windows VM 验收继续 NOT READY。
+
+## 2026-11-03 — PR #129 起草与首轮验收
+
+- Scope / Current State：分支推远端并创建 **draft PR #129**（base main）。验收首轮完成：payload import smoke、native wheel schema24 重建与 parity、docker 镜像 smoke 合同补齐、全量复跑、flow 漂移门禁收口。
+- Evidence：① standalone-python payload 含 aoede/mneme/memory，解压树内 canonical 导入与兼容层身份验证通过（python 变体不含 memory_rust 为设计行为）；② cargo fmt/clippy clean，cargo test 26 passed（测试夹具随 schema24 更新，463612e），隔离 venv 安装新 wheel 导出 24、收 24 拒 23（'unsupported memory schema: expected 24, got 23'），`validate_rust_fullchain.py` PASS 且 python/native differ=false，仓库运行时 `_native.pyd` 已由新 wheel 刷新（gitignore 制品，原为 schema20）；③ docker-publish 镜像内 import 清单补 aoede/mneme（1dd77d8），镜像构建由 CI 在 PR 上执行；④ 全量 4302 passed，19F+4E 均为基线/环境既有（windows/test_process_tree 为记忆在档的基线失败）；⑤ flow manifest 在最终 HEAD 重生成（c809776）——319b9ff 的导入改写曾使旧 manifest 漂移，drift gate 正确拦截。
+- What's Next：CI 在 PR 上跑（含 docker smoke）；剩余 NOT READY——真模型/QQ 灰度、Windows 安装回滚 VM 验收、时机/自然度标注协议冻结。PR 过审后移除 draft。
+- Files：feature_list.json（验收证据）；提交 463612e、1dd77d8、c809776。
+
+## 2026-11-03 — Aoede / Mneme 阶段二实施（S2-01…S2-04）
+
+- Scope / Current State：分支 `codex/aoede-mneme-proactive`。阶段二四个工作包代码面完成：S2-01 求证持久生命周期（ae463ae）、S2-02 统一机会流程（a1e4767）、S2-03 PROACTIVE_FREQUENCY 持久预算（12af2da）、S2-04 行为验收与双语文档（本提交）。
+- What's Done：`mneme/verification.py`（attempts/tombstone/CAS/保守绑定/启动恢复）+ schema23→24（Python 与 memory_rust 常量同步）；consolidator 与晋升门防复活守卫；`aoede/opportunity.py`（每会话唯一在途、debounce 3s/TTL 15s、验证 ASK 公平竞争、掷骰/条数门槛退役、定时任务改造）；`aoede/budget.py` + `PROACTIVE_FREQUENCY`（0–6，R=0 绝对关闭含自发播报；容量 1/初始 0/UTC 墙钟/回退不补/fail closed）+ 主动插话/验证 ASK/自发播报共用一桶；context-only 参与验收测试；aoede/mneme 双语文档 S2 正文 + 配置参考条目。
+- Evidence：aoede 46 + 回归面 221 passed（proactive/participation/mneme/schema/settings/consolidator/reply）；ruff 全仓 clean；check_docs 127/1356/0；detect-changes 各包 LOW/MEDIUM/HIGH 均已报告；新旧导入身份与 CLI 退出码合同由 tests/mneme 固化。
+- What's Next：全量 tests/ 复跑（含 runtime/adapter 环境受限文件）；native wheel 按 schema24 重建 + 隔离安装 parity（未做，NOT RUN）；真模型/QQ 灰度/Windows 安装回滚验收未做——**overall NOT READY**；G2 灰度（影子→隔离模型→单群低频）待上述验收后。
+- Files：`aoede/{opportunity,budget,service,host,verification/service}.py`、`mneme/verification.py`、`mneme/{schema,consolidator,memory_manager}.py`、`memory_rust/{backend.py,native/src/schema.rs}`、`ai_gateway.py`、`config/settings.py`、`.env.example`、`docs/{architecture/aoede(.en).md,reference/configuration(.en).md}`、`tests/aoede/{test_verification_lifecycle,test_opportunity_timing,test_frequency_budget,test_context_only_participation}.py`、状态三文件。
+
+## 2026-11-03 — Aoede / Mneme 阶段一实施（S1-00…S1-04）
+
+- Scope / Current State：分支 `codex/aoede-mneme-proactive`（自 837a089）。阶段一「行为等价拆分」五工作包全部提交：S1-00 合同冻结（1c78905）、S1-01 中立端口（68edc85）、S1-02 Aoede 提取（4b53464）、S1-03 Mneme 改名（32029ac）、S1-04 发布/文档/flow 收口（本提交）。阶段二（S2-01…S2-04）未实施。
+- What's Done：正式包 `aoede/`（proactive*/participation/编排外移 + host 注入）与 `mneme/`（47 模块机械迁移）；`memory/*` 为身份保持兼容别名（sys.modules 自替换，CLI 双向等价）；`stella_contracts/aoede.py` 端口合同；ai_gateway 瘦委托 + scheduler 单注册；发布 payload COMMON_DIRS 加入两新包；双语架构文档 aoede/mneme（S1 骨架）；flow catalog 锚点迁至规范路径并重新生成 immutable manifest（旧 manifest 未改）。
+- Evidence：定向主动套件 106 passed（与基线一致）；受影响消费者（attribution/reply/time-sensitive/promotion/message-relations/observability 三批/aoede+mneme 兼容）全绿；全量 tests 4201 passed，17 失败经基线 worktree 对照证实为环境/既有（缺 nonebot 适配器、Windows 进程锁、corona/nucleus 隔离检查），非本轮回归；ruff 全仓 clean；check_docs 127 文件/1357 链接/0 错误；flow --check ok；新旧 CLI 退出码一致；import 身份 17 对全同。detect-changes：S1-02 LOW、S1-03 CRITICAL/47 flows（已报告，即改名本身）。
+- What's Next：阶段二 S2-01（求证持久生命周期，schema 下一版本以执行时最新+1 为准重核）→ S2-02（统一机会流程）→ S2-03（PROACTIVE_FREQUENCY）→ S2-04（行为验收+双语文档正文）。真模型/QQ 灰度/Windows 安装与 native wheel 验收未做，阶段一整体 **NOT READY for G1 全项**（缺安装环境验收），可独立回滚。
+- Files：`aoede/`、`mneme/`、`memory/`（兼容层）、`stella_contracts/aoede.py`、`ai_gateway.py`、`scripts/build_release_package.py`、`scripts/generate_message_flow.py`、`core/observability/flow_catalog.py`、`internal_flow_catalog.py`、新 manifest、`docs/architecture/aoede|mneme(.en).md`、`tests/aoede|mneme/`、状态三文件。未跟踪的 bridge/debug/startup 文件未混入。
+
+## 2026-11-03 — Aoede / Mneme 两阶段工程计划
+
+- Scope / Current State：仅制定计划；生产代码、测试、配置、数据库与服务均未改。交付 [Aoede / Mneme 工程计划](docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)，源码锚定 `837a0892e4f33e9341e0ecd1ac33049afad82271`。`AOEDE-MNEME-PLAN` 登记为规划完成；现有 active feature 的在途状态保留，不启动实施。
+- What's Done：分享讨论正文与当前源码交叉核验；两阶段分别为行为等价拆分命名、统一主动参与与一次性求证。列出接口、持久化事务、UNKNOWN 回执、预算、配置、native/schema、打包、离线/模型/QQ 分层验收及阶段提交。
+- Evidence：基线 `python scripts/check_docs.py` 为 123 文件 / 1333 链接 / 577 锚点 / 0 错误，`git diff --check` 通过。GitNexus 1.6.12 `analyze --index-only --pdg --workers 1` 刷新成功（122051 nodes / 308804 edges / 1253 clusters / 805 flows），实际 workspace index 的 runner 身份一致；初读旧 meta 的身份不匹配判断已撤回。核心符号已解析，retrieve_memories 为 CRITICAL / 8 direct，PDG controls 145条完整返回。新鲜 detect all：3 files / 2 symbols / 0 flows / LOW；compare main：101 / 524 / 20 / CRITICAL，无 partial/truncated。`progress.md` 首次 pre-edit HIGH 保留为历史，刷新后 MEDIUM / 5 direct；大文件跳过与图覆盖限制保留。最终 docs 123/1335/577/0，diff check通过。
+- What's Next：按计划 S1-00 在当前合适 checkout 重新锚定源码与图谱，执行阶段一；阶段一验收通过后才执行阶段二。尚未运行新业务测试、真实模型或 QQ 灰度；整体实现 **NOT READY**。
+- Files：本轮只新增计划并更新任务状态三文件；原有 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1` 保留。
+
 ## 2026-10-31 — MBENCH-002 记忆系统公开数据集基准评测
 
 - Scope: 新建 `memory_eval/` 评测包（隔离回放真实摄入→检索→作答→judge 全链路）+ `scripts/fetch_locomo.py`/`adapt_locomo.py`（pin+sha256，数据不入库）+ 12 个单测；分支 `codex/memory-benchmark`（基于 cf63061）。按 ChatGPT「研究Hy记忆」讨论的 SMB 结论执行。

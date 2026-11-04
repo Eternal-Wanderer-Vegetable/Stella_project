@@ -116,7 +116,7 @@ class RustMemoryBackend:
         raw = self._native.retrieve(json.dumps(payload, ensure_ascii=False))
         if isinstance(raw, str):
             raw = json.loads(raw)
-        from memory.retrieval_v2 import RetrievalResult
+        from mneme.retrieval_v2 import RetrievalResult
 
         return RetrievalResult(**raw)
 

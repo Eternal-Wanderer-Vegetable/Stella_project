@@ -72,7 +72,7 @@ class OracleConsolidationBackend:
     @staticmethod
     def _extract_statements(text: str) -> list[tuple[str, str]]:
         """从一条消息抽取 (span, 候选类型)；与证据合同共享同源正则。"""
-        from memory.evidence_contract import (
+        from mneme.evidence_contract import (
             _PREFERENCE_PATTERN,
             _PREFERENCE_PATTERN_EN,
             _SELF_REPORT_PATTERNS,

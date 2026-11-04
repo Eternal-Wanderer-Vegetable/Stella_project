@@ -35,7 +35,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from memory.evidence_contract import (
+from mneme.evidence_contract import (
     _PREFERENCE_PATTERN,
     _PREFERENCE_PATTERN_EN,
     _SELF_REPORT_PATTERNS,
@@ -169,8 +169,8 @@ def _shipped_accept(content: str) -> tuple[bool, str, str, str, str]:
     """
     import re as _re
 
-    from memory import evidence_contract as ec
-    from memory.evidence_contract import (
+    from mneme import evidence_contract as ec
+    from mneme.evidence_contract import (
         _MIN_VALUE_LEN,
         _semantic_contract_matches,
     )

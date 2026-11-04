@@ -2,9 +2,9 @@
 
 中文 | [English](memory-rust-backend.en.md) · [文档总览](../README.md)
 
-Stella 默认使用 `memory/` 中的 Python 引擎，也以它作为回退。
+Stella 默认使用 `mneme/` 中的 Python 记忆实现（`memory/*` 是保持同一模块身份的兼容别名），也以它作为回退。
 可选的 `stella-memory-rust` wheel 经 `memory_rust` 命名空间提供原生检索与晋升。
-当前分支要求两侧均为 **backend API 3 / memory schema 19**（[源码合同](../development/contracts.md)）；已发布 6.1.0 的 API 2/schema 18 是历史快照。
+当前分支要求两侧均为 **backend API 4 / memory schema 24**（[源码合同](../development/contracts.md)）；已发布 6.1.0 的 API 2/schema 18 是历史快照。
 wheel 包版本与 Stella 应用版本独立。
 
 ## 运行模式
@@ -23,6 +23,15 @@ wheel 包版本与 Stella 应用版本独立。
 `MEMORY_RUST_STRICT=true` 选择 strict；两者同时开启时 strict 优先。
 显式 `MEMORY_BACKEND` 始终优先。切回 Python：设置 `MEMORY_BACKEND=python` 并重启。
 
+## Mneme 接线
+
+`mneme.retrieval_v2.retrieve_memories()` 是检索入口。该入口通过
+`memory_rust.selector` 解析配置；选择 Rust 时，selector 校验 native 导出的 API/schema，
+调用 `_native` 检索，再把结果构造成同一个 `mneme.retrieval_v2.RetrievalResult`。
+`mneme.memory_manager.MemoryManager` 也通过 selector 解析 Rust 晋升后端，但晋升门槛、
+来源和所有权校验以及提交后副作用仍由 Mneme/Python 管理，native 只承担有界数据库事务。
+因此 Rust backend 是 Mneme 的可选实现接线，不是另一套记忆子系统。未配置时仍默认为 Python。
+
 Rust 不负责 embedding HTTP、LLM 整合、schema 迁移、Python 异步锁、调度、
 缓存失效与压缩器副作用；这些仍由 Python 集成层管理。
 
@@ -30,12 +39,18 @@ Rust 不负责 embedding HTTP、LLM 整合、schema 迁移、Python 异步锁、
 
 | 原生负载来源 | Backend API | Memory schema | Python |
 | --- | ---: | ---: | --- |
-| 当前分支原生源码（需重新核验 wheel） | 3 | 19 | 3.10+（`abi3`） |
+| 当前分支源码合同 | 4 | 24 | 3.10+（`abi3`） |
+| 本机 Windows `_native.pyd`（2026-11-04 隔离验证） | 4 | 24 | Python 3.14.7（本机证据） |
 | Stella `v6.1.0` 原生源码（`stella-memory-rust 0.1.0`） | 2 | 18 | 3.10+（`abi3`） |
 
 加载器先验证导出的 API/schema 常量，再选择 Rust。旧 wheel 也可能标为 `0.1.0`，
 **仅看包版本不能证明兼容**；使用对应 Stella Release 随包的 wheel，并核对导出常量。
 两侧必须遵守同一 owner/audience 合同，包括个人记忆作用域与来源绑定晋升。
+
+2026-11-04 的本机隔离验证确认 `_native.pyd` 导出 API 4/schema 24，`resolve_backend("rust")`
+选择该模块；定向兼容/晋升用例 22 项通过，`scripts/validate_rust_fullchain.py` 在临时库上
+通过原生检索冒烟与 Python/native 晋升 parity（`differ=false`）。这只证明当前本机产物与临时库，
+不替代 Release payload、干净 Windows VM 或安装/回滚验收。
 
 ## 发布资产
 

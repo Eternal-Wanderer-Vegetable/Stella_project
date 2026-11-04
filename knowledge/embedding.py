@@ -42,7 +42,7 @@ def _settings() -> Any:
 
 
 def _embedding_service():
-    from memory.embeddings import EmbeddingService
+    from mneme.embeddings import EmbeddingService
 
     return EmbeddingService
 
@@ -55,7 +55,7 @@ def resolve_embedding_profile() -> dict[str, Any]:
     if not base_url or not model:
         base_url = base_url or getattr(s, "MEMORY_EMBEDDING_BASE_URL", "")
         model = model or getattr(s, "MEMORY_EMBEDDING_MODEL", "")
-    from memory.embeddings import EMBEDDING_DIM
+    from mneme.embeddings import EMBEDDING_DIM
 
     return {
         "base_url": base_url,

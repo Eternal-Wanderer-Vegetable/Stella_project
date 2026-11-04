@@ -594,7 +594,7 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 
 ### 检索后端：Python / Rust（MEMORY_BACKEND）
 
-记忆引擎默认用 Python 实现（`memory/`），可选安装独立的 Rust 检索后端。选择方式不是本表的键，而是 `MEMORY_BACKEND` 环境变量：`python`（默认）/ `rust` / `auto`（可用则用、失败回退）/ `shadow`（Rust 只读旁路跑、记录一致性诊断、返回 Python 结果）/ `strict`（强制 Rust，失败即报）。兼容性矩阵、发布资产与回滚方式见 [memory-rust-backend.md](../architecture/memory-rust-backend.md)；早期的 `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` 等价于 `shadow` / `strict`，显式 `MEMORY_BACKEND` 优先。
+记忆引擎默认使用 Mneme 的 Python 实现（`mneme/`；`memory/*` 是保持模块身份的兼容别名），可选安装独立的 Rust 检索后端。选择方式不是本表的键，而是 `MEMORY_BACKEND` 环境变量：`python`（默认）/ `rust` / `auto`（可用则用、失败回退）/ `shadow`（Rust 只读旁路跑、记录一致性诊断、返回 Python 结果）/ `strict`（强制 Rust，失败即报）。兼容性矩阵、发布资产与回滚方式见 [memory-rust-backend.md](../architecture/memory-rust-backend.md)；早期的 `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` 等价于 `shadow` / `strict`，显式 `MEMORY_BACKEND` 优先。
 
 ### RAG 开关
 
@@ -682,6 +682,7 @@ interval >= SLOW → PROB_AT_SLOW
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
 | `PROACTIVE_ENABLED` | `true` | 主动发言总开关 |
+| `PROACTIVE_FREQUENCY` | `1.0` | 普通主动参与的唯一用户数值：每精确会话的最高长期补充速率（次/小时，0–6 支持小数）。R=0 关闭普通主动参与与自发睡眠/苏醒播报；被动回复与用户预约任务不受影响。重启生效（S2-03） |
 | `PROACTIVE_INTERVAL_FAST` | `20.0` | 视为「高频」的平均间隔上界（秒） |
 | `PROACTIVE_INTERVAL_SLOW` | `180.0` | 视为「冷清」的平均间隔下界（秒） |
 | `PROACTIVE_PROB_AT_FAST` | `0.15` | 高频端概率 |

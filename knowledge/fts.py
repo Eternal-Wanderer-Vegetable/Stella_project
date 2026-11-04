@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 
-from memory.text_similarity import normalize_text
+from mneme.text_similarity import normalize_text
 
 _CJK_RUN = re.compile(r"[\u4e00-\u9fff]{2,8}")
 _WORD = re.compile(r"\w+")

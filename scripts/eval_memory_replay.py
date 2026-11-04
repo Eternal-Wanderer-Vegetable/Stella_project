@@ -41,8 +41,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.spaces import resolve_space
-from memory import consolidator as consolidator_mod
-from memory.consolidator import MemoryConsolidator
+from mneme import consolidator as consolidator_mod
+from mneme.consolidator import MemoryConsolidator
 
 REPORT_SCHEMA = "memory-replay-report/1"
 # 编造判定：候选内容任一 4-gram 出现在会话窗口原文即视为有据；完全没有 = 编造
@@ -109,7 +109,7 @@ def _schema_conn(db_path: Path) -> sqlite3.Connection:
 def _provision_db(db_path: Path, sessions: list[dict[str, Any]]) -> None:
     """建规范 schema 并写入全部会话消息（时间戳按 day_offset 推移）。"""
     _schema_conn(db_path)
-    from memory.pre_processors import _GROUP_MESSAGES_V16_DDL
+    from mneme.pre_processors import _GROUP_MESSAGES_V16_DDL
 
     conn = sqlite3.connect(db_path)
     try:
@@ -148,10 +148,10 @@ def _provision_db(db_path: Path, sessions: list[dict[str, Any]]) -> None:
 
 def _isolate_paths(db_path: Path, tmp_path: Path, sessions: list[dict[str, Any]]) -> None:
     """DB / 日志路径全部指向隔离目录（评测不触生产库与仓库文件）。"""
-    import memory.memory_manager as memory_manager_mod
-    import memory.post_processors as post_processors
-    import memory.pre_processors as pre_processors
-    import memory.retriever as retriever
+    import mneme.memory_manager as memory_manager_mod
+    import mneme.post_processors as post_processors
+    import mneme.pre_processors as pre_processors
+    import mneme.retriever as retriever
 
     for mod in (pre_processors, consolidator_mod, retriever, memory_manager_mod):
         mod.DB_PATH = db_path
@@ -271,7 +271,7 @@ def _evaluate_metrics(
         promotion.append({"id": exp["id"], "promoted": hit})
 
     # ── qa_accuracy（生产检索语义，rule 模式） ──
-    import memory.retrieval_v2 as retrieval_v2
+    import mneme.retrieval_v2 as retrieval_v2
 
     old_db, old_v2, old_rag = (
         retrieval_v2.DB_PATH,

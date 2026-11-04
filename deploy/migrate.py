@@ -30,7 +30,7 @@ from config import space_map, state
 from . import env_merge, manifest
 
 if TYPE_CHECKING:  # 只为类型标注：运行时不 import memory.*（那会连带拉起整个记忆层）
-    from memory.migrations import MigrationReport
+    from mneme.migrations import MigrationReport
 
 # ── 用户数据清单：全项目「什么是用户数据」的唯一定义 ──────────
 #
@@ -455,7 +455,7 @@ def _migrate_database(
     这样迁移写进去的名字与运行时 ``resolve_space()`` 返回的名字必然一致——不一致会
     让检索静默查不到（「一切正常但什么都不记」）。
     """
-    from memory import migrations, schema
+    from mneme import migrations, schema
 
     root = source if dry_run else target
     db_path = root / "memory" / "agent_memory.db"

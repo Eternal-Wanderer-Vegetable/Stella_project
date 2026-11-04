@@ -260,6 +260,6 @@ QQ private chat defaults to enabled (`PRIVATE_CHAT_ENABLED=true`); an empty
 `PRIVATE_CHAT_ALLOWLIST` allows all friends, independently of `ALLOWED_GROUPS`.
 Personal writing/sharing, attribution guards, and proactive contracts default to
 disabled; migration does not automatically share old facts. Rust deployments need
-an extension matching the deployed application: current branch API 3/schema 19, published 6.1.0 snapshot API 2/schema 18. Mismatches fail rust/strict selection; see [source contracts](../development/contracts.en.md). See
+an extension matching the deployed application: current branch API 4/schema 24, published 6.1.0 snapshot API 2/schema 18. Mismatches fail rust/strict selection; see [source contracts](../development/contracts.en.md). See
 [configuration](../reference/configuration.en.md) and [Cometa](cometa.en.md) for defaults and
 the optional SDK.

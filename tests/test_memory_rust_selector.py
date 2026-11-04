@@ -103,7 +103,7 @@ def test_rust_requires_matching_contract():
 def test_python_memory_schema_contract_matches_source_version():
     from memory.schema import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == MEMORY_SCHEMA_VERSION == 23
+    assert SCHEMA_VERSION == MEMORY_SCHEMA_VERSION == 24
 
 
 def test_rust_requires_matching_api_version():

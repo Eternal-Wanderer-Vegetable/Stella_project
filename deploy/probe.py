@@ -50,7 +50,7 @@ from config import (
     STELLA_HOME_SOURCE,
     SYSTEM_PROMPT_PATH,
 )
-from memory.schema import SCHEMA_VERSION
+from mneme.schema import SCHEMA_VERSION
 
 from . import env_keys
 from .models import Snapshot

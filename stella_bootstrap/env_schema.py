@@ -19,6 +19,9 @@ _ENV_FUNCS = frozenset(
         "_env_int_set",
         "_env_str_list",
         "_env_choice",
+        # 带范围校验的专用浮点解析（S2-03 PROACTIVE_FREQUENCY；非法值回退
+        # 安全默认的诊断逻辑在 settings 侧，schema 侧按 float 暴露）
+        "_env_frequency",
     }
 ) | _INHERIT_FUNCS
 _FIELD_TYPES = {
@@ -30,6 +33,7 @@ _FIELD_TYPES = {
     "_env_int_set": "int_set",
     "_env_str_list": "str_list",
     "_env_choice": "choice",
+    "_env_frequency": "float",
     "_env_inherit": "string",
     "_env_int_inherit": "int",
     "_env_float_inherit": "float",

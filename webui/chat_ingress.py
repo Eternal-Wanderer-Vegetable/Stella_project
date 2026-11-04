@@ -121,8 +121,8 @@ async def run_turn(
         normalize_trusted_webchat,
     )
     from core.transport.legacy_ingress import shared_legacy_ingress
-    from memory import capture_gate, conversation_registry, social_store
-    from memory.pre_processors import record_message
+    from mneme import capture_gate, conversation_registry, social_store
+    from mneme.pre_processors import record_message
 
     _ensure_webchat_space()
     # 注册表登记（计划 §6.1）：WebChat 保留 -1 存储/独立主体，不被私聊复用
@@ -328,7 +328,7 @@ async def reset_webchat_runtime() -> None:
     ——已取消旧轮不能晚到后重建历史。会话压缩状态同步重置（多人身份修复
     计划 §6.4）：generation 递增使在途 compact 的 CAS 拒绝旧摘要提交。
     """
-    from memory import session_context as sc
+    from mneme import session_context as sc
 
     sc.bump_reset_generation(WEBCHAT_GROUP_ID)
     from core.runtime.facade import ensure_shared_facade_started

@@ -329,8 +329,8 @@ class RestrictedPlanner:
         """
         try:
             from config.spaces import resolve_space
-            from memory.ownership import scope_for_chat_context
-            from memory.retrieval_v2 import retrieve_memories
+            from mneme.ownership import scope_for_chat_context
+            from mneme.retrieval_v2 import retrieve_memories
 
             space = ctx.group_shared_space or resolve_space(ctx.group_id)
             # 深度查询与快速路径同一份访问范围（计划 §6.6）：Planner 的改写

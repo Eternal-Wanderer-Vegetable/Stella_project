@@ -87,7 +87,7 @@ with _contextlib.suppress(Exception):
     from config import PROJECT_ROOT as _PROJECT_ROOT
     from config import STELLA_HOME as _STELLA_HOME
     from config import state as _state
-    from memory.schema import SCHEMA_VERSION as _SCHEMA_VERSION
+    from mneme.schema import SCHEMA_VERSION as _SCHEMA_VERSION
 
     _TRANSITION = _state.record_run(
         _STELLA_HOME, _PROJECT_ROOT, schema_version=_SCHEMA_VERSION

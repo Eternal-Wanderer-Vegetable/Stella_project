@@ -42,6 +42,7 @@ COMMON_FILES = (
 # 2026-09-24 实测），重则启动期 ModuleNotFoundError。
 COMMON_DIRS = (
     "astrbot_compat",
+    "aoede",
     "capability",
     "config",
     "core",
@@ -51,6 +52,7 @@ COMMON_DIRS = (
     "gravitas",
     "knowledge",
     "memory",
+    "mneme",
     "nucleus",
     "skills",
     "system_prompts",

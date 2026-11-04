@@ -2,10 +2,11 @@
 
 [中文](memory-rust-backend.md) | English · [Documentation](../README.en.md)
 
-The Python `memory/` engine remains the default and fallback. The optional
+The Python memory implementation in `mneme/` remains the default and fallback;
+`memory/*` is a compatibility alias layer that preserves module identity. The optional
 `stella-memory-rust` wheel exposes native retrieval and promotion through the
-`memory_rust` namespace. The current branch requires **backend API 3 and memory schema
-19** on both sides ([source contracts](../development/contracts.en.md)); the published 6.1.0 API 2/schema 18 contract is a historical snapshot; the wheel package version is independent of the application
+`memory_rust` namespace. The current branch requires **backend API 4 and memory schema
+24** on both sides ([source contracts](../development/contracts.en.md)); the published 6.1.0 API 2/schema 18 contract is a historical snapshot; the wheel package version is independent of the application
 version.
 
 ## Runtime modes
@@ -25,6 +26,18 @@ and `MEMORY_RUST_STRICT=true` selects strict. Strict wins if both flags are set.
 An explicit backend setting takes precedence. To return to Python, set
 `MEMORY_BACKEND=python` and restart.
 
+## Mneme binding
+
+`mneme.retrieval_v2.retrieve_memories()` is the retrieval entry point. It uses
+`memory_rust.selector` to resolve the configured backend. When Rust is selected,
+the selector validates the native API/schema exports, calls `_native`, and
+reconstructs the result as the same `mneme.retrieval_v2.RetrievalResult` type.
+`mneme.memory_manager.MemoryManager` also resolves the Rust promotion backend,
+while Mneme/Python retains promotion gates, source and ownership checks, and
+post-commit effects; native code owns only the bounded database transaction.
+Rust is an optional backend attached to Mneme, not a second memory subsystem.
+Python remains the default when no backend is configured.
+
 Rust does not own embedding HTTP, LLM consolidation, schema migration, Python
 async locks, scheduling, cache invalidation, or compressor side effects. The
 Python integration retains those responsibilities.
@@ -33,7 +46,8 @@ Python integration retains those responsibilities.
 
 | Payload built from | Backend API | Memory schema | Python |
 | --- | ---: | ---: | --- |
-| Current branch native source (recheck the actual wheel) | 3 | 19 | 3.10+ (`abi3`) |
+| Current branch source contract | 4 | 24 | 3.10+ (`abi3`) |
+| Local Windows `_native.pyd` (isolated check, 2026-11-04) | 4 | 24 | Python 3.14.7 (local evidence) |
 | Stella `v6.1.0` native source (`stella-memory-rust 0.1.0`) | 2 | 18 | 3.10+ (`abi3`) |
 
 The loader validates exported API/schema constants before selecting Rust.
@@ -41,6 +55,13 @@ An older wheel can also be named `0.1.0`; **package version alone cannot prove
 compatibility**. Use the wheel shipped with the matching Stella release and
 verify its exported constants. Python and Rust owner/audience contracts must
 agree, including personal-memory scopes and source-bound promotion.
+
+On 2026-11-04, an isolated local check confirmed that `_native.pyd` exports API
+4/schema 24 and that `resolve_backend("rust")` selects it. The targeted
+compatibility/promotion tests passed (22); `scripts/validate_rust_fullchain.py`
+passed native retrieval smoke and Python/native promotion parity (`differ=false`)
+against temporary databases. This does not certify the release payload, a clean
+Windows VM, or install/rollback acceptance.
 
 ## Release assets
 

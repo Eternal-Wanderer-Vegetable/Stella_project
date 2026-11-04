@@ -44,7 +44,7 @@ class Preference:
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
-    from memory.schema import create_astrbot_preferences_table
+    from mneme.schema import create_astrbot_preferences_table
 
     create_astrbot_preferences_table(conn)
     return conn

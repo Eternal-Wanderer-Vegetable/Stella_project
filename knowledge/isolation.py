@@ -65,7 +65,7 @@ def evidence_leaked_into_memory(ctx: Any) -> list[str]:
     evidence = getattr(ctx, "knowledge_evidence", None) or []
     if not evidence:
         return []
-    from memory.text_similarity import normalize_text
+    from mneme.text_similarity import normalize_text
 
     memory_texts = _memory_texts(ctx)
     if not memory_texts:

@@ -15,8 +15,6 @@ import asyncio
 from pathlib import Path
 
 import pytest
-
-from memory.participation import ParticipationManager
 from memory.participation.decision import (
     ALLOW_LLM,
     CANDIDATE,
@@ -27,6 +25,8 @@ from memory.participation.tables import (
     ParticipationTableError,
     load_tables,
 )
+
+from memory.participation import ParticipationManager
 
 TABLES_DIR = Path(__file__).resolve().parent.parent / "config" / "participation"
 

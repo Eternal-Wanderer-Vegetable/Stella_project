@@ -16,7 +16,7 @@ import sqlite3
 from typing import Any
 
 from config import DB_PATH
-from memory import scope_versions
+from mneme import scope_versions
 
 
 def _connect() -> sqlite3.Connection:

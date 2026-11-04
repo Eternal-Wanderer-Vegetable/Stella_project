@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-03",
-  "active_feature": "SETTINGS-DOCTOR-MODEL-CONFIG-RECOVERY",
+  "updated_at": "2026-11-04",
+  "active_feature": "AOEDE-MNEME-IMPL",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -2179,7 +2179,7 @@
       "id": "SETTINGS-DOCTOR-MODEL-CONFIG-RECOVERY",
       "name": "设置页模型端点与待应用配置告警处理",
       "description": "恢复或明确当前不可达的本地模型端点，并在审查外部环境修订后决定应用、回退或逐项合并。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [
         "SETTINGS-DOCTOR-MANAGED-PORT-ACCURACY"
       ],
@@ -2277,6 +2277,75 @@
       "acceptance": "shipped（生产语义直调）对 202 样本：MUST 召回 30/143（21.0%，A0 基线 10 倍）、MUST_NOT 误收 1/19（维持基线）、精度代理 97.1%；plan_intent→PLAN 绑定让计划类自动获得 14 天时效 TTL。",
       "evidence": "docs/reports/2026-11-03-contract-expansion-production.md",
       "branch": "codex/evidence-contract-expansion"
+    },
+    {
+      "id": "AOEDE-MNEME-PLAN",
+      "name": "Aoede / Mneme 子系统拆分与主动发言改造计划",
+      "description": "根据分享讨论与当前源码制定两阶段落地计划；仅交付计划，不实施业务改动。",
+      "status": "done",
+      "dependencies": [],
+      "scope": [
+        "docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "计划明确 Aoede/Mneme 代码、数据和接口边界与兼容策略",
+        "阶段一行为等价拆分，阶段二覆盖上下文参与、一次性求证、统一预算、时机与文档",
+        "每个工作包含目标文件、验收、迁移、回滚与提交检查点，图局限和外部验收缺口明确"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md",
+          "result": "Pinned to 837a0892e4f33e9341e0ecd1ac33049afad82271. Discussion/current source reviewed. GitNexus 1.6.12 analyze --index-only --pdg --workers 1 completed (122051 nodes / 308804 edges / 1253 clusters / 805 flows). Core impacts resolved: pick_target LOW/1 direct; retrieve_memories CRITICAL/8 direct; all consumers accounted. Complete 145-edge controls slice plus target/replied flows checked. Docs 123 files / 1335 links / 577 anchors / 0 errors; diff check passed. Fresh detect all: 3 files / 2 symbols / 0 flows / LOW; compare main: 101 files / 524 symbols / 20 flows / CRITICAL, neither partial nor truncated. Skipped large files and graph coverage limits retained. Planning only; runtime/implementation NOT READY."
+        }
+      ]
+    },
+    {
+      "id": "AOEDE-MNEME-IMPL",
+      "name": "Aoede / Mneme 子系统拆分与主动发言改造实施",
+      "description": "按 2026-11-03 计划两阶段实施：S1 行为等价拆分（aoede/mneme 包 + 兼容层 + 发布），S2 上下文优先参与、一次性求证持久生命周期与统一预算。",
+      "status": "in_progress",
+      "dependencies": [
+        "AOEDE-MNEME-PLAN"
+      ],
+      "scope": [
+        "stella_contracts/aoede.py（新）",
+        "aoede/（新）、mneme/（新）、memory/（兼容层）",
+        "stella_project/plugins/bot_main/ai_gateway.py",
+        "scripts/build_release_package.py、docs/architecture/aoede|mneme（新）",
+        "tests/aoede/（新）等定向测试"
+      ],
+      "done_criteria": [
+        "G1：aoede/mneme 正式包与 memory 兼容层同一模块/单例身份加载，行为等价基线不变，发布 payload 与双语命名文档同步",
+        "G2：context-only/context+memory 同一决策流程；一次性求证持久终态与 tombstone 防复活；PROACTIVE_FREQUENCY 持久预算；被动/预约合同独立",
+        "缺离线回归、真模型、QQ 灰度或 Windows 安装验收时保留 NOT READY，不以源码存在替代验收"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md",
+          "result": "S1-00 baseline on branch codex/aoede-mneme-proactive at 837a089: targeted proactive suite 106 passed / 2 errored (tests/runtime/test_proactive_native.py fixture needs nonebot_plugin_alconna, missing in current interpreter - environmental, pre-existing). Fresh GitNexus impact re-confirmed at this HEAD: pick_target LOW/2, _proactive_at_user LOW/1, _check_reply_later LOW/2, ParticipationManager LOW/13, retrieve_memories CRITICAL/19 (reported; behaviour-equivalent split + all 8 direct consumers regressed per plan)."
+        },
+        {
+          "report": "docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md",
+          "result": "Stage 1 (S1-00..S1-04) complete on codex/aoede-mneme-proactive, 5 commits. Canonical aoede/ + mneme/ packages extracted; memory/* identity-safe compat aliases (sys.modules self-replacement, CLI parity, light package import); neutral ports in stella_contracts/aoede.py; ai_gateway thin delegates with single scheduler registration; release payload COMMON_DIRS includes both packages; bilingual architecture skeletons docs/architecture/aoede|mneme(.en).md; flow catalog anchors re-pointed and immutable manifest regenerated (old manifests untouched). Gates: targeted proactive 106 passed (baseline parity); compat/identity suites green; full suite 4201 passed with 17 failures verified identical on pre-change baseline via worktree (environmental/pre-existing); ruff clean; check_docs 127 files/1357 links/0 errors; flow --check ok; detect-changes S1-03 CRITICAL reported (the rename itself, all direct consumers regressed). Stage 2 (S2-01..S2-04) not started; G1 full acceptance NOT READY pending release-product/install/native-wheel checks."
+        },
+        {
+          "report": "docs/plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md",
+          "result": "Stage 2 (S2-01..S2-04) code complete on codex/aoede-mneme-proactive. S2-01 (ae463ae): mneme/verification.py attempts+tombstones, schema23->24 (Python + memory_rust constants; native wheel rebuild NOT RUN - old wheel refuses new DB and falls back to Python backend), conservative reply binding, CAS rejection, consolidator+promotion anti-resurrection guards, 12 lifecycle scenarios. S2-02 (a1e4767): aoede/opportunity.py unified timing layer - one in-flight per conversation, debounce 3s/TTL 15s, verification ASK competes without timer priority, dice+15-message gates retired from the new path, timer rework, 9 timing scenarios. S2-03 (12af2da): PROACTIVE_FREQUENCY (0-6/h default 1.0, R=0 absolute off incl. announcements), persistent token bucket (capacity 1, empty start, UTC wall clock, rollback-safe, fail-closed), shared bucket for speak/ASK/announce, 11 budget scenarios. S2-04: context-only participation acceptance (empty memory proceeds; budget-blocked stays silent), bilingual aoede/mneme doc bodies, config reference entries. Regression 221 passed across proactive/participation/mneme/schema suites; ruff clean; docs 127 files/1356 links/0 errors; detect-changes LOW (11 files/6 symbols). Remaining acceptance gaps: full-suite run incl. runtime/adapter files, model/QQ/Windows/native-wheel acceptance - overall NOT READY per plan gates."
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/129",
+          "result": "Acceptance round (post-draft PR #129): (1) payload import smoke PASS - standalone-python payload contains aoede/mneme/memory, canonical imports and compat identity verified from the extracted tree (memory_rust absent by design in the python variant; shipped via wheel in rust variants). (2) native wheel rebuilt for schema24: cargo fmt/clippy clean, cargo test 26 passed after seeding fixtures at 24 (commit 463612e); isolated-venv install exports MEMORY_SCHEMA_VERSION=24 and the gate accepts 24 / refuses 23 ('unsupported memory schema: expected 24, got 23'); scripts/validate_rust_fullchain.py verdict PASS with python/native differ=false; repo runtime _native.pyd refreshed from the new wheel (gitignored artifact, previously schema20). (3) docker image smoke contract extended to import mneme+aoede in-container (commit 1dd77d8); actual image build runs in CI on this PR. (4) full suite 4302 passed; remaining 19F+4E verified baseline/environmental (one new sighting: windows/test_process_tree - documented pre-existing baseline failure). (5) flow drift gate green at final head (c809776). Still NOT READY: model/live-QQ gray rollout, Windows install/rollback VM acceptance, timing/naturalness rubric."
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/129",
+          "result": "Follow-up on PR #129, fixed at head f42aa2448cf9875ef6782cf40565efc1e3c19490: old head b71e809 failed all three Python matrices (4338 passed/35 skipped/1 failed each) and flow-manifest due to a stale content-addressed manifest; sole test failure was TestDriftGate::test_committed_manifest_matches_source. Regenerated message-flow.9b19e90b7675.json; local --check passes on Python 3.10/3.11/3.12. Fixed group admission for native OneBot at segments anywhere in the message, requiring segment qq to equal active bot self_id. Regression failed before the fix and passed after; TestSharedAdmission + flow drift test: 4 passed. Changed-file Ruff, docs, git diff --check, and all PR checks including Python 3.10/3.11/3.12, flow-manifest, flow-closure, Windows native reliability, security, CLI, and lint passed. Managed runtime restarted: Corona 33904 / Nucleus 33152 ready, API reachable, OneBot healthy. No live QQ message was sent; actual reply acceptance remains pending. AOEDE-MNEME-IMPL remains in_progress / NOT READY for remaining G2 gates."
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/129",
+          "result": "2026-11-04 Rust/Mneme binding and documentation audit: Python source, Rust contract constants, and local Windows memory_rust._native exports agree at backend API 4/schema 24; mneme.retrieval_v2 routes through memory_rust.selector and mneme.memory_manager owns promotion policy while delegating the bounded transaction. Focused selector/promotion/Mneme compatibility tests: 22 passed, 1 deprecation warning; scripts/validate_rust_fullchain.py passed on temporary databases with native retrieval smoke and Python/native promotion differ=false. Synchronized 7 bilingual documentation pairs and updated current source-contract references; python scripts/check_docs.py passed (127 files / 1358 local links / 577 anchors / 0 errors), git diff --check passed. Commit 1d6e62c was pushed; all 14 hosted CI checks passed and PR #129 was marked ready for review (open/unmerged). Release-payload/clean Windows VM, model/QQ rollout, and behavior-rubric acceptance remain NOT READY; feature stays in_progress."
+        }
+      ]
     }
   ]
 }
