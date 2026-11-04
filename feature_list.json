@@ -2415,7 +2415,7 @@
         },
         {
           "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b02.md",
-          "result": "B02 completed on fixed public When2Speak and Social AI Ambient test revisions. Three deterministic no-memory baselines each scored 21,687/21,687 and 16,222/16,222 rows; all six reports passed schema validation with zero actor/scorer failures. Model calls, memory inputs, and generated outputs were zero. B02 tests 9 passed and Ruff passed. Source labels remain separate from Stella Chinese-persona labels; product behavior, timing, memory, model, and platform acceptance remain NOT READY."
+          "result": "B02 completed on fixed public When2Speak and Social AI Ambient test revisions. Three deterministic no-memory baselines each scored 21,687/21,687 and 16,222/16,222 rows; all six reports passed schema validation with zero actor/scorer failures. Model calls, memory inputs, and generated outputs were zero. B02 tests 9 passed and Ruff passed. Source labels remain separate from Stella Chinese-persona labels; product behavior, timing, memory, model, and platform acceptance remain NOT READY. Commit e9738e9 is pushed and bilingual PR comment 6629116706 is recorded."
         }
       ]
     }

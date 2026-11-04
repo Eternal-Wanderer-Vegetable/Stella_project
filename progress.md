@@ -1,6 +1,6 @@
 ## 2026-11-04 — 主动参与与记忆 Benchmark B02
 
-- Scope / Current State：B02 代码、公开数据适配和无记忆基线均完成，待本包独立提交与 PR #130 中英文评测评论。`AOEDE-MNEME-BENCH-IMPL` 继续为唯一 `in_progress` feature；整体行为效果仍 NOT READY。
+- Scope / Current State：B02 已单独提交并推送为 `e9738e9`，PR #130 中英文评测评论已发布（`6629116706`）。`AOEDE-MNEME-BENCH-IMPL` 继续为唯一 `in_progress` feature；整体行为效果仍 NOT READY。
 - What's Done：When2Speak token adapter 从 actor 输入隔离末尾 gold token；Social AI Ambient 按标注目标轮切分为 16,222 个前缀 scenario，source category 仅供 report-side 分层。新增 always-silent、always-speak、last-explicit-question 三个零记忆/零生成本地 actor、源标签 scorer、完整误判 JSONL 与汇总报告。
 - Evaluation：When2Speak 三组各 21,687/21,687；Social AI 三组各 16,222/16,222；全部 6 个 report schema 校验通过，actor/scorer failed=0、coverage=100%，model calls/memory inputs/generated outputs=0。Macro-F1：When2Speak 0.4656/0.1142/0.5037；Social AI 0.4933/0.0258/0.5184（按 always-silent / always-speak / last-explicit-question）。末问号规则仍漏掉 94.7% 与 83.2% gold SPEAK，保留原样基线，不调生产策略。定向回归 9 passed（1 条 Python 3.14 async 弃用警告）；Ruff 与 CLI help 通过。首个完成基线报告由 checkpoint 汇总恢复，wall_time_ms=null；其余五组有 runner wall time。
 - Dataset / Boundary：When2Speak revision `092e40995896b0c278a1e32954297ef125b70112` / 21,687 rows；Social AI revision `5efda0b267d6bd5ecae74cbe1141a66f64495661` / 1,212 scenes、16,222 labeled turns。源标签不是 Stella 中文 persona 标签（此处 0）；未运行真实模型/平台/产品组件时机、无生产聊天/数据库/配置。运行缓存和每案例原文保持在 gitignored run path。

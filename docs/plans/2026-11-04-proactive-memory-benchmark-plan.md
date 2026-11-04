@@ -318,7 +318,7 @@ node .gitnexus/run.cjs detect-changes --scope compare --base-ref main --repo Ste
 
 - **B00：完成。** 协议、来源、指标分母、数据和门禁冻结；见 [B00 报告](../reports/2026-11-04-proactive-memory-benchmark-b00.md)。
 - **B01：完成。** 通用数据合同、隔离 actor/scorer runner、指纹和断点恢复已提交并单独记录；见 [B01 报告](../reports/2026-11-04-proactive-memory-benchmark-b01.md)。
-- **B02：离线公开基线完成。** When2Speak 21,687/21,687 与 Social AI Ambient 16,222/16,222 三种无记忆策略均完整计分；模型调用/生成/记忆输入为 0。公开数据源标签不等于 Stella 中文 persona 标注；不得据此宣称产品有效或调生产规则。完整指标、数据哈希、误判边界与运行限制见 [B02 报告](../reports/2026-11-04-proactive-memory-benchmark-b02.md)。
+- **B02：离线公开基线完成。** When2Speak 21,687/21,687 与 Social AI Ambient 16,222/16,222 三种无记忆策略均完整计分；模型调用/生成/记忆输入为 0。公开数据源标签不等于 Stella 中文 persona 标注；不得据此宣称产品有效或调生产规则。提交 `e9738e9` 已推送；PR #130 中英文评论已发布。完整指标、数据哈希、误判边界与运行限制见 [B02 报告](../reports/2026-11-04-proactive-memory-benchmark-b02.md)。
 - **B03–B07：未完成。** 时机/机制、记忆全链路、自然使用、中文盲测和完整离线验收仍按依赖顺序推进；B06 标注资源尚未安排。
 - **B08：未开始且未准入。** 真实平台目标、参与者同意、模型/配置、观察窗口及回滚动作需要明确授权；不得从本机服务健康或公开数据推断可向群发送。
 - 当前总状态保持 **NOT READY**。每包独立英文提交；每步完成评测后在对应 PR 评论写中英文结论。

@@ -1,12 +1,12 @@
 ## Current Handoff — proactive / memory benchmark B02 (2026-11-04)
 
-- Current Objective：B02 公开数据适配和本地无记忆基线完成；正在整理独立包提交与 PR #130 中英文评测评论。PR base `codex/aoede-mneme-proactive`。整体 benchmark/产品行为验收保持 NOT READY。
+- Current Objective：B02 公开数据适配和本地无记忆基线已完成；commit `e9738e9` 已推送，PR #130 双语评测评论 `6629116706` 已发布。PR base `codex/aoede-mneme-proactive`。下一包进入 B03，整体 benchmark/产品行为验收保持 NOT READY。
 - Files：`proactive_eval/b02.py`、`proactive_eval/source_adapters.py`、`proactive_eval/b02_plugins.py`、`tests/evaluation/test_proactive_b02.py`、[B02 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b02.md)、计划和状态文件。保留既有无关未跟踪 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
 - Evaluation：When2Speak 3 baselines each 21,687/21,687; Social AI Ambient 3 baselines each 16,222/16,222；actor/scorer failures 0，coverage 100%，model/memory/generation 0。六份 schema PASS；定向 tests 9 passed、Ruff PASS。末问号规则 FIR/MIR 分别为 When2Speak 0.0261/0.9470、Social AI 0.0740/0.8322。原始数据标签与 Stella persona 标注分栏，persona 标签数 0。
 - Recovery Notes：首个 When2Speak/always-silent 已完成 actor/scorer，但报告聚合时出现解包 bug；补丁后从完成 checkpoint 恢复汇总，未重跑。随后修正 B02 只给已有部分 checkpoint 的 baseline 传 `--resume`；新基线使用新的临时 STELLA_HOME root，保留之前失败尝试的临时标记。全六组当前完成；数据缓存位于 gitignored `memory/benchmark/_public/proactive_eval/runs/B02-2026-11-04/`。
 - GitNexus：本包 scope all repeated snapshots 9 files / 3–25 symbols / 792 processes / CRITICAL；compare main 344 files / 364–1,158 symbols / 791–792 processes / CRITICAL。`source_adapters.py` 文件级 impact HIGH / summary-only MEDIUM，exact context 显示只被 B02 runner 与测试导入；保留 HIGH/CRITICAL，不按风险轴降级。新建包的索引解析不稳定并有流程截断，改动中无 Aoede/Mneme/部署/Rust 源文件。
 - Boundaries：只用固定公开数据与确定性本地决策；Python 3.14.6；无模型、Bot、生产聊天/数据库/配置或平台服务。报告第一组 baseline 的 `wall_time_ms` 为 null，因为是完成 checkpoint 汇总恢复，未作时间估算。
-- Next：按计划进入 B03，以 PITCH 轮次窗口驱动正式 OpportunityManager/预算/Mneme 求证矩阵；先做 GitNexus upstream impact 和源码合同核验。B06 双标人员/裁决排期尚缺；B08 真实平台范围、参与者同意和7日观察未准入。
+- Next：以 PITCH 轮次窗口驱动正式 OpportunityManager/预算/Mneme 求证矩阵；开始前做 GitNexus upstream impact 和源码合同核验。B06 双标人员/裁决排期尚缺；B08 真实平台范围、参与者同意和7日观察未准入。
 
 ## Current Handoff — proactive / memory benchmark B01 (2026-11-04)
 

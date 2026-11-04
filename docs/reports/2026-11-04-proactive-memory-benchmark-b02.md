@@ -55,4 +55,4 @@ python -m proactive_eval.b02 --resume --home-root $attemptHome
 
 ## 恢复点
 
-B02 源码、定向测试、状态更新与本报告按一个工作包独立提交；B02 的数据产物保留在上述 gitignored run directory。下一包为 B03：用 PITCH 可用轮次窗口驱动正式 OpportunityManager、预算与 Mneme 求证状态，并单独记录发现的产品缺陷，不与本报告的无记忆基线混合。
+B02 源码、定向测试、状态更新与本报告作为工作包提交并推送：`e9738e9` (`feat(eval): add B02 public participation baselines`)。中英文评测评论已发布在 [PR #130](https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/130#issuecomment-6629116706)。B02 数据产物保留在上述 gitignored run directory。下一包为 B03：用 PITCH 可用轮次窗口驱动正式 OpportunityManager、预算与 Mneme 求证状态，并单独记录发现的产品缺陷，不与本报告的无记忆基线混合。
