@@ -2416,6 +2416,10 @@
         {
           "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b02.md",
           "result": "B02 completed on fixed public When2Speak and Social AI Ambient test revisions. Three deterministic no-memory baselines each scored 21,687/21,687 and 16,222/16,222 rows; all six reports passed schema validation with zero actor/scorer failures. Model calls, memory inputs, and generated outputs were zero. B02 tests 9 passed and Ruff passed. Source labels remain separate from Stella Chinese-persona labels; product behavior, timing, memory, model, and platform acceptance remain NOT READY. Commit e9738e9 is pushed and bilingual PR comment 6629116706 is recorded."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b03.md",
+          "result": "B03 offline PITCH timing and virtual-time mechanism evaluation completed. Fixed PITCH revision 6413b59ac9eca1e056c192a786f059076f91cb74 / SHA-256 02684a4355eb3bf716fe157a66330d2241233504ebe630b8870f263e08a14471; all 384 candidates, 35 conversations, and 1,091 annotations retained; 329 official intersections and 55 conflicts. Segment-start hits 4/329; always-silent misses 329; oracle is non-causal only. Full 384-row report schema PASS (SHA-256 b259f3311549b3477b91b207e88606472591f588a7c42bb04badd90b411157f1). Targeted tests 44 passed with one Python 3.14 asyncio deprecation warning; Ruff and docs passed (127 files / 1,360 links / 577 anchors / 0 errors). No model, Bot, production data/configuration, or platform execution. Commit 152e7e6 is pushed; bilingual PR comment 6630358374 is recorded. Overall benchmark remains NOT READY."
         }
       ]
     }

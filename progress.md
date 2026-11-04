@@ -1,3 +1,13 @@
+## 2026-11-04 — 主动参与与记忆 Benchmark B03
+
+- Scope / Current State：B03 离线评测已完成并单独推送，提交 `152e7e6bdb25d463865a445a349781ccc0514d45`；PR #130 双语结论评论 ID `6630358374`。`AOEDE-MNEME-BENCH-IMPL` 仍是唯一 `in_progress` feature；整体 benchmark 与产品效果仍 NOT READY。
+- What's Done：新增 PITCH scorer-only 轮次窗口审计、schema、逐候选诊断、UTC/monotonic/timer 同步的虚拟时间驱动，以及使用生产 OpportunityManager、预算/Mneme 存储的隔离机制测试。未修改生产 Aoede/Mneme 符号。
+- Evaluation：固定 PITCH revision `6413b59ac9eca1e056c192a786f059076f91cb74` / JSON SHA `02684a4355eb3bf716fe157a66330d2241233504ebe630b8870f263e08a14471`；384 个候选、35 个对话、1,091 条标注均保留，官方交集 329/384、冲突 55。segment-start 命中 4/329（1.22%）；always-silent 漏掉329；oracle为非因果诊断。完整逐候选报告 SHA `b259f3311549b3477b91b207e88606472591f588a7c42bb04badd90b411157f1` 并通过 schema。定向回归44 passed（Python 3.14 asyncio弃用警告）；Ruff通过；docs 127 files / 1360 links / 577 anchors / 0 errors。
+- Closeout Docs：状态与计划更新后 `python scripts/check_docs.py` 为127 files / 1362 links / 577 anchors / 0 errors；`feature_list.json` JSON parse与 `git diff --check` 通过。
+- GitNexus：编辑前 `OpportunityManager` LOW（10 impacted/1 direct）；`ProactiveBudgetStore` HIGH（101/3）；`MnemeVerificationStore` HIGH（105/5）；`VirtualClock` CRITICAL（181 processes/20 modules，流程包含不相关项）；均未修改生产符号或用 riskSharedAxes豁免。B03 staged/all：8 files / 107 symbols / 0 processes / LOW。compare main：分支累计351 files / 2,993 symbols / 114 processes / CRITICAL；列表在 `--limit 50000` 后仍封顶，保留为累计风险/列表限制，不宣称全量流程已审阅。提交后索引 commit 对齐 HEAD，runner v4 current、incompleteReasons为空，CLI状态为 registered。
+- Blockers / Next：没有真实模型、Bot、平台或生产数据验收。B00 embedding/hybrid 与 LoCoMo judge、B06中文标注排期、B08真实目标/同意/模型配置/窗口/回滚仍待处理。下一步按依赖进入 B04 双摄入、lineage、真实 batch/capture 与记忆生命周期复跑。
+- Files：`proactive_eval/b03.py`、`pitch_windows.py`、`virtual_time.py`、schema、两份定向测试、[B03 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b03.md)及计划/状态文件。保留既有无关未跟踪 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+
 ## 2026-11-04 — 主动参与与记忆 Benchmark B02
 
 - Scope / Current State：B02 已单独提交并推送为 `e9738e9`，PR #130 中英文评测评论已发布（`6629116706`）。`AOEDE-MNEME-BENCH-IMPL` 继续为唯一 `in_progress` feature；整体行为效果仍 NOT READY。

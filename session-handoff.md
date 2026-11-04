@@ -1,4 +1,13 @@
-## Current Handoff — proactive / memory benchmark B02 (2026-11-04)
+## Current Handoff — proactive / memory benchmark B03 (2026-11-04)
+
+- Current Objective：B03 已完成并推送到 `codex/proactive-memory-benchmark-implementation`，提交 `152e7e6bdb25d463865a445a349781ccc0514d45`；PR #130 双语评测评论 ID `6630358374`。整体行为效果仍 NOT READY。下一步按 B04 执行记忆双摄入、lineage、batch/capture、LoCoMo/PersonaMem 复跑及写侧更新/撤回/过期矩阵。
+- Files：`proactive_eval/b03.py`、`pitch_windows.py`、`virtual_time.py`、`schemas/pitch-window-audit-1.schema.json`、两份定向测试、[B03 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b03.md)，以及计划/progress/feature 状态。
+- Verification Evidence：PITCH commit `6413b59ac9eca1e056c192a786f059076f91cb74` / SHA `02684a4355eb3bf716fe157a66330d2241233504ebe630b8870f263e08a14471`，384候选/35对话/1091标注；官方交集329，55冲突仍在分母。完整 JSON 报告 SHA `b259f3311549b3477b91b207e88606472591f588a7c42bb04badd90b411157f1` schema PASS。定向 tests 44 passed（1 Python 3.14弃用警告）、Ruff PASS、docs 127/1360/577/0。真实模型、平台、Bot、生产数据/配置未运行。
+- GitNexus：pre-edit production impact 为 OpportunityManager LOW（10/1），ProactiveBudgetStore HIGH（101/3），MnemeVerificationStore HIGH（105/5），VirtualClock CRITICAL（181流程/20模块）；生产符号未改。B03 staged/all 为8 files/107 symbols/0 processes/LOW。compare main 分支累计351 files/2993 symbols/114 processes/CRITICAL，列表重复在 limit 50000 后仍 capped；索引刷新至提交 HEAD，runner身份current且 incompleteReasons为空，CLI顶层状态为 registered。
+- Blockers：B00 embedding/hybrid 与新 LoCoMo judge未运行；B06标注人员/排期未定；B08至少7日平台试验所需的实际目标、参与者同意、模型/配置、窗口、回滚动作均未指定。B08不准入，整体 NOT READY。
+- Preserve：不要触碰既有无关未跟踪 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+
+## Previous Handoff — proactive / memory benchmark B02 (2026-11-04)
 
 - Current Objective：B02 公开数据适配和本地无记忆基线已完成；commit `e9738e9` 已推送，PR #130 双语评测评论 `6629116706` 已发布。PR base `codex/aoede-mneme-proactive`。下一包进入 B03，整体 benchmark/产品行为验收保持 NOT READY。
 - Files：`proactive_eval/b02.py`、`proactive_eval/source_adapters.py`、`proactive_eval/b02_plugins.py`、`tests/evaluation/test_proactive_b02.py`、[B02 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b02.md)、计划和状态文件。保留既有无关未跟踪 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
