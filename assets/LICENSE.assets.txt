@@ -94,6 +94,7 @@ Original artwork and image resources:
     assets/pic/Title_Image(First_Edition).jpg
     assets/pic/Title_Image(Second_Edition)_Compressed_version.jpg
     assets/pic/Title_Image(Second_Edition).jpg
+    assets/pic/Stella_logo_animated.svg
 
 Application icon resources derived from the Stella artwork:
 
