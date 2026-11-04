@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stella.invalid/schemas/stella-memory-report-2.schema.json",
+  "title": "Stella memory evaluation report v2",
+  "allOf": [
+    {"$ref": "https://stella.invalid/schemas/evaluation-report-common.schema.json#/$defs/reportBase"},
+    {
+      "type": "object",
+      "required": ["ingest_tracks", "lineage", "memory_conditions"],
+      "properties": {
+        "schema": {"const": "stella-memory-report/2"},
+        "ingest_tracks": {
+          "type": "object",
+          "required": ["controlled", "production_equivalent"],
+          "properties": {
+            "controlled": {"type": "object", "required": ["status", "capture_bypassed"], "properties": {"status": {"type": "string"}, "capture_bypassed": {"type": "boolean"}, "counts": {"type": "object"}}, "additionalProperties": true},
+            "production_equivalent": {"type": "object", "required": ["status", "capture_bypassed"], "properties": {"status": {"type": "string"}, "capture_bypassed": {"const": false}, "counts": {"type": "object"}}, "additionalProperties": true}
+          },
+          "additionalProperties": false
+        },
+        "lineage": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source_event_ids", "candidate_ids", "promoted_memory_ids", "retrieval_ranks", "packed_memory_ids", "answer_support_ids"],
+            "properties": {
+              "source_event_ids": {"type": "array", "items": {"type": "string"}},
+              "candidate_ids": {"type": "array", "items": {"type": "string"}},
+              "promoted_memory_ids": {"type": "array", "items": {"type": "string"}},
+              "retrieval_ranks": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+              "packed_memory_ids": {"type": "array", "items": {"type": "string"}},
+              "answer_support_ids": {"type": "array", "items": {"type": "string"}},
+              "alignment_status": {"enum": ["resolved", "ALIGNMENT_UNRESOLVED"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "memory_conditions": {
+          "type": "array",
+          "items": {"enum": ["M0_NO_MEMORY", "M1_RELEVANT", "M2_IRRELEVANT", "M3_STALE_OR_CONFLICT", "M4_WRONG_OWNER_OR_SCOPE", "M5_UNCERTAIN", "M6_PRODUCTION_WRITE"]}
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

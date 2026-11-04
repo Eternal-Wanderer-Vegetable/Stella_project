@@ -1,0 +1,381 @@
+{
+  "schema": "stella-dataset-registry/1",
+  "frozen_date": "2026-11-04",
+  "raw_data_root": "memory/benchmark/_public/",
+  "distribution_policy": "Raw third-party data and restricted prompt artifacts stay in gitignored storage and are excluded from releases. Reports publish only permitted source IDs, counts, derived metrics, and hashes.",
+  "datasets": [
+    {
+      "dataset_id": "when2speak",
+      "priority": "P0",
+      "status": "FROZEN_TEST_SLICES",
+      "source": {
+        "repository": "duke-trust-lab/When2Speak",
+        "revision": "092e40995896b0c278a1e32954297ef125b70112",
+        "url": "https://huggingface.co/datasets/duke-trust-lab/When2Speak/tree/092e40995896b0c278a1e32954297ef125b70112"
+      },
+      "license": "CC-BY-4.0",
+      "license_evidence": {
+        "url": "https://huggingface.co/api/datasets/duke-trust-lab/When2Speak/revision/092e40995896b0c278a1e32954297ef125b70112",
+        "card_sha256": "956122d7e2ba792088972a446a04c5d1396e076234d66f3a80beb9d90149b01e",
+        "readme_sha256": "b72d71dfc3dbb9edf6f80318b9e1c8423e202fb9ebf067f536927878f5ed56ba"
+      },
+      "unit": "decision_context",
+      "official_splits": {
+        "train": 173325,
+        "validation": 21788,
+        "test": 21687
+      },
+      "test_counts": {
+        "decision_contexts": 21687,
+        "speak": 2795,
+        "silent": 18892
+      },
+      "configs": [
+        {
+          "name": "token",
+          "role": "primary binary participation decision",
+          "shared_context_group": "when2speak-test-2026-11-04",
+          "files": [
+            {
+              "path": "memory/benchmark/_public/proactive_eval/raw/when2speak/finetune_test_token.jsonl",
+              "sha256": "72304bf61f588cffee8e0620e12778b215d6ae6c1815cd3204ab3e0425258db7",
+              "bytes": 26120970,
+              "records": 21687
+            }
+          ]
+        },
+        {
+          "name": "dialogue",
+          "role": "secondary expression-quality diagnostic; never an independent sample",
+          "shared_context_group": "when2speak-test-2026-11-04",
+          "prefix_matches_token_rows": 21687,
+          "empty_assistant_outputs": 67,
+          "files": [
+            {
+              "path": "memory/benchmark/_public/proactive_eval/raw/when2speak/finetune_test_dialogue.jsonl",
+              "sha256": "f24ea9e164c80e1fa82b0586f09587a54be4daba1ded1b79586c5d641d8c31dd",
+              "bytes": 26899517,
+              "records": 21687
+            }
+          ]
+        }
+      ],
+      "adapter_notes": [
+        "The official README defines < as SPEAK and > as SILENT for token output; dialogue output uses > for silence and natural language for speaking.",
+        "The token and dialogue test prefixes align row-for-row. Keep both variants in the same split and score the binary label from the token config.",
+        "67 dialogue rows have an empty assistant output; classify these as unavailable for expression-quality scoring and preserve them in the run counts."
+      ],
+      "limitations": [
+        "Synthetic English conversations are not QQ/WebChat acceptance.",
+        "Train and validation counts come from the pinned dataset card; only the test files and README/card metadata are downloaded in B00."
+      ]
+    },
+    {
+      "dataset_id": "pitch",
+      "priority": "P0",
+      "status": "FROZEN",
+      "source": {
+        "repository": "Social-Futures-Lab/pitch",
+        "revision": "6413b59ac9eca1e056c192a786f059076f91cb74",
+        "url": "https://github.com/Social-Futures-Lab/pitch/tree/6413b59ac9eca1e056c192a786f059076f91cb74"
+      },
+      "license": "MIT",
+      "license_evidence": {
+        "url": "https://github.com/Social-Futures-Lab/pitch/blob/6413b59ac9eca1e056c192a786f059076f91cb74/LICENSE",
+        "license_sha256": "a2611643bfcfc8fce82f854d8790557a3423406daac96d7fbde898762c9baa32",
+        "readme_sha256": "1b352ce542ec870a7fbed64a962d906a0ebdd292a99bf3da7810510152ecd9f9"
+      },
+      "unit": "fixed_candidate_message_with_turn_window",
+      "counts": {
+        "candidates": 384,
+        "conversations": 35,
+        "individual_annotations": 1091,
+        "author_annotations": 384,
+        "within_group_annotations": 707,
+        "do_not_surface_annotations": 44,
+        "candidates_with_any_do_not_surface_annotation": 37
+      },
+      "window_intersection": {
+        "numerator": 329,
+        "denominator": 384,
+        "method": "For each official ground_truth.acceptable_windows list with at least one interval, count a nonempty intersection when max(window_start) <= min(window_end). Candidates without an intersection remain in the full denominator.",
+        "within_group_only": {
+          "numerator": 345,
+          "denominator": 374,
+          "method": "Apply the same interval-intersection rule to individual_annotations where role=within_group; candidates with no such annotations are not in this secondary denominator."
+        }
+      },
+      "files": [
+        {
+          "path": "memory/benchmark/_public/proactive_eval/raw/pitch/data/pitch-benchmark-data.json",
+          "sha256": "02684a4355eb3bf716fe157a66330d2241233504ebe630b8870f263e08a14471",
+          "bytes": 6012106,
+          "records": 384
+        },
+        {
+          "path": "memory/benchmark/_public/proactive_eval/raw/pitch/data/README.md",
+          "sha256": "1b352ce542ec870a7fbed64a962d906a0ebdd292a99bf3da7810510152ecd9f9",
+          "bytes": 9374
+        },
+        {
+          "path": "memory/benchmark/_public/proactive_eval/raw/pitch/LICENSE",
+          "sha256": "a2611643bfcfc8fce82f854d8790557a3423406daac96d7fbde898762c9baa32",
+          "bytes": 1085
+        }
+      ],
+      "limitations": [
+        "A 296/384 intersection count previously stated in the planning document was not reproduced at this pinned revision using the documented acceptable_windows data; B00 freezes 329/384 under the explicit method above and retains 384 as the primary denominator.",
+        "PITCH labels are turn windows, not elapsed-time windows. Lookahead/full-transcript placement remains a separate noncausal upper bound."
+      ]
+    },
+    {
+      "dataset_id": "social-ai-ambient-bench",
+      "priority": "P0",
+      "status": "FROZEN_TEST_SPLIT",
+      "source": {
+        "repository": "text-ai/social-ai-ambient-bench",
+        "revision": "5efda0b267d6bd5ecae74cbe1141a66f64495661",
+        "url": "https://huggingface.co/datasets/text-ai/social-ai-ambient-bench/tree/5efda0b267d6bd5ecae74cbe1141a66f64495661"
+      },
+      "license": "Apache-2.0",
+      "license_evidence": {
+        "url": "https://huggingface.co/api/datasets/text-ai/social-ai-ambient-bench/revision/5efda0b267d6bd5ecae74cbe1141a66f64495661",
+        "card_sha256": "b4da5ae31ebbab6c26340fcb92ee76f7f65296a83257254282586394f1de1d6e",
+        "license_sha256": "b0ab1f2009078155fc23b594795d64d9e65cb33396c38f21dbffec1105848840",
+        "readme_sha256": "6afb37f150ae67aeb5157b03c9f2b9e236e76c08a67ca5eee15c2908e85b89a3"
+      },
+      "unit": "scene_with_turn_level_expected_output",
+      "split": "test",
+      "counts": {
+        "scenes": 1212,
+        "turns": 16222,
+        "respond": 429,
+        "silent": 15793
+      },
+      "files": [
+        {
+          "path": "memory/benchmark/_public/proactive_eval/raw/social-ai-ambient-bench/data/test.jsonl",
+          "sha256": "44d477ab5874cdc3e082d95787cb78f26e0a894e8a0056b56caca74058f66cd1",
+          "bytes": 2460792,
+          "records": 1212
+        }
+      ],
+      "limitations": [
+        "Use as a tool-assistant and interruption diagnostic; the official Alfi preference is not Stella's social-persona gold.",
+        "The approximately 97.36% SILENT rate makes an always-silent baseline mandatory."
+      ]
+    },
+    {
+      "dataset_id": "chmap-data",
+      "priority": "P1",
+      "status": "FROZEN_TEST_CONFIGS",
+      "source": {
+        "repository": "FrontierLab/ChMap-Data",
+        "revision": "bd3a65052113ceeb1111b0ee0b44427101806376",
+        "url": "https://huggingface.co/datasets/FrontierLab/ChMap-Data/tree/bd3a65052113ceeb1111b0ee0b44427101806376"
+      },
+      "license": "Apache-2.0",
+      "license_evidence": {
+        "url": "https://huggingface.co/api/datasets/FrontierLab/ChMap-Data/revision/bd3a65052113ceeb1111b0ee0b44427101806376",
+        "card_sha256": "bad349f15a254206ddd2574e6a14e1583635f77d4e4dbff97d78708c9ee9ce84",
+        "readme_sha256": "341d59555831948dfd5cb26ff4c6c78315b7e3460f6141eb45bb2e515e9a37f5"
+      },
+      "unit": "task_configuration_test_record",
+      "configurations": [
+        {
+          "name": "overall_dialouge_view",
+          "split": "test",
+          "records": 122,
+          "sha256": "3215388e77606479d53718843a2230216da0755c06c6e6d35178dc2fd581c6ac"
+        },
+        {
+          "name": "dialogue_data",
+          "split": "test",
+          "records": 400,
+          "sha256": "2172b8c21d427c5ff71dc3f40e810b65c4ee5102ee3e563ce76dfc398852f267"
+        },
+        {
+          "name": "topic_rank",
+          "split": "test",
+          "records": 149,
+          "sha256": "8959522572df201153610da425fba035f12bf0804dfd7f95fbef5661d05fc778"
+        }
+      ],
+      "limitations": [
+        "Do not merge the three task configurations or their rows into one sample count.",
+        "The relation between the paper's 100-example evaluation and the pinned released test IDs remains unresolved; historical/future target fields must be kept out of actor inputs.",
+        "callback_dialogue has no official test file at this revision and is not promoted from train to test."
+      ]
+    },
+    {
+      "dataset_id": "memuse",
+      "priority": "P1",
+      "status": "FROZEN_TEST_AND_CONTEXT_FILES",
+      "source": {
+        "repository": "RuiSumida/memuse",
+        "revision": "d268288a25c4d802cf071eb70d79b6e7dcb3b6c6",
+        "url": "https://huggingface.co/datasets/RuiSumida/memuse/tree/d268288a25c4d802cf071eb70d79b6e7dcb3b6c6"
+      },
+      "license": "CC-BY-NC-4.0",
+      "license_evidence": {
+        "url": "https://huggingface.co/api/datasets/RuiSumida/memuse/revision/d268288a25c4d802cf071eb70d79b6e7dcb3b6c6",
+        "card_sha256": "cae925cca9e2113b3ad37e6df64467d9a930edf159a4d7b1d79767adb363acb6",
+        "readme_sha256": "5430bf9798f10fac64fbebfa4f9b778bbf181c5ea12d8328627fb9a7b1038034"
+      },
+      "unit": "paired_user_memory_integration_instance",
+      "counts": {
+        "positive_instances": 72,
+        "matched_negative_instances": 72,
+        "positive_fact_subquestions": 316,
+        "training_sessions_for_context": 1872,
+        "users": 40
+      },
+      "files": [
+        {
+          "path": "memory/benchmark/_public/proactive_eval/raw/memuse/data/instances.test.jsonl",
+          "sha256": "9578613c9c403c36a0b2ef5689aeec4b8b13d296d5a3be069b67084abe7d1ec2",
+          "bytes": 4863507,
+          "records": 72
+        },
+        {
+          "path": "memory/benchmark/_public/proactive_eval/raw/memuse/data/negatives.test.jsonl",
+          "sha256": "630803019f1b1ca2fdfc572ac10140bdaae1b4c080871075973bf24476484d51",
+          "bytes": 5406542,
+          "records": 72
+        },
+        {
+          "path": "memory/benchmark/_public/proactive_eval/raw/memuse/data/sessions.train.jsonl",
+          "sha256": "43a740999be64df3a1e35512e1d6e291f0fb8156959885fbfb8b8ccbd96424e2",
+          "bytes": 9925797,
+          "records": 1872
+        },
+        {
+          "path": "memory/benchmark/_public/proactive_eval/raw/memuse/data/users.jsonl",
+          "sha256": "d995b28f93069dc4d7c560034137967104b219af8f020b15b0a6863f227bd116",
+          "bytes": 120512,
+          "records": 40
+        }
+      ],
+      "limitations": [
+        "Positive and matched negative examples remain paired by user and instance; do not treat the 144 rows as independent users.",
+        "This dataset measures memory use under a user cue and does not label autonomous interruption timing.",
+        "Non-commercial license terms apply to use and distribution."
+      ]
+    },
+    {
+      "dataset_id": "locomo",
+      "priority": "P0_REGRESSION",
+      "status": "FROZEN_HISTORICAL_REFERENCE",
+      "source": {
+        "repository": "snap-research/locomo",
+        "revision": "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376",
+        "url": "https://github.com/snap-research/locomo/tree/3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376"
+      },
+      "license": "CC-BY-NC-4.0",
+      "unit": "question_with_source_evidence",
+      "counts": {"conversations": 10, "questions": 1986},
+      "files": [
+        {
+          "path": "memory/benchmark/_public/locomo/data/locomo10.json",
+          "sha256": "79fa87e90f04081343b8c8debecb80a9a6842b76a7aa537dc9fdf651ea698ff4",
+          "bytes": 2805274,
+          "verified_by": "python scripts/fetch_locomo.py --check"
+        }
+      ],
+      "historical_result_reference": "docs/reports/2026-10-31-locomo-memory-benchmark.md",
+      "limitations": [
+        "Historical LLM and gold-injection runs are references only and are not B-current scores.",
+        "Keep official token-F1 separate from Stella judge accuracy."
+      ]
+    },
+    {
+      "dataset_id": "personamem-v2",
+      "priority": "P0_REGRESSION",
+      "status": "FROZEN_HISTORICAL_REFERENCE",
+      "source": {
+        "repository": "bowen-upenn/PersonaMem-v2",
+        "revision": "ed956dea41521fc4499acbc63f966e0fd3c053ba",
+        "url": "https://huggingface.co/datasets/bowen-upenn/PersonaMem-v2/tree/ed956dea41521fc4499acbc63f966e0fd3c053ba"
+      },
+      "license": "CC-BY-4.0",
+      "unit": "retrieval_case",
+      "counts": {"cases": 5000, "retrieval_modes": 4},
+      "files": [
+        {
+          "path": "memory/benchmark/_public/personamem/benchmark/text/benchmark.csv",
+          "sha256": "95f2a8a324aab7baf2af937feae12731369e2abf7cad5ab3e170594cb25a3e52",
+          "bytes": 42426457,
+          "verified_by": "python scripts/fetch_personamem.py --check"
+        }
+      ],
+      "historical_result_reference": "docs/reports/evidence/memory-benchmark-locomo/personamem-full-matrix-20261031.txt",
+      "limitations": [
+        "The historical 5000x4 matrix is a retrieval-case pass rate, not memory precision.",
+        "The full 11115-vector fixture used in the 2026-10-31 matrix is absent from this workspace; embedding and hybrid are not reproducible in B00 without a separately budgeted embedding run."
+      ]
+    },
+    {
+      "dataset_id": "locomo-conv",
+      "priority": "P1",
+      "status": "BLOCKED_DATA",
+      "source": {"repository": "MiuLab/LoCoMo-Conv", "url": "https://github.com/MiuLab/LoCoMo-Conv"},
+      "license": "UNRESOLVED",
+      "unit": "question_with_implicit_or_counterfactual_memory_use",
+      "limitations": ["Repository-level derivative data/code permission was not established; paper license is not substituted for data/code terms."]
+    },
+    {
+      "dataset_id": "longmemeval-cleaned",
+      "priority": "P2",
+      "status": "DEFERRED_DATASET_BUDGET",
+      "source": {"repository": "xiaowu0162/LongMemEval", "url": "https://github.com/xiaowu0162/LongMemEval"},
+      "license": "MIT_REPORTED_NOT_REPINNED",
+      "unit": "question_over_long_chat_history",
+      "limitations": ["Cleaned 500-question version and source file hashes are not downloaded or pinned. Select only after write-side funnel and a separate call/cost budget are in place.", "LongMemEval-V2 multimodal web-agent traces are outside this QQ/WebChat chat scope."]
+    },
+    {
+      "dataset_id": "livechat",
+      "priority": "P2_AUXILIARY",
+      "status": "BLOCKED_DATA",
+      "source": {"repository": "gaojingsheng/LiveChat", "url": "https://github.com/gaojingsheng/LiveChat"},
+      "license": "UNVERIFIED",
+      "unit": "streamer_viewer_turn",
+      "limitations": ["Repository revision, license, downloadable subset, and format are not frozen.", "Human next-speaker labels are not autonomous-speak gold."]
+    },
+    {
+      "dataset_id": "irc-disentanglement",
+      "priority": "P2_AUXILIARY",
+      "status": "BLOCKED_DATA",
+      "source": {"repository": "jkkummerfeld/irc-disentanglement", "url": "https://github.com/jkkummerfeld/irc-disentanglement"},
+      "license": "UNVERIFIED",
+      "unit": "threaded_irc_message",
+      "limitations": ["Repository revision, license, downloadable subset, and format are not frozen.", "Reply edges and human next-speaker labels do not establish AI should-speak gold."]
+    },
+    {
+      "dataset_id": "mpdd",
+      "priority": "P3_RESEARCH_CANDIDATE",
+      "status": "DEFERRED_FORMAT_AND_LICENSE",
+      "source": {"repository": "ntunlplab/Dialogue-MPDD", "url": "https://github.com/ntunlplab/Dialogue-MPDD"},
+      "license": "UNVERIFIED",
+      "unit": "multi_party_emotion_relation_turn",
+      "limitations": ["Not in the primary acceptance set; first verify format, labels, license, and fetchable revision."]
+    },
+    {
+      "dataset_id": "ishiki-multi-party-dialogue",
+      "priority": "P3_RESEARCH_CANDIDATE",
+      "status": "DEFERRED_FORMAT_AND_LICENSE",
+      "source": {"repository": "ishiki-labs/multi-party-dialogue", "url": "https://huggingface.co/datasets/ishiki-labs/multi-party-dialogue"},
+      "license": "UNVERIFIED",
+      "unit": "multi_party_continuation_turn",
+      "limitations": ["Not in the primary acceptance set; first verify format, labels, license, and fetchable revision."]
+    },
+    {
+      "dataset_id": "op-bench",
+      "priority": "P3_RESEARCH_CANDIDATE",
+      "status": "DEFERRED_DATA_AVAILABILITY",
+      "source": {"repository": "EMNLP 2026 paper", "url": "https://aclanthology.org/2026.emnlp-main.1168/"},
+      "license": "UNVERIFIED",
+      "unit": "over_personalization_case",
+      "limitations": ["Paper is retained as task-design reference only; full original dataset availability and license are not verified."]
+    }
+  ]
+}

@@ -1,3 +1,31 @@
+## Current Handoff — proactive / memory benchmark B03 (2026-11-04)
+
+- Current Objective：B03 已完成并推送到 `codex/proactive-memory-benchmark-implementation`，提交 `152e7e6bdb25d463865a445a349781ccc0514d45`；PR #130 双语评测评论 ID `6630358374`。整体行为效果仍 NOT READY。下一步按 B04 执行记忆双摄入、lineage、batch/capture、LoCoMo/PersonaMem 复跑及写侧更新/撤回/过期矩阵。
+- Files：`proactive_eval/b03.py`、`pitch_windows.py`、`virtual_time.py`、`schemas/pitch-window-audit-1.schema.json`、两份定向测试、[B03 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b03.md)，以及计划/progress/feature 状态。
+- Verification Evidence：PITCH commit `6413b59ac9eca1e056c192a786f059076f91cb74` / SHA `02684a4355eb3bf716fe157a66330d2241233504ebe630b8870f263e08a14471`，384候选/35对话/1091标注；官方交集329，55冲突仍在分母。完整 JSON 报告 SHA `b259f3311549b3477b91b207e88606472591f588a7c42bb04badd90b411157f1` schema PASS。定向 tests 44 passed（1 Python 3.14弃用警告）、Ruff PASS、docs 127/1360/577/0。真实模型、平台、Bot、生产数据/配置未运行。
+- GitNexus：pre-edit production impact 为 OpportunityManager LOW（10/1），ProactiveBudgetStore HIGH（101/3），MnemeVerificationStore HIGH（105/5），VirtualClock CRITICAL（181流程/20模块）；生产符号未改。B03 staged/all 为8 files/107 symbols/0 processes/LOW。compare main 分支累计351 files/2993 symbols/114 processes/CRITICAL，列表重复在 limit 50000 后仍 capped；索引刷新至提交 HEAD，runner身份current且 incompleteReasons为空，CLI顶层状态为 registered。
+- Blockers：B00 embedding/hybrid 与新 LoCoMo judge未运行；B06标注人员/排期未定；B08至少7日平台试验所需的实际目标、参与者同意、模型/配置、窗口、回滚动作均未指定。B08不准入，整体 NOT READY。
+- Preserve：不要触碰既有无关未跟踪 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+
+## Previous Handoff — proactive / memory benchmark B02 (2026-11-04)
+
+- Current Objective：B02 公开数据适配和本地无记忆基线已完成；commit `e9738e9` 已推送，PR #130 双语评测评论 `6629116706` 已发布。PR base `codex/aoede-mneme-proactive`。下一包进入 B03，整体 benchmark/产品行为验收保持 NOT READY。
+- Files：`proactive_eval/b02.py`、`proactive_eval/source_adapters.py`、`proactive_eval/b02_plugins.py`、`tests/evaluation/test_proactive_b02.py`、[B02 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b02.md)、计划和状态文件。保留既有无关未跟踪 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+- Evaluation：When2Speak 3 baselines each 21,687/21,687; Social AI Ambient 3 baselines each 16,222/16,222；actor/scorer failures 0，coverage 100%，model/memory/generation 0。六份 schema PASS；定向 tests 9 passed、Ruff PASS。末问号规则 FIR/MIR 分别为 When2Speak 0.0261/0.9470、Social AI 0.0740/0.8322。原始数据标签与 Stella persona 标注分栏，persona 标签数 0。
+- Recovery Notes：首个 When2Speak/always-silent 已完成 actor/scorer，但报告聚合时出现解包 bug；补丁后从完成 checkpoint 恢复汇总，未重跑。随后修正 B02 只给已有部分 checkpoint 的 baseline 传 `--resume`；新基线使用新的临时 STELLA_HOME root，保留之前失败尝试的临时标记。全六组当前完成；数据缓存位于 gitignored `memory/benchmark/_public/proactive_eval/runs/B02-2026-11-04/`。
+- GitNexus：本包 scope all repeated snapshots 9 files / 3–25 symbols / 792 processes / CRITICAL；compare main 344 files / 364–1,158 symbols / 791–792 processes / CRITICAL。`source_adapters.py` 文件级 impact HIGH / summary-only MEDIUM，exact context 显示只被 B02 runner 与测试导入；保留 HIGH/CRITICAL，不按风险轴降级。新建包的索引解析不稳定并有流程截断，改动中无 Aoede/Mneme/部署/Rust 源文件。
+- Boundaries：只用固定公开数据与确定性本地决策；Python 3.14.6；无模型、Bot、生产聊天/数据库/配置或平台服务。报告第一组 baseline 的 `wall_time_ms` 为 null，因为是完成 checkpoint 汇总恢复，未作时间估算。
+- Next：以 PITCH 轮次窗口驱动正式 OpportunityManager/预算/Mneme 求证矩阵；开始前做 GitNexus upstream impact 和源码合同核验。B06 双标人员/裁决排期尚缺；B08 真实平台范围、参与者同意和7日观察未准入。
+
+## Current Handoff — proactive / memory benchmark B01 (2026-11-04)
+
+- Current Objective：B01 实现及评测已完成，按计划进入 B02 数据适配与无记忆基线；每包独立英文提交，评测后在 PR #130 写中英文结论。PR base codex/aoede-mneme-proactive。
+- Files：计划、B00/B01报告、proactive_eval/、core/evaluation/events.py、tests/evaluation/test_proactive_eval_fingerprint.py 与任务状态文件；旧的未跟踪本机路径不纳入提交。
+- Verification Evidence：B01首轮定向回归40 passed；follow-up为actor plugin path补入resume fingerprint，五套evaluation回归41 passed（pytest-asyncio loop scope弃用警告）；CLI合成样本 validate通过、错gold hash预启动拒绝、分离actor/scorer子进程1/1完成；Ruff通过；check_docs.py 127/1359/577/0。跟进GitNexus all 7/7/0 LOW；compare main重复为339 files、791–1142 symbols、793–794 processes，均CRITICAL；较低limit有时capped，扩大limit后取得未截断样本339/791/794及339/940/794，按分支累计风险保留。未运行公开数据集、真实模型、Bot、生产数据/配置或平台。
+- Blockers：B00检索基线PARTIAL；B02真实公开文件适配待做；B06中文双标/裁决资源未排期；B08指定目标、明确授权和七天观察未满足。效果、平台与发布验收NOT READY。
+- Next：完成B01 actor-plugin指纹修正提交并评论PR #130后，继续B02 When2Speak token与Social AI无记忆基线。
+- Active feature切换时 AOEDE-MNEME-IMPL 暂记 blocked，其发布、模型、QQ与Windows VM门禁仍 NOT READY。恢复原实现工作前需重新协调唯一 active feature。
+
 ## Current Handoff — PR #129 Rust/Mneme 文档收尾 (2026-11-04)
 
 - Status：Rust/Mneme 接线已核对，双语文档与当前 API 4/schema 24 同步；本机 isolated native fullchain 通过。文档/状态提交 `1d6e62c` 已推送；PR #129 为 open/ready-for-review/unmerged，新 head 上全部 14 项 hosted CI 通过。

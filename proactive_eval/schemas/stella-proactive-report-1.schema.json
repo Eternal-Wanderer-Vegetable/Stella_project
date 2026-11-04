@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stella.invalid/schemas/stella-proactive-report-1.schema.json",
+  "title": "Stella proactive evaluation report v1",
+  "allOf": [
+    {"$ref": "https://stella.invalid/schemas/evaluation-report-common.schema.json#/$defs/reportBase"},
+    {
+      "type": "object",
+      "required": ["panels"],
+      "properties": {
+        "schema": {"const": "stella-proactive-report/1"},
+        "panels": {
+          "type": "object",
+          "required": ["aoede_participation", "mneme_memory", "aoede_mneme_joint"],
+          "properties": {
+            "aoede_participation": {"type": "object", "additionalProperties": {"$ref": "https://stella.invalid/schemas/evaluation-report-common.schema.json#/$defs/metric"}},
+            "mneme_memory": {"type": "object", "additionalProperties": {"$ref": "https://stella.invalid/schemas/evaluation-report-common.schema.json#/$defs/metric"}},
+            "aoede_mneme_joint": {"type": "object", "additionalProperties": {"$ref": "https://stella.invalid/schemas/evaluation-report-common.schema.json#/$defs/metric"}}
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}
