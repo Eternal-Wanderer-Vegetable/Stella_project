@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stella.invalid/schemas/stella-scorer-gold-1.schema.json",
+  "title": "Stella scorer-only gold sidecar v1",
+  "description": "Store and load in the scorer boundary, never in the actor process, actor prompt, embedding, cache, or initial database.",
+  "type": "object",
+  "required": ["schema", "scenario_id", "event_id", "label_origin", "source_label", "allowed_actions", "turn_window", "memory_requirement", "support_evidence_ids", "forbidden_memory_ids", "annotation"],
+  "properties": {
+    "schema": {"const": "stella-scorer-gold/1"},
+    "scenario_id": {"type": "string", "minLength": 1},
+    "event_id": {"type": "string", "minLength": 1},
+    "label_origin": {"enum": ["official", "stella_adjudication", "human_annotation", "synthetic_fixture"]},
+    "source_label": {"enum": ["SPEAK", "SILENT", "NOT_APPLICABLE"]},
+    "allowed_actions": {"type": "array", "uniqueItems": true, "items": {"enum": ["SPEAK", "WAIT", "DROP"]}},
+    "turn_window": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["start_turn", "end_turn", "window_kind"],
+          "properties": {
+            "start_turn": {"type": "integer", "minimum": 0},
+            "end_turn": {"type": "integer", "minimum": 0},
+            "window_kind": {"enum": ["official_intersection", "official_union", "human_adjudicated", "synthetic"]}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "do_not_surface": {"type": ["boolean", "null"]},
+    "memory_requirement": {"enum": ["required", "not_required", "optional", "unknown"]},
+    "support_evidence_ids": {"type": "array", "items": {"type": "string"}},
+    "forbidden_memory_ids": {"type": "array", "items": {"type": "string"}},
+    "should_abstain": {"type": ["boolean", "null"]},
+    "annotation": {
+      "type": "object",
+      "required": ["annotator_count", "agreement", "adjudicated"],
+      "properties": {
+        "annotator_count": {"type": "integer", "minimum": 0},
+        "agreement": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "adjudicated": {"type": "boolean"},
+        "ambiguous": {"type": "boolean"},
+        "notes_ref": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

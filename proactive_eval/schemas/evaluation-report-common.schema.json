@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stella.invalid/schemas/evaluation-report-common.schema.json",
+  "$defs": {
+    "metric": {
+      "type": "object",
+      "required": ["status", "numerator", "denominator", "value"],
+      "properties": {
+        "status": {"enum": ["scored", "not_applicable", "not_run", "blocked"]},
+        "numerator": {"type": ["number", "null"]},
+        "denominator": {"type": ["number", "null"], "minimum": 0},
+        "value": {"type": ["number", "null"]},
+        "reason": {"type": ["string", "null"]},
+        "confidence_interval_95": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}], "minItems": 2, "maxItems": 2}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "scored"}}, "required": ["status"]},
+          "then": {"properties": {"denominator": {"type": "number", "exclusiveMinimum": 0}, "value": {"type": "number"}}}
+        },
+        {
+          "if": {"properties": {"status": {"enum": ["not_applicable", "not_run", "blocked"]}}, "required": ["status"]},
+          "then": {"properties": {"value": {"type": "null"}, "reason": {"type": "string", "minLength": 1}}}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "fingerprint": {
+      "type": "object",
+      "required": ["sha256", "components"],
+      "properties": {
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "components": {
+          "type": "object",
+          "required": ["code_commit", "dirty_tree_digest", "dataset_registry_sha256", "scenario_schema", "report_schema", "effective_config_sha256", "prompt_hashes", "model", "tokenizer", "backend", "dependencies", "platform_hardware", "seed"],
+          "properties": {
+            "code_commit": {"type": "string"},
+            "dirty_tree_digest": {"type": ["string", "null"]},
+            "dataset_registry_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "scenario_schema": {"type": "string"},
+            "report_schema": {"type": "string"},
+            "effective_config_sha256": {"type": ["string", "null"]},
+            "prompt_hashes": {"type": "object"},
+            "model": {"type": "object"},
+            "tokenizer": {"type": ["object", "null"]},
+            "backend": {"type": "object"},
+            "dependencies": {"type": "object"},
+            "platform_hardware": {"type": "object"},
+            "seed": {"type": ["integer", "null"]}
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataset": {
+      "type": "object",
+      "required": ["dataset_id", "config", "revision", "split", "unit", "adapter_version", "file_hashes"],
+      "properties": {
+        "dataset_id": {"type": "string"},
+        "config": {"type": "string"},
+        "revision": {"type": "string"},
+        "split": {"type": "string"},
+        "unit": {"type": "string"},
+        "adapter_version": {"type": "string"},
+        "file_hashes": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+        "raw_count": {"type": ["integer", "null"], "minimum": 0},
+        "adapted_count": {"type": ["integer", "null"], "minimum": 0},
+        "excluded_count": {"type": ["integer", "null"], "minimum": 0},
+        "license": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "counts": {
+      "type": "object",
+      "required": ["total", "completed", "failed", "skipped", "not_applicable"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "completed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "not_applicable": {"type": "integer", "minimum": 0},
+        "scored_coverage": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "trace": {
+      "type": "object",
+      "required": ["scenario_id", "event_id", "participation_intent", "opportunity_action", "generation_result", "delivery_outcome", "budget_outcome"],
+      "properties": {
+        "scenario_id": {"type": "string"},
+        "event_id": {"type": "string"},
+        "participation_intent": {"enum": ["SPEAK", "SILENT", "UNKNOWN", "NOT_RUN"]},
+        "opportunity_action": {"enum": ["SPEAK", "WAIT", "DROP", "BLOCKED", "NONE"]},
+        "generation_result": {"enum": ["GENERATED", "SKIP", "FAILED", "NOT_RUN"]},
+        "delivery_outcome": {"enum": ["ACK", "DEFINITE_FAILURE", "UNKNOWN", "NONE", "NOT_RUN"]},
+        "budget_outcome": {"type": "string"},
+        "opportunity_id": {"type": ["string", "null"]},
+        "revision": {"type": ["integer", "null"], "minimum": 0},
+        "state_digest": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "reportBase": {
+      "type": "object",
+      "required": ["schema", "run_id", "status", "evidence_level", "metric_definitions_version", "fingerprint", "dataset", "baseline", "counts", "metrics", "traces", "cost", "artifacts"],
+      "properties": {
+        "schema": {"type": "string"},
+        "run_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["pass", "fail", "partial", "blocked", "not_run"]},
+        "evidence_level": {"enum": ["L0", "L1", "L2", "L3"]},
+        "metric_definitions_version": {"type": "string"},
+        "fingerprint": {"$ref": "#/$defs/fingerprint"},
+        "dataset": {"$ref": "#/$defs/dataset"},
+        "baseline": {
+          "type": "object",
+          "required": ["baseline_id", "source_ref", "condition"],
+          "properties": {
+            "baseline_id": {"type": "string"},
+            "source_ref": {"type": "string"},
+            "condition": {"type": "string"},
+            "paired": {"type": "boolean"}
+          },
+          "additionalProperties": true
+        },
+        "counts": {"$ref": "#/$defs/counts"},
+        "metrics": {"type": "object", "additionalProperties": {"$ref": "#/$defs/metric"}},
+        "traces": {"type": "array", "items": {"$ref": "#/$defs/trace"}},
+        "cost": {
+          "type": "object",
+          "required": ["model_calls", "input_tokens", "output_tokens", "wall_time_ms", "peak_rss_bytes"],
+          "properties": {
+            "model_calls": {"type": ["integer", "null"], "minimum": 0},
+            "input_tokens": {"type": ["integer", "null"], "minimum": 0},
+            "output_tokens": {"type": ["integer", "null"], "minimum": 0},
+            "wall_time_ms": {"type": ["number", "null"], "minimum": 0},
+            "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+            "by_role": {"type": "object"},
+            "estimated_price": {"type": ["number", "null"], "minimum": 0},
+            "price_currency": {"type": ["string", "null"]}
+          },
+          "additionalProperties": false
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256", "restricted"],
+            "properties": {
+              "path": {"type": "string"},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "restricted": {"type": "boolean"},
+              "media_type": {"type": ["string", "null"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "partial_reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

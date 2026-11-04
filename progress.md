@@ -1,3 +1,14 @@
+## 2026-11-04 — 主动参与与记忆 Benchmark B00
+
+- Scope / Current State：新分支 `codex/proactive-memory-benchmark-implementation`；切换 active feature 为 `AOEDE-MNEME-BENCH-IMPL` / in_progress；原 `AOEDE-MNEME-IMPL` 记为 blocked（implementation follow-up 暂停于独立评测任务期间，产品仍 NOT READY）。完成 B00 协议与来源冻结；未触及业务源码。
+- What's Done：增加 `proactive_eval/` 合同、14 条数据 registry、NOTICE、协议与 baseline lock，以及 registry/actor-only/scorer-only/通用/proactive/memory v2 共 6 个 schema；写 B00 报告。PITCH 在 pin `6413b59` 上按 acceptable-window 全交集复算为 329/384，计划先前的296/384未复现，主分母保留384并明示55例无交集。冻结3个独立面板、每项分母、2000次 paired cluster bootstrap / seed 20261104、12类240段中文双标与预登记门槛/预算。
+- Evaluation：PersonaMem-v2 frozen 5000 case 在隔离 Python 3.12.14 + 临时空 `STELLA_HOME` 重跑 rule / FTS：各5000/5000 case pass，precision 33.4%、recall 100%、pollution 66.6%、mode accuracy 98.1%、forbidden 0/1558；它们不是端到端写侧通过。历史11,115向量 fixture缺失，embedding/hybrid NOT RUN；LoCoMo cache check通过，但未跑模型/judge回归。所有6 schema与14条registry验证通过；actor gold字段与scored零分母负例被拒绝。混淆矩阵和轮次窗口样例手算通过。
+- GitNexus pre-edit：`feature_list.json` LOW（2 direct / 19 impacted）；`progress.md` MEDIUM（5 / 29）；`session-handoff.md` LOW（2 / 19）；均为状态文档调用，没有运行流程。源码锚点 `cbcd6f9` 到运行 HEAD `6de893f` 只有原计划与状态文档差异。
+- Final gates：`python scripts/check_docs.py` 127 files / 1361 local links / 577 anchors / 0 errors；JSON/schema/registry/actor隔离/零分母验证通过；缓存检查均 exit 0；`git diff --check` 通过。提交前 GitNexus all：3 tracked files / 2 symbols / 0 processes / LOW；compare main：312 files / 2637 symbols / 113 processes / CRITICAL，为分支累计风险，保留不豁免。
+- Blockers：B00 baseline为 PARTIAL；缺 embedding fixture；LoCoMo新模型/judge未运行；G0 双 fixture事件一致、坏hash/异指纹resume/零样本拒绝仍由 B01 runner验收；中文标注无已指派人员；B08 scope/授权/7天观察未满足。benchmark与产品效果仍 NOT READY。
+- Next：B00提交后继续 B01 adapters/隔离CLI、gold隔离和指纹续跑拒绝。PR 每个工作包评测完成后补中英文结论评论。
+- Files：`proactive_eval/`、`docs/reports/2026-11-04-proactive-memory-benchmark-b00.md`、`feature_list.json`、`progress.md`、`session-handoff.md`。
+
 ## 2026-11-04 — 主动参与与记忆 Benchmark 全面规划
 
 - Scope / Current State：本轮仅制定计划并更新任务状态。源锚点 `cbcd6f9d3b725f73aee02a4e4c4ca7f5280d52bd`，分支 `codex/aoede-mneme-proactive`。原 `AOEDE-MNEME-IMPL` 保持唯一 active feature / in_progress / NOT READY；新增 benchmark 实施任务为 planned。

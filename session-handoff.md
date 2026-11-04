@@ -1,10 +1,10 @@
-## Current Handoff — proactive / memory benchmark plan (2026-11-04)
+## Current Handoff — proactive / memory benchmark B00 (2026-11-04)
 
-- Current Objective：全面规划交付；实施尚未启动。先读[计划](docs/plans/2026-11-04-proactive-memory-benchmark-plan.md) §12 B00，再按B00–B08逐包提交。当前active feature仍是 `AOEDE-MNEME-IMPL`，其原G2/发布VM门禁保持NOT READY；新benchmark实施登记planned。
-- Files：计划、feature_list.json、progress.md、session-handoff.md。源锚点 `cbcd6f9d3b725f73aee02a4e4c4ca7f5280d52bd`。只有本轮文档/状态可纳入提交，保留 .zcode计划/debug.log/ligamina_bridge/start_managed_stella.ps1 四组既有未跟踪内容。
-- Verification Evidence：公开分享正文+一手数据卡/数据文件已核；代码经GitNexus query/context定位与源码补证。核心修正：When2Speak token/dialogue同上下文；PITCH384候选/35对话/1091人次且是turn窗口；ChMap按config拆分；现有runner不是完整机会/预算/求证E2E。当前临时研究文件不作为恢复依赖，主要来源/哈希和发现已写计划。规划任务done；文档门禁127/1360/577/0，计划额外8本地链接核验通过。图all为4/3/0/LOW，compare main累计312/461/794/CRITICAL，风险保留。JSON/diff检查通过。
-- Blockers：尚无本轮benchmark、模型或QQ实测；LoCoMo-Conv许可/ChMap test协议、模型预算与中文标注需B00/B06明确。不得把规划完成升级为效果或平台通过；Release/Windows VM独立保留。
-- Recommended Next Step：开始B00，冻结dataset config/revision/hash/license、指标分母、source-native/persona标签与原样基线。B01复用core/evaluation隔离宿主，补统一虚拟timer与生产对象链、memory_eval多源report/resume/lineage。执行前显式临时STELLA_HOME、重做upstream impact；真实平台scope授权推迟到B08。
+- Current Objective：B00 已单独提交，按计划继续 B01–B07 的离线工作；每包评测完成后独立提交英文 commit，并在 PR 评论中记录中英文结论。B06 需人工标注资源；B08 在用户给出平台/范围并明确授权至少7天观察前不运行。`AOEDE-MNEME-IMPL` 原有 G2/发布 VM 门禁仍 NOT READY。
+- Files：[计划](docs/plans/2026-11-04-proactive-memory-benchmark-plan.md)、[B00报告](docs/reports/2026-11-04-proactive-memory-benchmark-b00.md)、`proactive_eval/`、任务状态三文件。保留既有未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`，不要纳入 benchmark commit。
+- Verification Evidence：冻结14条数据 registry、来源许可/hash/revision与分母；6个schema、registry、actor gold隔离、零分母指标均通过校验。PITCH窗口交集329/384（旧计划296/384未复现）；PersonaMem rule/FTS各5000/5000 case pass，但precision33.4%、pollution66.6%，不可称端到端成功。完整基线PARTIAL：缺11,115向量fixture，embedding/hybrid及新LoCoMo judge未跑。无模型、Bot、生产数据/配置或服务访问。详见 progress.md B00 section 与 baseline lock。
+- Blockers：G0 fixture重放/resume/零样本行为待B01；B06暂无两名标注员+裁决排期；B08 scope/明确授权/七天观察未满足。跨层与产品验收NOT READY。
+- Next：完成 B01 数据适配器、actor/scorer隔离、隔离命令行和失败安全/续跑验证；基于计划每包重查impact与门禁。PR base为 `codex/aoede-mneme-proactive`。
 
 ## Current Handoff — PR #129 Rust/Mneme 文档收尾 (2026-11-04)
 
