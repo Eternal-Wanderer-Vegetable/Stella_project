@@ -40,7 +40,7 @@ to `off`, with `shadow` and `enforce` available. Follow the dated
 enforcement. Missing proactive evidence, wrong targets, or changed candidates must
 prevent delivery. `tools/data_repair.py` provides source-driven preview/apply/revoke
 with column-level CAS; do not reassign an entire space to one person. See the
-[Rust guide](memory-rust-backend.en.md) for current-branch schema 19/API 3 compatibility.
+[Rust guide](memory-rust-backend.en.md) for current-branch schema 24/API 4 compatibility.
 
 ## Three Design Principles
 

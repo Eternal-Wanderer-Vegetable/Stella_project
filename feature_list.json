@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-03",
+  "updated_at": "2026-11-04",
   "active_feature": "AOEDE-MNEME-IMPL",
   "features": [
     {
@@ -2340,6 +2340,10 @@
         {
           "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/129",
           "result": "Follow-up on PR #129, fixed at head f42aa2448cf9875ef6782cf40565efc1e3c19490: old head b71e809 failed all three Python matrices (4338 passed/35 skipped/1 failed each) and flow-manifest due to a stale content-addressed manifest; sole test failure was TestDriftGate::test_committed_manifest_matches_source. Regenerated message-flow.9b19e90b7675.json; local --check passes on Python 3.10/3.11/3.12. Fixed group admission for native OneBot at segments anywhere in the message, requiring segment qq to equal active bot self_id. Regression failed before the fix and passed after; TestSharedAdmission + flow drift test: 4 passed. Changed-file Ruff, docs, git diff --check, and all PR checks including Python 3.10/3.11/3.12, flow-manifest, flow-closure, Windows native reliability, security, CLI, and lint passed. Managed runtime restarted: Corona 33904 / Nucleus 33152 ready, API reachable, OneBot healthy. No live QQ message was sent; actual reply acceptance remains pending. AOEDE-MNEME-IMPL remains in_progress / NOT READY for remaining G2 gates."
+        },
+        {
+          "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/129",
+          "result": "2026-11-04 Rust/Mneme binding and documentation audit: Python source, Rust contract constants, and local Windows memory_rust._native exports agree at backend API 4/schema 24; mneme.retrieval_v2 routes through memory_rust.selector and mneme.memory_manager owns promotion policy while delegating the bounded transaction. Focused selector/promotion/Mneme compatibility tests: 22 passed, 1 deprecation warning; scripts/validate_rust_fullchain.py passed on temporary databases with native retrieval smoke and Python/native promotion differ=false. Synchronized 7 bilingual documentation pairs and updated current source-contract references; python scripts/check_docs.py passed (127 files / 1358 local links / 577 anchors / 0 errors), git diff --check passed. Release-payload/clean Windows VM, model/QQ rollout, and behavior-rubric acceptance remain NOT READY; feature stays in_progress."
         }
       ]
     }

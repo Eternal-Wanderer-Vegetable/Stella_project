@@ -73,8 +73,11 @@ imports the other.
 - The timer (since S2-02) only does sleep announcements, opportunity
   recovery and fair verification-ASK submission - no verification priority.
 
-Known limits (as of this round): UNKNOWN settlements on the announcement
-and speak paths are conservative consumes without automatic retry; the
-native wheel has not been rebuilt for schema24 yet (old wheels refuse the
-new database and fall back safely to the Python backend). The acceptance
-matrix lives in plan section 8.
+Known limits (as of 2026-11-04): UNKNOWN settlements on the announcement
+and speak paths are conservative consumes without automatic retry. The local
+Windows `_native.pyd` exports API 4/schema 24 and is selected by the Rust
+selector; a temporary-database fullchain passed native retrieval smoke and
+Python/native promotion parity (`differ=false`). An old wheel refuses schema
+24 on contract mismatch and safely falls back or errors according to mode.
+This local check does not certify the Release payload, a clean Windows VM, or
+install/rollback acceptance. The acceptance matrix lives in plan section 8.

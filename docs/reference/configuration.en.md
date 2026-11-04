@@ -583,7 +583,7 @@ The observation limit is **tiered by type**. The tier table is the code-level co
 
 ### Retrieval Backend: Python / Rust (`MEMORY_BACKEND`)
 
-The memory engine defaults to the Python implementation (`memory/`); an independent Rust retrieval backend can be installed optionally. The switch is the `MEMORY_BACKEND` environment variable, not a key in the table below: `python` (default) / `rust` / `auto` (use Rust when available, fall back on failure) / `shadow` (run Rust read-only beside Python, record parity diagnostics, return the Python result) / `strict` (require Rust and surface failures). See [memory-rust-backend.md](../architecture/memory-rust-backend.md) for the compatibility matrix, release assets, and rollback; the earlier `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` are equivalent to `shadow` / `strict`, and an explicit `MEMORY_BACKEND` takes precedence.
+The memory engine defaults to Mneme's Python implementation (`mneme/`; `memory/*` is a module-identity-preserving compatibility alias layer); an independent Rust retrieval backend can be installed optionally. The switch is the `MEMORY_BACKEND` environment variable, not a key in the table below: `python` (default) / `rust` / `auto` (use Rust when available, fall back on failure) / `shadow` (run Rust read-only beside Python, record parity diagnostics, return the Python result) / `strict` (require Rust and surface failures). See [memory-rust-backend.en.md](../architecture/memory-rust-backend.en.md) for the compatibility matrix, release assets, and rollback; the earlier `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` are equivalent to `shadow` / `strict`, and an explicit `MEMORY_BACKEND` takes precedence.
 
 ### RAG Switches
 

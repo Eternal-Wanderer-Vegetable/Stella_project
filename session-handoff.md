@@ -1,4 +1,13 @@
-## Current Handoff — PR #129 CI 漂移与群 @ 修复 (2026-11-03)
+## Current Handoff — PR #129 Rust/Mneme 文档收尾 (2026-11-04)
+
+- Status：Rust/Mneme 接线已核对，双语文档与当前 API 4/schema 24 同步；本机 isolated native fullchain 通过。PR #129 当前在本轮检查时为 open/draft/unmerged，文档门禁通过，等待提交推送和 PR CI 后标为 ready for review。
+- Current Objective：完成 PR 文档/状态提交，确认新 commit 的 CI，再执行 ready-for-review 状态转换。不要合并；真实模型/QQ、Windows 干净 VM/安装回滚和时机/自然度验收仍未完成。
+- Files：7 组中英文文档（`memory-rust-backend`、`memory-system`、`contracts`、`aoede`、`deployment-docker`、`configuration`、`mneme`）与 `feature_list.json`、`progress.md`、本交接。保留未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
+- Evidence：Python 与本机 native 导出 API 4/schema 24；`resolve_backend("rust")` 选中 native；定向测试 22 passed / 1 warning；临时库 `validate_rust_fullchain.py` PASS，Python/native promotion `differ=false`；`check_docs.py` 127/1358/577/0，JSON 和 diff check 通过。合同页 impact HIGH/14 direct/111 total/0 processes，其他文档 MEDIUM；未改运行源码。
+- Blockers：G2 真实模型/QQ 灰度、Windows 干净 VM 安装回滚和自然度 rubric 仍待验收，整体产品验收保留 NOT READY。
+- Recommended Next Step：提交并推送限定文档变更，等 PR CI 完成，再标记 ready for review。验收缺口通过 PR 描述和矩阵保留，后续按计划单独完成；不合并。
+
+## Previous Handoff — PR #129 CI 漂移与群 @ 修复 (2026-11-03)
 
 - Status：修复已提交并推送至 PR #129，HEAD `f42aa24`，PR 仍为 draft。flow-manifest、flow-closure、文档、lint、CLI、安全、Windows native reliability 及 Python 3.10/3.11/3.12 CI 均通过。
 - Current Objective：代码与 PR CI 修复完成；等待用户在群里 @ Stella 一次并提供大致时间，以核对真实触发与回复回执。Aoede/Mneme 外部 G2 gates 继续 NOT READY。

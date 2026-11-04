@@ -594,7 +594,7 @@ LM Studio **不限制并发**：多个请求同时打到同一模型时服务端
 
 ### 检索后端：Python / Rust（MEMORY_BACKEND）
 
-记忆引擎默认用 Python 实现（`memory/`），可选安装独立的 Rust 检索后端。选择方式不是本表的键，而是 `MEMORY_BACKEND` 环境变量：`python`（默认）/ `rust` / `auto`（可用则用、失败回退）/ `shadow`（Rust 只读旁路跑、记录一致性诊断、返回 Python 结果）/ `strict`（强制 Rust，失败即报）。兼容性矩阵、发布资产与回滚方式见 [memory-rust-backend.md](../architecture/memory-rust-backend.md)；早期的 `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` 等价于 `shadow` / `strict`，显式 `MEMORY_BACKEND` 优先。
+记忆引擎默认使用 Mneme 的 Python 实现（`mneme/`；`memory/*` 是保持模块身份的兼容别名），可选安装独立的 Rust 检索后端。选择方式不是本表的键，而是 `MEMORY_BACKEND` 环境变量：`python`（默认）/ `rust` / `auto`（可用则用、失败回退）/ `shadow`（Rust 只读旁路跑、记录一致性诊断、返回 Python 结果）/ `strict`（强制 Rust，失败即报）。兼容性矩阵、发布资产与回滚方式见 [memory-rust-backend.md](../architecture/memory-rust-backend.md)；早期的 `MEMORY_RUST_SHADOW=true` / `MEMORY_RUST_STRICT=true` 等价于 `shadow` / `strict`，显式 `MEMORY_BACKEND` 优先。
 
 ### RAG 开关
 

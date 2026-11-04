@@ -23,8 +23,13 @@ code boundaries, not a second body.
   ports. `mneme/verification.py` and the verification attempt/tombstone
   persistence land in stage two (S2-01).
 - The `memory_rust` release name, native ABI, `BACKEND_API_VERSION` and the
-  SQLite file name do not change with this rename; the Rust wheel is a
-  versioned external dependency, not an unfinished rename.
+  SQLite file name do not change with this rename. The versioned Rust wheel is
+  an optional backend attached through `memory_rust.selector`: `mneme.retrieval_v2`
+  calls the selector and native results are reconstructed as Mneme's
+  `RetrievalResult`; promotion stays managed by `mneme.memory_manager`, with
+  Python retaining the gates and post-commit effects. Python remains the default
+  backend unless `MEMORY_BACKEND` explicitly selects another mode. See the
+  [Rust backend binding and compatibility guide](memory-rust-backend.en.md).
 
 ## Data and resources (unchanged)
 

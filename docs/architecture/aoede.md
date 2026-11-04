@@ -60,5 +60,8 @@ Aoede 是「是否、何时、对谁开口」的主动参与子系统（2026-11-
   不再有「主动 @ 优先」。
 
 已知边界（截至本轮）：播报与插话路径的 UNKNOWN 结算为保守消耗，不自动重投；
-native wheel 尚未按 schema24 重建（旧 wheel 拒读新库并安全回落 Python 后端）。
+2026-11-04 本机 Windows `_native.pyd` 已确认导出 API 4/schema 24，Rust selector
+可选中该模块；临时数据库 fullchain 通过原生检索冒烟及 Python/native 晋升 parity
+（`differ=false`）。旧 wheel 会因合同不匹配而拒绝 schema24，并按模式安全回落或报错。
+本机验证不等同于 Release payload、干净 Windows VM 或安装/回滚验收。
 阶段验收矩阵见 [计划](../plans/2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md) §8。

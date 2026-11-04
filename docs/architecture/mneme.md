@@ -18,7 +18,11 @@ Mneme 是 Stella 记忆子系统的正式 Python 包（2026-11-03 计划 §3.1�
   `stella_contracts/aoede.py` 的端口交互。`mneme/verification.py` 与求证
   attempt/tombstone 的持久生命周期在阶段二（S2-01）落地。
 - `memory_rust` 发行名、native ABI、`BACKEND_API_VERSION` 与 SQLite 文件名
-  不随本改名变化；Rust wheel 是有版本的外部依赖，不是 Mneme 改名未完成。
+  不随本改名变化；Rust wheel 是有版本的可选后端，仍通过 `memory_rust.selector`
+  接入 Mneme：`mneme.retrieval_v2` 调用 selector，native 结果重建为 Mneme 的
+  `RetrievalResult`；晋升由 `mneme.memory_manager` 管理，Python 保留门槛与提交后副作用。
+  默认 backend 仍是 Python，需显式设置 `MEMORY_BACKEND` 才会选择其他模式。
+  详见 [Rust 后端接线与兼容](memory-rust-backend.md)。
 
 ## 数据与资源（不变）
 

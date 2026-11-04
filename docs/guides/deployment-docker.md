@@ -238,5 +238,5 @@ backup API，或停服务后备份，不能只复制 WAL 模式的主 `.db` 文�
 QQ 私聊默认启用（`PRIVATE_CHAT_ENABLED=true`，空白名单允许所有好友），与
 `ALLOWED_GROUPS` 独立；需要收窄时配置 `PRIVATE_CHAT_ALLOWLIST`。
 个人写入/分享、归属 guard 与主动验证合同默认关闭，迁移不会自动开放旧记忆。
-Rust 部署必须与所用应用源码合同一致；当前分支为 API 3/schema 19，已发布 6.1.0 的 API 2/schema 18 属于旧快照。合同不符时 strict/rust 会拒绝，见 [源码合同](../development/contracts.md)。
+Rust 部署必须与所用应用源码合同一致；当前分支为 API 4/schema 24，已发布 6.1.0 的 API 2/schema 18 属于旧快照。合同不符时 strict/rust 会拒绝，见 [源码合同](../development/contracts.md)。
 配置默认值和可选 Cometa SDK 见 [配置](../reference/configuration.md)与 [Cometa](cometa.md)。

@@ -4,21 +4,21 @@
 
 <a id="610-的源码合同与发布门禁"></a>
 
-2026-10-25 P04 将记忆源码合同推进至 schema 23/API 4，新增追加式传输消息事件、组件与关系表；社交旁表合同为 schema 5，Scheduling SQL 为 schema 2，Cometa Origin JSON 为 v3。2026-10-26 在隔离 Linux 工具链中构建并加载了 abi3 wheel，导出的 API 4/schema 23 与源码一致，且通过 native fullchain；这不证明 Windows 发布资产、干净 VM 或发布流程已验收。旧 native wheel 不得加载 schema 23 数据库。
+当前源码记忆合同为 schema 24 / backend API 4。2026-10-25 的 schema 23/API 4 变更及 2026-10-26 Linux abi3 wheel/fullchain 是历史验收：它们证明当时的 v23 源码与 wheel 一致，不覆盖当前 v24。v23 新增追加式传输消息事件、组件与关系表；v24 新增一次性求证生命周期表。旧 native wheel 必须通过导出常量校验，不能加载不兼容的新 schema。
 
 | 来源 | 当前常量 |
 | --- | --- |
-| [Python schema](../../memory/schema.py) | SCHEMA_VERSION = 23 |
-| [Python/native 合同](../../memory_rust/backend.py) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 23 |
-| [Rust schema](../../memory_rust/native/src/schema.rs) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 23 |
+| [Python schema](../../mneme/schema.py) | SCHEMA_VERSION = 24 |
+| [Python/native 合同](../../memory_rust/backend.py) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 24 |
+| [Rust schema](../../memory_rust/native/src/schema.rs) | BACKEND_API_VERSION = 4; MEMORY_SCHEMA_VERSION = 24 |
 | [Social schema](../../memory/social_schema.py) | SOCIAL_SCHEMA_VERSION = 5 |
 | [Scheduling SQL schema](../../stella_project/plugins/bot_main/scheduling/migrations.py) | SCHEMA_VERSION = 2 |
 | [Cometa Origin JSON](../../cometa/models.py) | schema_version = 3 |
 
-本轮隔离构建的 wheel 验收证据见[多平台 P10 验证报告](../reports/2026-10-26-xplat-p10-validation.md)。该证据只覆盖本地 Linux abi3 wheel 和临时数据；切换分支时仍须重新核对常量，Windows 发布资产与干净 VM 保持待验。
+2026-10-26 Linux abi3 wheel 的历史验收见[多平台 P10 验证报告](../reports/2026-10-26-xplat-p10-validation.md)，仅覆盖 schema 23。2026-11-04 本机 Windows 隔离验证确认 `_native.pyd` 导出 API 4/schema 24，Rust selector 选中该模块，定向测试 22 项通过，临时库 fullchain 与 Python/native 晋升 parity 通过（`differ=false`）。此本地证据不等同于 Release payload、干净 Windows VM 或安装回滚验收。
 
-- 记忆 schema 23 / backend API 4：`memory/schema.py`、`memory_rust/backend.py` 与 `memory_rust/native/src/schema.rs` 必须一致。原生包版本不能替代导出常量校验。v23 追加 transport event/parts/relations，并保留旧整数 `msg_id` 供显式 QQ 兼容路径使用。
-- Native evidence verifier 同时识别历史 `2026-10-08.1` 与当前 `2026-10-21.1` assessment；当前 namespaced source snapshot 必须通过其不透明 `subject_key` 与 `connection_id` 绑定证据，legacy 快照仍按 `qq:{user_id}` 兼容。它不把旧 wheel 视为 schema 23 兼容。
+- 当前记忆 schema 24 / backend API 4：`mneme/schema.py`、`memory_rust/backend.py` 与 `memory_rust/native/src/schema.rs` 必须一致。原生包版本不能替代导出常量校验。schema 24 增加持久的一次性求证 attempts 与 rejection tombstones；schema 23 的 transport event/parts/relations 及整数 `msg_id` QQ 兼容路径仍保留。
+- Native evidence verifier 同时识别历史 `2026-10-08.1` 与当前 `2026-10-21.1` assessment；当前 namespaced source snapshot 必须通过其不透明 `subject_key` 与 `connection_id` 绑定证据，legacy 快照仍按 `qq:{user_id}` 兼容。历史 v23 wheel 验收不表示该 wheel 兼容 schema 24。
 - Social schema 5：`social_deliveries.platform_message_ids_json` 保存一个物理发送片段的全部平台消息 ID；v4→v5 迁移只把既有首 ID 包装成单元素列表，不重新解释 ID。WP06 保留单 ID 兼容字段，同时支持不透明 ID 和逐段回执。
 - Scheduling schema 2：task/run/audit/quota 记录保存可验证的 DeliveryTarget、主体与 scope；旧 QQ task 只有在 Bot/群目标明确可绑定时才迁移为可发送，其他行保持不可路由，旧配额放入隔离的 legacy scope。发送必须精确解析持久化 BotRef，unknown 不自动重试。
 - P05 出站合同：`OutboundService.send` 按完整 Bot/scene/route 目标 FIFO 串行；每目标最多 32 个排队项，目标 lane 与配额状态各有 4096 项上限。`rate_limit_buckets` 独立同时执行 adapter、connection、scene、target 作用域与 `api`、`request` 类别；旧限流字段分别保留为 adapter API 桶与 connection API 桶，不把不同窗口压成一个限值。限流状态是进程内滑动窗口，进程重启后清零。每个物理片段及重试都占用配额；仅明确 FAILED、标准限流错误码且附带 retry-after 的请求可重试，默认最多 2 次，单次 retry-after 等待最多 30 秒，并仍受消息 deadline/窗口约束。UNKNOWN 永不重投；回执保存物理片段状态、尝试次数和不透明消息 ID。排队期间 Bot 绑定代际变化或断连会拒绝发送。同 self_id 可在不同 adapter 并存，同一 adapter 槽冲突仍拒绝。
