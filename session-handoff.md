@@ -1,3 +1,11 @@
+## Current Handoff — proactive / memory benchmark plan (2026-11-04)
+
+- Current Objective：全面规划交付；实施尚未启动。先读[计划](docs/plans/2026-11-04-proactive-memory-benchmark-plan.md) §12 B00，再按B00–B08逐包提交。当前active feature仍是 `AOEDE-MNEME-IMPL`，其原G2/发布VM门禁保持NOT READY；新benchmark实施登记planned。
+- Files：计划、feature_list.json、progress.md、session-handoff.md。源锚点 `cbcd6f9d3b725f73aee02a4e4c4ca7f5280d52bd`。只有本轮文档/状态可纳入提交，保留 .zcode计划/debug.log/ligamina_bridge/start_managed_stella.ps1 四组既有未跟踪内容。
+- Verification Evidence：公开分享正文+一手数据卡/数据文件已核；代码经GitNexus query/context定位与源码补证。核心修正：When2Speak token/dialogue同上下文；PITCH384候选/35对话/1091人次且是turn窗口；ChMap按config拆分；现有runner不是完整机会/预算/求证E2E。当前临时研究文件不作为恢复依赖，主要来源/哈希和发现已写计划。规划任务done；文档门禁127/1360/577/0，计划额外8本地链接核验通过。图all为4/3/0/LOW，compare main累计312/461/794/CRITICAL，风险保留。JSON/diff检查通过。
+- Blockers：尚无本轮benchmark、模型或QQ实测；LoCoMo-Conv许可/ChMap test协议、模型预算与中文标注需B00/B06明确。不得把规划完成升级为效果或平台通过；Release/Windows VM独立保留。
+- Recommended Next Step：开始B00，冻结dataset config/revision/hash/license、指标分母、source-native/persona标签与原样基线。B01复用core/evaluation隔离宿主，补统一虚拟timer与生产对象链、memory_eval多源report/resume/lineage。执行前显式临时STELLA_HOME、重做upstream impact；真实平台scope授权推迟到B08。
+
 ## Current Handoff — PR #129 Rust/Mneme 文档收尾 (2026-11-04)
 
 - Status：Rust/Mneme 接线已核对，双语文档与当前 API 4/schema 24 同步；本机 isolated native fullchain 通过。文档/状态提交 `1d6e62c` 已推送；PR #129 为 open/ready-for-review/unmerged，新 head 上全部 14 项 hosted CI 通过。

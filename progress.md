@@ -1,3 +1,13 @@
+## 2026-11-04 — 主动参与与记忆 Benchmark 全面规划
+
+- Scope / Current State：本轮仅制定计划并更新任务状态。源锚点 `cbcd6f9d3b725f73aee02a4e4c4ca7f5280d52bd`，分支 `codex/aoede-mneme-proactive`。原 `AOEDE-MNEME-IMPL` 保持唯一 active feature / in_progress / NOT READY；新增 benchmark 实施任务为 planned。
+- What's Done：[全面计划](docs/plans/2026-11-04-proactive-memory-benchmark-plan.md) 定义 Aoede、Mneme 与联合行为三个独立成绩面板、六条评测轨、B00–B08 依赖/交付/验收/提交检查点、指标分母、双摄入与lineage、防未来泄漏、频率/求证故障矩阵、中文240段双标/盲评、成本上限与cluster CI。分享对话正文已提取并复核一手来源；修正When2Speak两任务重复计数、PITCH标注人次/轮次窗口、ChMap配置统计等口径，来源revision及部分文件hash写入计划。
+- Source Findings：现有 core/evaluation runner 主链是 observe→简化生成→FakeSender，不能直接作为当前机会/预算/求证全链验收；memory_eval 的 capture绕过、LoCoMo固定report/schema、gold-ID召回与题号续跑需先补协议。LoCoMo官方F1与Stella judge分列；LongMemEval-V2属web-agent轨道，不作为本轮聊天评测升级。
+- Evidence：文档基线127 files / 1358 links / 577 anchors / 0 errors；GitNexus1.6.12实际索引与runner均current、覆盖2203文件；源码/入口补查覆盖空context/0流程结果。编辑前状态文件impact LOW/MEDIUM/LOW，新计划UNKNOWN后已补引用检查。最终门禁：check_docs 127 files / 1360 links / 577 anchors / 0 errors；日期计划独立核验315行/8本地链接及锚点/0错误，17条来源链接登记；feature JSON与diff检查通过。GitNexus all为4 files / 3 symbols / 0 processes / LOW；compare main为312 files / 461 symbols / 794 processes / CRITICAL（分支累计风险保留，未豁免）。规划任务done，实施planned。
+- Blockers：B00–B08尚未执行；LoCoMo-Conv衍生许可、ChMap发布test协议、模型/硬件预算和中文标注排期需在对应工作包冻结。未访问生产数据/配置、模型、Bot或服务；不新增运行验收结论。
+- Next：实施从B00协议/数据registry/冻结基线开始，再B01隔离与适配。完整计划允许离线工作先行；真实QQ目标与窗口只在B08需要用户给出。既有四组未跟踪路径完整保留。
+- Files：计划与任务状态三文件；验证范围仅文档/规划。
+
 ## 2026-11-04 — PR #129 Rust/Mneme 接线与文档同步
 
 - Scope / Current State：只改了 7 组中英文文档及任务状态文件；未改运行代码。分支 `codex/aoede-mneme-proactive`，文档收尾提交 `1d6e62c` 已推送；PR #129 现为 open/ready-for-review/unmerged。

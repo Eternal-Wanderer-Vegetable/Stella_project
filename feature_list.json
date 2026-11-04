@@ -2346,6 +2346,62 @@
           "result": "2026-11-04 Rust/Mneme binding and documentation audit: Python source, Rust contract constants, and local Windows memory_rust._native exports agree at backend API 4/schema 24; mneme.retrieval_v2 routes through memory_rust.selector and mneme.memory_manager owns promotion policy while delegating the bounded transaction. Focused selector/promotion/Mneme compatibility tests: 22 passed, 1 deprecation warning; scripts/validate_rust_fullchain.py passed on temporary databases with native retrieval smoke and Python/native promotion differ=false. Synchronized 7 bilingual documentation pairs and updated current source-contract references; python scripts/check_docs.py passed (127 files / 1358 local links / 577 anchors / 0 errors), git diff --check passed. Commit 1d6e62c was pushed; all 14 hosted CI checks passed and PR #129 was marked ready for review (open/unmerged). Release-payload/clean Windows VM, model/QQ rollout, and behavior-rubric acceptance remain NOT READY; feature stays in_progress."
         }
       ]
+    },
+    {
+      "id": "AOEDE-MNEME-BENCH-PLAN",
+      "name": "Stella 主动参与与记忆系统联合 Benchmark 全面规划",
+      "description": "根据分享资料、一手数据与当前源码，制定 Aoede、Mneme 与联合行为的可复现评测计划；仅规划与状态记录。",
+      "status": "done",
+      "dependencies": [
+        "AOEDE-MNEME-PLAN"
+      ],
+      "scope": [
+        "docs/plans/2026-11-04-proactive-memory-benchmark-plan.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "数据集的一手来源、规模单位、标签语义、许可和防泄漏边界明确",
+        "主动决策/时机、记忆写入/检索/使用、联合求证分别有指标分母与基线",
+        "B00-B08 工作包具备依赖、交付、验收、预算和逐包提交/回滚检查点",
+        "中文标注、统计区间、真实模型/QQ 与发布VM边界明确；文档及图门禁记录"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-11-04-proactive-memory-benchmark-plan.md",
+          "result": "Plan drafted against cbcd6f9d3b725f73aee02a4e4c4ca7f5280d52bd. Source-native/persona tracks, causal timing, dual ingestion, lineage, budgets, annotation and finite hard-zero gates specified. Implementation and runtime acceptance NOT RUN."
+        },
+        {
+          "command": "python scripts/check_docs.py; explicit dated-plan local-link/anchor check; feature JSON validation; git diff --cached --check; GitNexus detect-changes all/compare main",
+          "result": "Maintained docs PASS: 127 files / 1360 links / 577 anchors / 0 errors. Dated plan checked separately: 315 lines / 8 local links and anchors / 0 errors; 17 source links registered. Feature IDs unique, original active_feature retained. GitNexus all: 4 files / 3 symbols / 0 processes / LOW; compare main cumulative: 312 files / 461 symbols / 794 processes / CRITICAL, retained without waiver. Only plan and state files changed; model/runtime/platform/VM checks NOT RUN."
+        }
+      ]
+    },
+    {
+      "id": "AOEDE-MNEME-BENCH-IMPL",
+      "name": "Stella 主动参与与记忆系统 Benchmark 实施与验收",
+      "description": "按 B00-B08 顺序建立公开数据与中文联合评测，保留组件/生产等价/真实模型/平台验收边界。",
+      "status": "planned",
+      "dependencies": [
+        "AOEDE-MNEME-BENCH-PLAN"
+      ],
+      "scope": [
+        "proactive_eval/（拟建）及 core/evaluation/ 扩展",
+        "memory_eval/ 多数据集、双摄入轨、lineage 与续跑合同",
+        "公开数据manifest、中文标注、tests/aoede 与 tests/evaluation",
+        "日期化报告、CI轻量门禁与受控平台验收"
+      ],
+      "done_criteria": [
+        "B00 冻结数据/协议/主终点与原样基线，每包独立提交",
+        "G0-G6 有对应完成/失败/跳过证据，不用oracle/fixture替代生产等价或模型验收",
+        "B08 仅在明确scope授权下执行真实平台试验，QQ/WebChat 与 Windows 发布VM各自签收",
+        "所有未运行/partial/数据或标注阻塞项明确；未达行为门槛保留 NOT READY"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-11-04-proactive-memory-benchmark-plan.md",
+          "result": "Planned only. B00-B08 not started; original AOEDE-MNEME-IMPL remains the sole active feature. No model, Bot, production data/configuration or service operations performed."
+        }
+      ]
     }
   ]
 }
