@@ -2385,7 +2385,7 @@
         "AOEDE-MNEME-BENCH-PLAN"
       ],
       "scope": [
-        "proactive_eval/（拟建）及 core/evaluation/ 扩展",
+        "proactive_eval/ 及 core/evaluation/ 扩展",
         "memory_eval/ 多数据集、双摄入轨、lineage 与续跑合同",
         "公开数据manifest、中文标注、tests/aoede 与 tests/evaluation",
         "日期化报告、CI轻量门禁与受控平台验收"
@@ -2412,6 +2412,10 @@
         {
           "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b01.md",
           "result": "B01 follow-up hardening: actor plugin path is now included in the actor resume fingerprint. CLI regression verifies a different actor plugin is rejected before it can produce a result. Five isolated evaluation suites: 41 passed (pytest-asyncio loop-scope deprecation warning); Ruff and docs passed. Commit and bilingual PR comment recorded separately."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b02.md",
+          "result": "B02 completed on fixed public When2Speak and Social AI Ambient test revisions. Three deterministic no-memory baselines each scored 21,687/21,687 and 16,222/16,222 rows; all six reports passed schema validation with zero actor/scorer failures. Model calls, memory inputs, and generated outputs were zero. B02 tests 9 passed and Ruff passed. Source labels remain separate from Stella Chinese-persona labels; product behavior, timing, memory, model, and platform acceptance remain NOT READY."
         }
       ]
     }

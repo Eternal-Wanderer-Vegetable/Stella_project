@@ -1,3 +1,14 @@
+## 2026-11-04 — 主动参与与记忆 Benchmark B02
+
+- Scope / Current State：B02 代码、公开数据适配和无记忆基线均完成，待本包独立提交与 PR #130 中英文评测评论。`AOEDE-MNEME-BENCH-IMPL` 继续为唯一 `in_progress` feature；整体行为效果仍 NOT READY。
+- What's Done：When2Speak token adapter 从 actor 输入隔离末尾 gold token；Social AI Ambient 按标注目标轮切分为 16,222 个前缀 scenario，source category 仅供 report-side 分层。新增 always-silent、always-speak、last-explicit-question 三个零记忆/零生成本地 actor、源标签 scorer、完整误判 JSONL 与汇总报告。
+- Evaluation：When2Speak 三组各 21,687/21,687；Social AI 三组各 16,222/16,222；全部 6 个 report schema 校验通过，actor/scorer failed=0、coverage=100%，model calls/memory inputs/generated outputs=0。Macro-F1：When2Speak 0.4656/0.1142/0.5037；Social AI 0.4933/0.0258/0.5184（按 always-silent / always-speak / last-explicit-question）。末问号规则仍漏掉 94.7% 与 83.2% gold SPEAK，保留原样基线，不调生产策略。定向回归 9 passed（1 条 Python 3.14 async 弃用警告）；Ruff 与 CLI help 通过。首个完成基线报告由 checkpoint 汇总恢复，wall_time_ms=null；其余五组有 runner wall time。
+- Dataset / Boundary：When2Speak revision `092e40995896b0c278a1e32954297ef125b70112` / 21,687 rows；Social AI revision `5efda0b267d6bd5ecae74cbe1141a66f64495661` / 1,212 scenes、16,222 labeled turns。源标签不是 Stella 中文 persona 标签（此处 0）；未运行真实模型/平台/产品组件时机、无生产聊天/数据库/配置。运行缓存和每案例原文保持在 gitignored run path。
+- GitNexus pre-edit：`_run_baseline` exact upstream LOW（3 impacted、1 direct、1 process `run_b02`）；首次由于 B02 新文件未入图为 UNKNOWN，重建索引后取得 exact 结果。重建因 PDG 模式变化强制 full rebuild；process 日志仍提示候选入口/分支截断，故只依据精确局部调用链并对其他动态图关系保留限制。`feature_list.json` LOW 19 impacted / 2 direct；`progress.md` MEDIUM 29 / 5；`session-handoff.md` LOW 19 / 2；主计划 LOW 16 / 3，均为文档引用。
+- GitNexus final：scope all repeated snapshots 为 9 files / 3–25 symbols / 792 affected processes / CRITICAL；compare main 为 344 files / 364–1,158 symbols / 791–792 processes / CRITICAL（分支累计，部分输出列表被截短，完整 counts/risk 保留）。流列表一度把计划文档标题映射到配置/部署流程；本包可执行改动只有新 proactive_eval 模块及其 tests。`source_adapters.py` 文件 impact 在完整结果下 HIGH 156/181/20、summary-only 重查 MEDIUM 40/181/20；context 精确列出唯一非测试 importer 为 B02 runner，另一 caller 为 B02 tests，outgoing 仅 `proactive_eval.adapters`。精确 `dataset_id` 查询错解析到 Cometa 的 CodexAuthUnavailable，source search 也只发现 B02 内部字段引用。没有按风险轴豁免 HIGH/CRITICAL；索引过程本身的流截断限制继续记录。
+- Blockers / Next：B00 embedding/hybrid 与新 LoCoMo judge 仍未运行；B03–B07 尚未实施，B06 标注资源未安排；B08 授权目标与 7 日观察未满足。下一步进入 B03：PITCH 窗口、OpportunityManager、预算和 Mneme 求证状态矩阵。
+- Files：`proactive_eval/b02.py`、`source_adapters.py`、`b02_plugins.py`、`tests/evaluation/test_proactive_b02.py`、B02 报告、主计划及任务状态文件。
+
 ## 2026-11-04 — 主动参与与记忆 Benchmark B01
 
 - Scope / Current State：B01 已单独实现并验证，branch codex/proactive-memory-benchmark-implementation；PR #130 base codex/aoede-mneme-proactive。AOEDE-MNEME-BENCH-IMPL 是唯一 in_progress feature；B00/B01 完成不代表 benchmark 或产品验收通过。

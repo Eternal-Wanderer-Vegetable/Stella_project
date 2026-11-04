@@ -1,7 +1,7 @@
 # Stella 主动参与与记忆系统 Benchmark 全面计划
 
 - 日期：2026-11-04（Asia/Shanghai）。任务：`AOEDE-MNEME-BENCH-PLAN`。
-- 状态：规划交付；下列 B00–B08 尚未实施，benchmark 与产品行为验收均 **NOT READY**。
+- 状态：B00–B02 已完成各自离线工作包；B03–B08 尚未完成。整体 benchmark 与产品行为验收仍 **NOT READY**，执行记录见 §16。
 - 源码锚点：`codex/aoede-mneme-proactive`，`cbcd6f9d3b725f73aee02a4e4c4ca7f5280d52bd`。后续执行必须重新冻结目标提交与工作区差异。
 - 需求来源：[公开数据集 Benchmark 分享对话](https://chatgpt.com/share/6aeac3ac-df44-83e9-a790-932bc403ed6f)。已从公开 HTML 的 streamed JSON 读取正文；其中的建议经下列一手资料和当前源码复核后采用。
 - 本轮 scope：本文及任务状态三文件；不运行模型、不发送消息、不读写生产聊天/数据库/配置、不启动或重启服务。
@@ -22,7 +22,7 @@
 
 **推荐顺序**：B00 协议/来源 → B01 数据与隔离 → B02 无记忆决策 → B03 时机/机制 → B04 记忆全链路 → B05 记忆自然使用 → B06 中文联合盲测 → B07 完整离线验收 → B08 受控真实平台验收。每包独立提交；先保留原样基线，再提出产品改动。
 
-本轮只完成规划。现有 `AOEDE-MNEME-IMPL` 保持原 active feature 与 NOT READY；后续 benchmark 执行登记为 planned，切换 active feature 时只推进一个工作包。发布成品、干净 Windows VM 与安装回滚仍走原有独立门禁。
+计划撰写轮次只完成规划。随后执行已按单一工作包推进：截至 2026-11-04，B00–B02 完成；B03–B08 尚未完成。benchmark 的整体效果、发布成品、干净 Windows VM 与安装回滚仍走各自门禁，未通过前保持 NOT READY。
 
 ## 2. 当前能力与必须补齐的缺口
 
@@ -284,7 +284,7 @@ shadow记录候选与决策但0发送；随后显式真实模型+FakeSender；�
 
 实际反馈含有用/自然/打断/记错/不想被记住，沉默不自动标满意或确认。严重误记/越权/重复纠缠/R0异常/错投立即停止主动路径；没有硬违规但主体验或成本越界，则回到shadow并审查，不能靠提高R补样本。最终QQ/WebChat发送验收、行为效果、Release payload、Windows VM/安装回滚分别签收。
 
-## 15. 实施入口与本轮证据
+## 15. 实施入口与计划撰写轮次证据
 
 可恢复入口：先读本文B00，再读 [Aoede/Mneme改造计划](2026-11-03-gitnexus-plan-aoede-mneme-proactive-redesign.md)、[验证门禁](../agent/verification.md)、[模型探针](../development/probes.md)。实施前执行 `git status --short`、确认有效home/显式隔离home、检查数据manifest与选定模型身份；此后才运行需模型的命令。
 
@@ -313,3 +313,12 @@ node .gitnexus/run.cjs detect-changes --scope compare --base-ref main --repo Ste
 - 本轮未跑业务测试、真实模型、数据集全量、QQ/WebChat、发布或VM；研究核查与文档通过只支持本计划可执行性。
 
 尚待B00决定的事项：完整逐文件版本/许可清单；ChMap论文与发布test对应；LoCoMo-Conv衍生许可；当前模型/硬件与token预算；中文标注人员/排期。它们影响对应实验准入，不阻止先实现无需模型/私人数据的协议、夹具和本地决策基线。
+
+## 16. 执行记录
+
+- **B00：完成。** 协议、来源、指标分母、数据和门禁冻结；见 [B00 报告](../reports/2026-11-04-proactive-memory-benchmark-b00.md)。
+- **B01：完成。** 通用数据合同、隔离 actor/scorer runner、指纹和断点恢复已提交并单独记录；见 [B01 报告](../reports/2026-11-04-proactive-memory-benchmark-b01.md)。
+- **B02：离线公开基线完成。** When2Speak 21,687/21,687 与 Social AI Ambient 16,222/16,222 三种无记忆策略均完整计分；模型调用/生成/记忆输入为 0。公开数据源标签不等于 Stella 中文 persona 标注；不得据此宣称产品有效或调生产规则。完整指标、数据哈希、误判边界与运行限制见 [B02 报告](../reports/2026-11-04-proactive-memory-benchmark-b02.md)。
+- **B03–B07：未完成。** 时机/机制、记忆全链路、自然使用、中文盲测和完整离线验收仍按依赖顺序推进；B06 标注资源尚未安排。
+- **B08：未开始且未准入。** 真实平台目标、参与者同意、模型/配置、观察窗口及回滚动作需要明确授权；不得从本机服务健康或公开数据推断可向群发送。
+- 当前总状态保持 **NOT READY**。每包独立英文提交；每步完成评测后在对应 PR 评论写中英文结论。
