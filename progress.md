@@ -1,11 +1,11 @@
 ## 2026-11-04 — PR #129 Rust/Mneme 接线与文档同步
 
-- Scope / Current State：只改了 7 组中英文文档及 `feature_list.json`；未改运行代码。当前分支 `codex/aoede-mneme-proactive`，PR #129 在本轮核对时为 open/draft/unmerged。
+- Scope / Current State：只改了 7 组中英文文档及任务状态文件；未改运行代码。分支 `codex/aoede-mneme-proactive`，文档收尾提交 `1d6e62c` 已推送；PR #129 现为 open/ready-for-review/unmerged。
 - What's Done：确认 `mneme.retrieval_v2` 经 `memory_rust.selector` 选择 backend，native 检索结果重建为 Mneme `RetrievalResult`；`mneme.memory_manager` 保留 Python 晋升门槛和提交后副作用，仅委托有界 native 事务。同步 API 4/schema 24、Rust/Mneme 连接说明、本机 native 验证证据和未完成的 Release/VM 验收边界；更新 Aoede、Docker、配置与记忆架构中英文文档。日期化的 schema23/Linux wheel 旧证据保留为历史。
-- Evidence：Python/native 常量及本机 Windows `memory_rust._native` 均为 API 4/schema 24；`resolve_backend("rust")` 选中该模块。定向 selector/promotion/Mneme import tests 22 passed / 1 deprecation warning；`scripts/validate_rust_fullchain.py` 在临时库通过 native retrieve smoke，Python/native promotion parity `differ=false`。`python scripts/check_docs.py`：127 files / 1358 links / 577 anchors / 0 errors；`python -m json.tool feature_list.json` 与 `git diff --check` 通过。
-- GitNexus：编辑前源码合同文档 impact HIGH（exact；14 direct / 111 impacted，0 processes），故将其限制为当前合同更新并保留历史证据；其他目标文档 MEDIUM。状态文件 impact：`feature_list.json` LOW（2 direct）、`progress.md` MEDIUM（5 direct）、`session-handoff.md` LOW（2 direct）。文档引用图不表示运行流程影响；索引提取限制仍按既有记录理解。
+- Evidence：Python/native 常量及本机 Windows `memory_rust._native` 均为 API 4/schema 24；`resolve_backend("rust")` 选中该模块。定向 selector/promotion/Mneme import tests 22 passed / 1 deprecation warning；`scripts/validate_rust_fullchain.py` 在临时库通过 native retrieve smoke，Python/native promotion parity `differ=false`。`python scripts/check_docs.py`：127 files / 1358 links / 577 anchors / 0 errors；`python -m json.tool feature_list.json` 与 `git diff --check` 通过。PR head `1d6e62c` 上 14 项 hosted CI 全部通过（Python 3.10/3.11/3.12、flow closure/manifest、Docker、Windows native reliability、security、lint、CLI、documentation、memory benchmark、notify）。
+- GitNexus：编辑前源码合同文档 impact HIGH（exact；14 direct / 111 impacted，0 processes），故将其限制为当前合同更新并保留历史证据；其他目标文档 MEDIUM。状态文件 impact：`feature_list.json` LOW（2 direct）、`progress.md` MEDIUM（5 direct）、`session-handoff.md` LOW（2 direct）。提交前文档 all：17 files / 24 symbols / 0 processes / LOW；最终状态 all：3 files / 2 symbols / 0 processes / LOW；compare main 对 PR 累计改动判为 CRITICAL；CLI 提示符号列表有显示上限且完整 counts/risk 已计算。文档引用图不表示运行流程影响；索引提取限制仍按既有记录理解。
 - Blockers：本机 fullchain 不等同于 Release payload/干净 Windows VM/安装回滚验收；真实模型/QQ 灰度和时机/自然度验收仍未完成。`AOEDE-MNEME-IMPL` 保持 in_progress / NOT READY。
-- Next：提交并推送文档收尾，复核 PR #129 最新 CI，然后将 PR 标记为 ready for review；不合并，保留计划要求的外部验收缺口。
+- Next：等待 PR review。按计划继续独立完成 Release payload/Windows VM、真模型/QQ 与时机/自然度 gate；产品验收仍 NOT READY。
 
 ## 2026-11-03 — PR #129 flow 漂移与群 @ 回复修复
 

@@ -1,11 +1,11 @@
 ## Current Handoff — PR #129 Rust/Mneme 文档收尾 (2026-11-04)
 
-- Status：Rust/Mneme 接线已核对，双语文档与当前 API 4/schema 24 同步；本机 isolated native fullchain 通过。PR #129 当前在本轮检查时为 open/draft/unmerged，文档门禁通过，等待提交推送和 PR CI 后标为 ready for review。
-- Current Objective：完成 PR 文档/状态提交，确认新 commit 的 CI，再执行 ready-for-review 状态转换。不要合并；真实模型/QQ、Windows 干净 VM/安装回滚和时机/自然度验收仍未完成。
+- Status：Rust/Mneme 接线已核对，双语文档与当前 API 4/schema 24 同步；本机 isolated native fullchain 通过。文档/状态提交 `1d6e62c` 已推送；PR #129 为 open/ready-for-review/unmerged，新 head 上全部 14 项 hosted CI 通过。
+- Current Objective：跟进 PR review；实施与本地/CI 验收可供审查，真实模型/QQ、Release payload/Windows 干净 VM安装回滚与时机/自然度验收仍未完成，不据此宣告产品验收完成。
 - Files：7 组中英文文档（`memory-rust-backend`、`memory-system`、`contracts`、`aoede`、`deployment-docker`、`configuration`、`mneme`）与 `feature_list.json`、`progress.md`、本交接。保留未跟踪 `.zcode/`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`。
-- Evidence：Python 与本机 native 导出 API 4/schema 24；`resolve_backend("rust")` 选中 native；定向测试 22 passed / 1 warning；临时库 `validate_rust_fullchain.py` PASS，Python/native promotion `differ=false`；`check_docs.py` 127/1358/577/0，JSON 和 diff check 通过。合同页 impact HIGH/14 direct/111 total/0 processes，其他文档 MEDIUM；未改运行源码。
+- Evidence：Python 与本机 native 导出 API 4/schema 24；`resolve_backend("rust")` 选中 native；定向测试 22 passed / 1 warning；临时库 `validate_rust_fullchain.py` PASS，Python/native promotion `differ=false`；`check_docs.py` 127/1358/577/0，JSON 和 diff check 通过。合同页 impact HIGH/14 direct/111 total/0 processes，其他文档 MEDIUM；文档 all LOW（17/24/0），状态 all LOW（3/2/0），compare main 对 PR 累计 diff 判 CRITICAL（变更清单有显示上限）；未改运行源码。
 - Blockers：G2 真实模型/QQ 灰度、Windows 干净 VM 安装回滚和自然度 rubric 仍待验收，整体产品验收保留 NOT READY。
-- Recommended Next Step：提交并推送限定文档变更，等 PR CI 完成，再标记 ready for review。验收缺口通过 PR 描述和矩阵保留，后续按计划单独完成；不合并。
+- Recommended Next Step：跟进 PR #129 review。验收缺口通过 PR 描述和矩阵保留；按计划单独完成，不把 PR ready 状态等同于真实模型/QQ/Windows 产品验收。
 
 ## Previous Handoff — PR #129 CI 漂移与群 @ 修复 (2026-11-03)
 
