@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stella.invalid/schemas/pitch-window-audit-1.schema.json",
+  "title": "PITCH scorer-side window audit v1",
+  "type": "object",
+  "required": [
+    "schema", "status", "evidence_level", "source", "counts", "intersection",
+    "placement_diagnostics", "union_placement_diagnostics",
+    "within_group_placement_diagnostics", "do_not_surface_annotation_subgroup",
+    "timing_contract", "synthetic_timing_sensitivity", "per_candidate_results", "limits"
+  ],
+  "properties": {
+    "schema": {"const": "stella-pitch-window-audit/1"},
+    "status": {"const": "completed"},
+    "evidence_level": {"const": "source_native_gold_audit"},
+    "source": {
+      "type": "object",
+      "required": ["dataset_id", "revision", "license", "sha256", "unit", "label_side", "actor_runs"],
+      "properties": {
+        "dataset_id": {"const": "pitch"},
+        "revision": {"type": "string", "minLength": 1},
+        "license": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "unit": {"const": "fixed_candidate_message_with_turn_window"},
+        "label_side": {"const": "scorer_only"},
+        "actor_runs": {"const": 0}
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "candidates", "conversations", "individual_annotations",
+        "scoreable_intersection_windows", "no_intersection_candidates",
+        "candidates_without_official_windows", "candidates_with_conflicting_official_windows",
+        "author_annotations", "within_group_annotations",
+        "within_group_candidates_with_timing_windows", "within_group_intersection_windows",
+        "within_group_candidates_without_timing_windows",
+        "within_group_candidates_with_conflicting_windows",
+        "consensus_do_not_surface_candidates",
+        "candidates_with_any_do_not_surface_annotation", "do_not_surface_annotations",
+        "segment_start_consensus_best_turn_exact_matches", "consensus_best_turn_denominator"
+      ],
+      "properties": {
+        "candidates": {"type": "integer", "minimum": 1},
+        "conversations": {"type": "integer", "minimum": 1},
+        "individual_annotations": {"type": "integer", "minimum": 0},
+        "scoreable_intersection_windows": {"type": "integer", "minimum": 0},
+        "no_intersection_candidates": {"type": "integer", "minimum": 0},
+        "candidates_without_official_windows": {"type": "integer", "minimum": 0},
+        "candidates_with_conflicting_official_windows": {"type": "integer", "minimum": 0},
+        "author_annotations": {"type": "integer", "minimum": 0},
+        "within_group_annotations": {"type": "integer", "minimum": 0},
+        "within_group_candidates_with_timing_windows": {"type": "integer", "minimum": 0},
+        "within_group_intersection_windows": {"type": "integer", "minimum": 0},
+        "within_group_candidates_without_timing_windows": {"type": "integer", "minimum": 0},
+        "within_group_candidates_with_conflicting_windows": {"type": "integer", "minimum": 0},
+        "consensus_do_not_surface_candidates": {"type": "integer", "minimum": 0},
+        "candidates_with_any_do_not_surface_annotation": {"type": "integer", "minimum": 0},
+        "do_not_surface_annotations": {"type": "integer", "minimum": 0},
+        "segment_start_consensus_best_turn_exact_matches": {"type": "integer", "minimum": 0},
+        "consensus_best_turn_denominator": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "intersection": {
+      "type": "object",
+      "required": ["method", "denominator", "scoreable_numerator", "coverage"],
+      "properties": {
+        "method": {"type": "string"},
+        "denominator": {"type": "integer", "minimum": 1},
+        "scoreable_numerator": {"type": "integer", "minimum": 0},
+        "coverage": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    },
+    "placement_diagnostics": {"$ref": "#/$defs/placementSet"},
+    "union_placement_diagnostics": {"$ref": "#/$defs/placementSet"},
+    "within_group_placement_diagnostics": {"$ref": "#/$defs/placementSet"},
+    "do_not_surface_annotation_subgroup": {
+      "type": "object",
+      "required": [
+        "candidate_definition", "candidate_denominator", "do_not_surface_annotation_count",
+        "consensus_do_not_surface_candidates", "intersection_diagnostics"
+      ],
+      "properties": {
+        "candidate_definition": {"type": "string"},
+        "candidate_denominator": {"type": "integer", "minimum": 0},
+        "do_not_surface_annotation_count": {"type": "integer", "minimum": 0},
+        "consensus_do_not_surface_candidates": {"type": "integer", "minimum": 0},
+        "intersection_diagnostics": {"$ref": "#/$defs/placementSet"}
+      },
+      "additionalProperties": false
+    },
+    "per_candidate_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "conversation_id", "n_turns", "window_evidence", "placements"],
+        "properties": {
+          "candidate_id": {"type": "string", "minLength": 1},
+          "conversation_id": {"type": "string", "minLength": 1},
+          "n_turns": {"type": "integer", "minimum": 1},
+          "window_evidence": {
+            "type": "object",
+            "required": [
+              "official_intersection", "official_union", "within_group_intersection",
+              "within_group_timing_annotation_count", "has_official_windows",
+              "any_do_not_surface_annotation", "do_not_surface_annotation_count",
+              "consensus_do_not_surface", "consensus_best_turn"
+            ],
+            "properties": {
+              "official_intersection": {"$ref": "#/$defs/turnWindowOrNull"},
+              "official_union": {"$ref": "#/$defs/turnWindowOrNull"},
+              "within_group_intersection": {"$ref": "#/$defs/turnWindowOrNull"},
+              "within_group_timing_annotation_count": {"type": "integer", "minimum": 0},
+              "has_official_windows": {"type": "boolean"},
+              "any_do_not_surface_annotation": {"type": "boolean"},
+              "do_not_surface_annotation_count": {"type": "integer", "minimum": 0},
+              "consensus_do_not_surface": {"type": "boolean"},
+              "consensus_best_turn": {"type": ["integer", "null"], "minimum": 1}
+            },
+            "additionalProperties": false
+          },
+          "placements": {
+            "type": "object",
+            "required": [
+              "segment_start_turn", "segment_start_intersection_status",
+              "always_silent_intersection_status", "intersection_oracle_turn",
+              "intersection_oracle_status"
+            ],
+            "properties": {
+              "segment_start_turn": {"type": "integer", "minimum": 1},
+              "segment_start_intersection_status": {"enum": ["NO_INTERSECTION", "MISSED", "EARLY", "HIT", "LATE"]},
+              "always_silent_intersection_status": {"enum": ["NO_INTERSECTION", "MISSED", "EARLY", "HIT", "LATE"]},
+              "intersection_oracle_turn": {"type": ["integer", "null"], "minimum": 1},
+              "intersection_oracle_status": {"enum": ["NO_INTERSECTION", "MISSED", "EARLY", "HIT", "LATE"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "timing_contract": {
+      "type": "object",
+      "required": [
+        "opportunity_debounce_seconds", "opportunity_ttl_seconds",
+        "proactive_cooldown_seconds", "verification_window_seconds",
+        "pitch_window_unit", "synthetic_arrivals_used_as_pitch_truth"
+      ],
+      "properties": {
+        "opportunity_debounce_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "opportunity_ttl_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "proactive_cooldown_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "verification_window_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "pitch_window_unit": {"const": "turn"},
+        "synthetic_arrivals_used_as_pitch_truth": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "synthetic_timing_sensitivity": {
+      "type": "object",
+      "required": ["intervals", "ttl_merge_boundary"],
+      "properties": {
+        "intervals": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "required": [
+              "profile", "interval_seconds", "interval_source", "turns", "created",
+              "merged", "dropped", "speak_actions", "timer_fires_after_submitted_turn_count"
+            ],
+            "properties": {
+              "profile": {"type": "string"},
+              "interval_seconds": {"type": "number", "exclusiveMinimum": 0},
+              "interval_source": {"const": "synthetic"},
+              "turns": {"type": "integer", "minimum": 1},
+              "created": {"type": "integer", "minimum": 0},
+              "merged": {"type": "integer", "minimum": 0},
+              "dropped": {"type": "integer", "minimum": 0},
+              "speak_actions": {"type": "integer", "minimum": 0},
+              "timer_fires_after_submitted_turn_count": {
+                "type": "array", "items": {"type": "integer", "minimum": 1}
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "ttl_merge_boundary": {
+          "type": "object",
+          "required": [
+            "merge_interval_seconds", "original_ttl_seconds", "original_expiry_monotonic",
+            "replacement_created_at_monotonic", "expired_opportunity_replaced_at_ttl",
+            "replacement_submit_result", "replacement_speak_actions"
+          ],
+          "properties": {
+            "merge_interval_seconds": {"type": "number"},
+            "original_ttl_seconds": {"type": "number"},
+            "original_expiry_monotonic": {"type": "number"},
+            "replacement_created_at_monotonic": {"type": "number"},
+            "expired_opportunity_replaced_at_ttl": {"type": "boolean"},
+            "replacement_submit_result": {"type": "string"},
+            "replacement_speak_actions": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "limits": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "turnWindowOrNull": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "array",
+          "prefixItems": [
+            {"type": "integer", "minimum": 1},
+            {"type": "integer", "minimum": 1}
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      ]
+    },
+    "placementSet": {
+      "type": "object",
+      "required": ["segment_start", "always_silent", "intersection_oracle"],
+      "properties": {
+        "segment_start": {"$ref": "#/$defs/placement"},
+        "always_silent": {"$ref": "#/$defs/placement"},
+        "intersection_oracle": {"$ref": "#/$defs/placement"}
+      },
+      "additionalProperties": false
+    },
+    "placement": {
+      "type": "object",
+      "required": [
+        "interpretation", "denominator_all_candidates", "scoreable_window_denominator",
+        "no_intersection", "no_annotation_window", "placements",
+        "placement_on_no_intersection", "missed", "early", "hit", "late",
+        "window_hit_rate", "early_rate", "late_rate", "missed_rate",
+        "coverage_all_candidates"
+      ],
+      "properties": {
+        "interpretation": {"type": "string"},
+        "denominator_all_candidates": {"type": "integer", "minimum": 1},
+        "scoreable_window_denominator": {"type": "integer", "minimum": 0},
+        "no_intersection": {"type": "integer", "minimum": 0},
+        "no_annotation_window": {"type": "integer", "minimum": 0},
+        "placements": {"type": "integer", "minimum": 0},
+        "placement_on_no_intersection": {"type": "integer", "minimum": 0},
+        "missed": {"type": "integer", "minimum": 0},
+        "early": {"type": "integer", "minimum": 0},
+        "hit": {"type": "integer", "minimum": 0},
+        "late": {"type": "integer", "minimum": 0},
+        "window_hit_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "early_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "late_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "missed_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "coverage_all_candidates": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

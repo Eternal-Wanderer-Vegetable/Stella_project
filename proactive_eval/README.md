@@ -35,6 +35,16 @@ For a run, pass the same expected hashes, an isolated home outside the checkout,
 
 The Python library's `run_actor_stage` callback is an in-process test seam. Use the CLI worker boundary when running application plugins so scorer gold is not resident in the actor worker.
 
+## B03 PITCH timing audit
+
+Run the scorer-side, turn-window audit with the pinned PITCH file and synthetic opportunity timing profiles:
+
+```powershell
+python -m proactive_eval.b03
+```
+
+The ignored output is written to `memory/benchmark/_public/proactive_eval/runs/B03/pitch-window-audit.json`. It preserves all 384 candidate IDs and timing outcomes, reports intersection, union, within-group, and `do_not_surface` views, and never sends candidate text or window labels to an actor. Synthetic seconds exercise debounce/TTL ordering only; they are not converted into PITCH elapsed-time labels. The run records the effective debounce, TTL, cooldown, and verification-window constants.
+
 ## Readiness
 
 B00 freezes the offline protocol and data fingerprints. It does not certify model behavior, real QQ/WebChat delivery, release payloads, or Windows installation. See the date-stamped B00 report and the task state in `progress.md` for the exact run evidence and remaining gates.
