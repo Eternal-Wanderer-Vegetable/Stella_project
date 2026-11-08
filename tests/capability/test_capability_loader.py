@@ -317,3 +317,30 @@ providers = [{ kind = "mcp", server = "not-running", tool = "search" }]
     )
     assert load_capability_file(path, reg) == 1
     assert reg.get("web.search") is not None
+
+
+def test_direct_reply_mode_is_parsed_and_validated(tmp_path):
+    path = _write(
+        tmp_path,
+        "plugins.toml",
+        """
+[[capability]]
+id = "dice.roll"
+direct_reply = "tool_output"
+providers = ["rd"]
+
+[[capability]]
+id = "weather.query"
+providers = ["get_weather"]
+
+[[capability]]
+id = "typo.mode"
+direct_reply = "raw"
+providers = ["x"]
+""",
+    )
+    reg = CapabilityRegistry()
+    assert load_capability_file(path, reg) == 3
+    assert reg.get("dice.roll").direct_reply == "tool_output"
+    assert reg.get("weather.query").direct_reply == "summary"
+    assert reg.get("typo.mode").direct_reply == "summary"

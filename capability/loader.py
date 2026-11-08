@@ -69,6 +69,8 @@ except ImportError:  # pragma: no cover - Python 3.10 需要 tomli 兜底（pypr
     import tomli as tomllib
 
 from capability.registry import (
+    DIRECT_REPLY_MODES,
+    DIRECT_REPLY_SUMMARY,
     KIND_ASTRBOT_TOOL,
     KIND_MCP,
     SOURCE_CONFIG,
@@ -217,6 +219,13 @@ def _parse_capability(raw: Any, domain: str, source: str = SOURCE_CONFIG) -> Cap
         else []
     )
     schema = raw.get("input_schema")
+    direct_reply = str(raw.get("direct_reply") or DIRECT_REPLY_SUMMARY).strip()
+    if direct_reply not in DIRECT_REPLY_MODES:
+        _logger().warning(
+            f"⚠️ [Capability] {cap_id} 的 direct_reply={direct_reply!r} 无效"
+            f"（可选 {sorted(DIRECT_REPLY_MODES)}），按 {DIRECT_REPLY_SUMMARY} 处理",
+        )
+        direct_reply = DIRECT_REPLY_SUMMARY
 
     capability = Capability(
         id=cap_id,
@@ -226,6 +235,7 @@ def _parse_capability(raw: Any, domain: str, source: str = SOURCE_CONFIG) -> Cap
         keywords=keywords,
         input_schema=schema if isinstance(schema, dict) else {},
         source=source,
+        direct_reply=direct_reply,
     )
 
     providers_raw = raw.get("providers") or []

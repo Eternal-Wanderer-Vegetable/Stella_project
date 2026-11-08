@@ -8,7 +8,7 @@
   "edges": 151,
   "explicit_boundaries": 19,
   "lanes": 14,
-  "reachable_symbols": 14918,
+  "reachable_symbols": 14923,
   "reachable_truncated_nodes": [],
   "source_resolved": 142,
   "total_nodes": 144,
@@ -5425,17 +5425,17 @@
      {
       "condition": "ctx.raw_event is None or ctx.bot is None",
       "kind": "branch",
-      "line": 329
+      "line": 352
      },
      {
       "condition": "ctx.adapter_name != 'onebot-v11'",
       "kind": "branch",
-      "line": 334
+      "line": 357
      },
      {
       "condition": "not _settings().ASTRBOT_COMPAT_ENABLED",
       "kind": "branch",
-      "line": 336
+      "line": 359
      },
      {
       "finally": false,
@@ -5443,53 +5443,53 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 338
+      "line": 361
      },
      {
       "kind": "return",
-      "line": 330
+      "line": 353
      },
      {
       "kind": "return",
-      "line": 335
+      "line": 358
      },
      {
       "kind": "return",
-      "line": 337
+      "line": 360
      },
      {
       "kind": "return",
-      "line": 341
+      "line": 364
      },
      {
       "kind": "await",
-      "line": 341
+      "line": 364
      },
      {
       "kind": "return",
-      "line": 344
+      "line": 367
      },
      {
       "kind": "call",
-      "line": 336,
+      "line": 359,
       "resolved": "local:capability/hooks.py#_settings",
       "target": "_settings"
      },
      {
       "kind": "call",
-      "line": 341,
+      "line": 364,
       "resolved": "local:astrbot_compat/events.py#build_event",
       "target": "build_event"
      },
      {
       "kind": "call",
-      "line": 343,
+      "line": 366,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "kind": "call",
-      "line": 343,
+      "line": 366,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      }
@@ -5922,6 +5922,10 @@
     },
     {
      "resolution": "unresolved",
+     "target": "capability/registry.py#registry.get"
+    },
+    {
+     "resolution": "unresolved",
      "target": "capability/router/types.py#CapabilityHit"
     },
     {
@@ -6029,56 +6033,56 @@
       "async": false,
       "context": "_flow_span(ctx, 'capability.route')",
       "kind": "with",
-      "line": 397
+      "line": 420
      },
      {
       "condition": "s.COMETA_ENABLED",
       "kind": "branch",
-      "line": 425
+      "line": 448
      },
      {
       "condition": "route.memory or not s.ROUTER_GATE_MEMORY",
       "kind": "branch",
-      "line": 444
+      "line": 467
      },
      {
       "condition": "route.tool and s.COMES_ENABLED and (not delegation_handled)",
       "kind": "branch",
-      "line": 453
+      "line": 476
      },
      {
       "condition": "s.SKILLS_ENABLED and (not delegation_handled)",
       "kind": "branch",
-      "line": 460
+      "line": 483
      },
      {
       "condition": "not jobs",
       "kind": "branch",
-      "line": 464
+      "line": 487
      },
      {
       "async": false,
       "context": "_flow_span(ctx, 'capability.fanout')",
       "kind": "with",
-      "line": 471
+      "line": 494
      },
      {
       "iterate": "zip(labels, outcomes, strict=False)",
       "kind": "loop",
-      "line": 488
+      "line": 511
      },
      {
       "condition": "ctx.tool_summaries",
       "kind": "branch",
-      "line": 492
+      "line": 515
      },
      {
       "kind": "return",
-      "line": 497
+      "line": 520
      },
      {
       "kind": "call",
-      "line": 395,
+      "line": 418,
       "resolved": "local:capability/hooks.py#_settings",
       "target": "_settings"
      },
@@ -6089,7 +6093,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 398
+      "line": 421
      },
      {
       "finally": false,
@@ -6098,313 +6102,313 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 428
+      "line": 451
      },
      {
       "kind": "return",
-      "line": 467
+      "line": 490
      },
      {
       "condition": "expired is not None",
       "kind": "branch",
-      "line": 477
+      "line": 500
      },
      {
       "kind": "call",
-      "line": 480,
+      "line": 503,
       "resolved": "unresolved",
       "target": "sum"
      },
      {
       "kind": "call",
-      "line": 482,
+      "line": 505,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 488,
+      "line": 511,
       "resolved": "unresolved",
       "target": "zip"
      },
      {
       "condition": "isinstance(outcome, BaseException)",
       "kind": "branch",
-      "line": 489
+      "line": 512
      },
      {
       "kind": "call",
-      "line": 496,
+      "line": 519,
       "resolved": "local:capability/hooks.py#_check_memory_isolation",
       "target": "_check_memory_isolation"
      },
      {
       "kind": "call",
-      "line": 397,
+      "line": 420,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "call",
-      "line": 415,
+      "line": 438,
       "resolved": "unresolved",
       "target": "route_span.finish"
      },
      {
       "kind": "call",
-      "line": 426,
+      "line": 449,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 436,
+      "line": 459,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 445,
+      "line": 468,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 446,
+      "line": 469,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 448,
+      "line": 471,
       "resolved": "unresolved",
       "target": "_logger(...).info"
      },
      {
       "kind": "call",
-      "line": 454,
+      "line": 477,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 455,
+      "line": 478,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 461,
+      "line": 484,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 462,
+      "line": 485,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 465,
+      "line": 488,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 471,
+      "line": 494,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 472
+      "line": 495
      },
      {
       "kind": "call",
-      "line": 473,
+      "line": 496,
       "resolved": "unresolved",
       "target": "next"
      },
      {
       "exception": "expired",
       "kind": "raise",
-      "line": 478
+      "line": 501
      },
      {
       "kind": "call",
-      "line": 479,
+      "line": 502,
       "resolved": "unresolved",
       "target": "fan_span.finish"
      },
      {
       "kind": "call",
-      "line": 489,
+      "line": 512,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 493,
+      "line": 516,
       "resolved": "unresolved",
       "target": "_logger(...).info"
      },
      {
       "kind": "await",
-      "line": 401
+      "line": 424
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 408
-     },
-     {
-      "kind": "await",
       "line": 431
      },
      {
+      "kind": "await",
+      "line": 454
+     },
+     {
       "exception": "bare",
       "kind": "raise",
-      "line": 433
+      "line": 456
      },
      {
       "kind": "call",
-      "line": 445,
+      "line": 468,
       "resolved": "local:capability/hooks.py#_retrieve_memory",
       "target": "_retrieve_memory"
      },
      {
       "kind": "call",
-      "line": 454,
+      "line": 477,
       "resolved": "local:capability/hooks.py#_run_comes",
       "target": "_run_comes"
      },
      {
       "kind": "call",
-      "line": 461,
+      "line": 484,
       "resolved": "local:capability/hooks.py#_run_skills",
       "target": "_run_skills"
      },
      {
       "kind": "call",
-      "line": 472,
+      "line": 495,
       "resolved": "external:asyncio",
       "target": "asyncio.gather"
      },
      {
       "condition": "failures",
       "kind": "branch",
-      "line": 485
+      "line": 508
      },
      {
       "kind": "call",
-      "line": 490,
+      "line": 513,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "kind": "call",
-      "line": 401,
+      "line": 424,
       "resolved": "local:capability/router/__init__.py#route",
       "target": "route_request"
      },
      {
       "kind": "call",
-      "line": 413,
+      "line": 436,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "kind": "call",
-      "line": 414,
+      "line": 437,
       "resolved": "local:capability/router/types.py#default_route",
       "target": "default_route"
      },
      {
       "kind": "call",
-      "line": 431,
+      "line": 454,
       "resolved": "local:capability/delegation.py#handle_delegation_turn",
       "target": "handle_delegation_turn"
      },
      {
       "kind": "call",
-      "line": 435,
+      "line": 458,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "condition": "delegation_handled",
       "kind": "branch",
-      "line": 437
+      "line": 460
      },
      {
       "condition": "delegation_handled",
       "kind": "branch",
-      "line": 438
+      "line": 461
      },
      {
       "kind": "call",
-      "line": 448,
+      "line": 471,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 480,
+      "line": 503,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 493,
+      "line": 516,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "bool"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "bool"
      },
      {
       "kind": "call",
-      "line": 474,
+      "line": 497,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 490,
+      "line": 513,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 494,
+      "line": 517,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 413,
+      "line": 436,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 435,
+      "line": 458,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      }
@@ -6768,6 +6772,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "f0e5e07d94173c71",
+     "file": "capability/hooks.py",
+     "qualname": "_direct_reply_text",
+     "resolution": "local"
+    },
+    {
      "body_hash": "1bf2b08edf109dfd",
      "file": "capability/hooks.py",
      "qualname": "_flow_decision",
@@ -6816,7 +6826,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4c09c158991454d",
+     "body_hash": "53202b56e8f4ffc1",
      "file": "capability/hooks.py",
      "qualname": "_set_direct_reply",
      "resolution": "local"
@@ -8364,6 +8374,10 @@
     },
     {
      "resolution": "unresolved",
+     "target": "capability/registry.py#registry.get"
+    },
+    {
+     "resolution": "unresolved",
      "target": "capability/router/types.py#CapabilityHit"
     },
     {
@@ -8471,56 +8485,56 @@
       "async": false,
       "context": "_flow_span(ctx, 'capability.route')",
       "kind": "with",
-      "line": 397
+      "line": 420
      },
      {
       "condition": "s.COMETA_ENABLED",
       "kind": "branch",
-      "line": 425
+      "line": 448
      },
      {
       "condition": "route.memory or not s.ROUTER_GATE_MEMORY",
       "kind": "branch",
-      "line": 444
+      "line": 467
      },
      {
       "condition": "route.tool and s.COMES_ENABLED and (not delegation_handled)",
       "kind": "branch",
-      "line": 453
+      "line": 476
      },
      {
       "condition": "s.SKILLS_ENABLED and (not delegation_handled)",
       "kind": "branch",
-      "line": 460
+      "line": 483
      },
      {
       "condition": "not jobs",
       "kind": "branch",
-      "line": 464
+      "line": 487
      },
      {
       "async": false,
       "context": "_flow_span(ctx, 'capability.fanout')",
       "kind": "with",
-      "line": 471
+      "line": 494
      },
      {
       "iterate": "zip(labels, outcomes, strict=False)",
       "kind": "loop",
-      "line": 488
+      "line": 511
      },
      {
       "condition": "ctx.tool_summaries",
       "kind": "branch",
-      "line": 492
+      "line": 515
      },
      {
       "kind": "return",
-      "line": 497
+      "line": 520
      },
      {
       "kind": "call",
-      "line": 395,
+      "line": 418,
       "resolved": "local:capability/hooks.py#_settings",
       "target": "_settings"
      },
@@ -8531,7 +8545,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 398
+      "line": 421
      },
      {
       "finally": false,
@@ -8540,313 +8554,313 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 428
+      "line": 451
      },
      {
       "kind": "return",
-      "line": 467
+      "line": 490
      },
      {
       "condition": "expired is not None",
       "kind": "branch",
-      "line": 477
+      "line": 500
      },
      {
       "kind": "call",
-      "line": 480,
+      "line": 503,
       "resolved": "unresolved",
       "target": "sum"
      },
      {
       "kind": "call",
-      "line": 482,
+      "line": 505,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 488,
+      "line": 511,
       "resolved": "unresolved",
       "target": "zip"
      },
      {
       "condition": "isinstance(outcome, BaseException)",
       "kind": "branch",
-      "line": 489
+      "line": 512
      },
      {
       "kind": "call",
-      "line": 496,
+      "line": 519,
       "resolved": "local:capability/hooks.py#_check_memory_isolation",
       "target": "_check_memory_isolation"
      },
      {
       "kind": "call",
-      "line": 397,
+      "line": 420,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "call",
-      "line": 415,
+      "line": 438,
       "resolved": "unresolved",
       "target": "route_span.finish"
      },
      {
       "kind": "call",
-      "line": 426,
+      "line": 449,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 436,
+      "line": 459,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 445,
+      "line": 468,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 446,
+      "line": 469,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 448,
+      "line": 471,
       "resolved": "unresolved",
       "target": "_logger(...).info"
      },
      {
       "kind": "call",
-      "line": 454,
+      "line": 477,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 455,
+      "line": 478,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 461,
+      "line": 484,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 462,
+      "line": 485,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 465,
+      "line": 488,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 471,
+      "line": 494,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 472
+      "line": 495
      },
      {
       "kind": "call",
-      "line": 473,
+      "line": 496,
       "resolved": "unresolved",
       "target": "next"
      },
      {
       "exception": "expired",
       "kind": "raise",
-      "line": 478
+      "line": 501
      },
      {
       "kind": "call",
-      "line": 479,
+      "line": 502,
       "resolved": "unresolved",
       "target": "fan_span.finish"
      },
      {
       "kind": "call",
-      "line": 489,
+      "line": 512,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 493,
+      "line": 516,
       "resolved": "unresolved",
       "target": "_logger(...).info"
      },
      {
       "kind": "await",
-      "line": 401
+      "line": 424
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 408
-     },
-     {
-      "kind": "await",
       "line": 431
      },
      {
+      "kind": "await",
+      "line": 454
+     },
+     {
       "exception": "bare",
       "kind": "raise",
-      "line": 433
+      "line": 456
      },
      {
       "kind": "call",
-      "line": 445,
+      "line": 468,
       "resolved": "local:capability/hooks.py#_retrieve_memory",
       "target": "_retrieve_memory"
      },
      {
       "kind": "call",
-      "line": 454,
+      "line": 477,
       "resolved": "local:capability/hooks.py#_run_comes",
       "target": "_run_comes"
      },
      {
       "kind": "call",
-      "line": 461,
+      "line": 484,
       "resolved": "local:capability/hooks.py#_run_skills",
       "target": "_run_skills"
      },
      {
       "kind": "call",
-      "line": 472,
+      "line": 495,
       "resolved": "external:asyncio",
       "target": "asyncio.gather"
      },
      {
       "condition": "failures",
       "kind": "branch",
-      "line": 485
+      "line": 508
      },
      {
       "kind": "call",
-      "line": 490,
+      "line": 513,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "kind": "call",
-      "line": 401,
+      "line": 424,
       "resolved": "local:capability/router/__init__.py#route",
       "target": "route_request"
      },
      {
       "kind": "call",
-      "line": 413,
+      "line": 436,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "kind": "call",
-      "line": 414,
+      "line": 437,
       "resolved": "local:capability/router/types.py#default_route",
       "target": "default_route"
      },
      {
       "kind": "call",
-      "line": 431,
+      "line": 454,
       "resolved": "local:capability/delegation.py#handle_delegation_turn",
       "target": "handle_delegation_turn"
      },
      {
       "kind": "call",
-      "line": 435,
+      "line": 458,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "condition": "delegation_handled",
       "kind": "branch",
-      "line": 437
+      "line": 460
      },
      {
       "condition": "delegation_handled",
       "kind": "branch",
-      "line": 438
+      "line": 461
      },
      {
       "kind": "call",
-      "line": 448,
+      "line": 471,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 480,
+      "line": 503,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 493,
+      "line": 516,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "bool"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "bool"
      },
      {
       "kind": "call",
-      "line": 474,
+      "line": 497,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 490,
+      "line": 513,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 494,
+      "line": 517,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 413,
+      "line": 436,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 435,
+      "line": 458,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      }
@@ -9210,6 +9224,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "f0e5e07d94173c71",
+     "file": "capability/hooks.py",
+     "qualname": "_direct_reply_text",
+     "resolution": "local"
+    },
+    {
      "body_hash": "1bf2b08edf109dfd",
      "file": "capability/hooks.py",
      "qualname": "_flow_decision",
@@ -9258,7 +9278,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4c09c158991454d",
+     "body_hash": "53202b56e8f4ffc1",
      "file": "capability/hooks.py",
      "qualname": "_set_direct_reply",
      "resolution": "local"
@@ -10806,6 +10826,10 @@
     },
     {
      "resolution": "unresolved",
+     "target": "capability/registry.py#registry.get"
+    },
+    {
+     "resolution": "unresolved",
      "target": "capability/router/types.py#CapabilityHit"
     },
     {
@@ -10913,56 +10937,56 @@
       "async": false,
       "context": "_flow_span(ctx, 'capability.route')",
       "kind": "with",
-      "line": 397
+      "line": 420
      },
      {
       "condition": "s.COMETA_ENABLED",
       "kind": "branch",
-      "line": 425
+      "line": 448
      },
      {
       "condition": "route.memory or not s.ROUTER_GATE_MEMORY",
       "kind": "branch",
-      "line": 444
+      "line": 467
      },
      {
       "condition": "route.tool and s.COMES_ENABLED and (not delegation_handled)",
       "kind": "branch",
-      "line": 453
+      "line": 476
      },
      {
       "condition": "s.SKILLS_ENABLED and (not delegation_handled)",
       "kind": "branch",
-      "line": 460
+      "line": 483
      },
      {
       "condition": "not jobs",
       "kind": "branch",
-      "line": 464
+      "line": 487
      },
      {
       "async": false,
       "context": "_flow_span(ctx, 'capability.fanout')",
       "kind": "with",
-      "line": 471
+      "line": 494
      },
      {
       "iterate": "zip(labels, outcomes, strict=False)",
       "kind": "loop",
-      "line": 488
+      "line": 511
      },
      {
       "condition": "ctx.tool_summaries",
       "kind": "branch",
-      "line": 492
+      "line": 515
      },
      {
       "kind": "return",
-      "line": 497
+      "line": 520
      },
      {
       "kind": "call",
-      "line": 395,
+      "line": 418,
       "resolved": "local:capability/hooks.py#_settings",
       "target": "_settings"
      },
@@ -10973,7 +10997,7 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 398
+      "line": 421
      },
      {
       "finally": false,
@@ -10982,313 +11006,313 @@
        "Exception"
       ],
       "kind": "try",
-      "line": 428
+      "line": 451
      },
      {
       "kind": "return",
-      "line": 467
+      "line": 490
      },
      {
       "condition": "expired is not None",
       "kind": "branch",
-      "line": 477
+      "line": 500
      },
      {
       "kind": "call",
-      "line": 480,
+      "line": 503,
       "resolved": "unresolved",
       "target": "sum"
      },
      {
       "kind": "call",
-      "line": 482,
+      "line": 505,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 488,
+      "line": 511,
       "resolved": "unresolved",
       "target": "zip"
      },
      {
       "condition": "isinstance(outcome, BaseException)",
       "kind": "branch",
-      "line": 489
+      "line": 512
      },
      {
       "kind": "call",
-      "line": 496,
+      "line": 519,
       "resolved": "local:capability/hooks.py#_check_memory_isolation",
       "target": "_check_memory_isolation"
      },
      {
       "kind": "call",
-      "line": 397,
+      "line": 420,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "call",
-      "line": 415,
+      "line": 438,
       "resolved": "unresolved",
       "target": "route_span.finish"
      },
      {
       "kind": "call",
-      "line": 426,
+      "line": 449,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 436,
+      "line": 459,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 445,
+      "line": 468,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 446,
+      "line": 469,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 448,
+      "line": 471,
       "resolved": "unresolved",
       "target": "_logger(...).info"
      },
      {
       "kind": "call",
-      "line": 454,
+      "line": 477,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 455,
+      "line": 478,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 461,
+      "line": 484,
       "resolved": "unresolved",
       "target": "jobs.append"
      },
      {
       "kind": "call",
-      "line": 462,
+      "line": 485,
       "resolved": "unresolved",
       "target": "labels.append"
      },
      {
       "kind": "call",
-      "line": 465,
+      "line": 488,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 471,
+      "line": 494,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 472
+      "line": 495
      },
      {
       "kind": "call",
-      "line": 473,
+      "line": 496,
       "resolved": "unresolved",
       "target": "next"
      },
      {
       "exception": "expired",
       "kind": "raise",
-      "line": 478
+      "line": 501
      },
      {
       "kind": "call",
-      "line": 479,
+      "line": 502,
       "resolved": "unresolved",
       "target": "fan_span.finish"
      },
      {
       "kind": "call",
-      "line": 489,
+      "line": 512,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 493,
+      "line": 516,
       "resolved": "unresolved",
       "target": "_logger(...).info"
      },
      {
       "kind": "await",
-      "line": 401
+      "line": 424
      },
      {
       "exception": "bare",
       "kind": "raise",
-      "line": 408
-     },
-     {
-      "kind": "await",
       "line": 431
      },
      {
+      "kind": "await",
+      "line": 454
+     },
+     {
       "exception": "bare",
       "kind": "raise",
-      "line": 433
+      "line": 456
      },
      {
       "kind": "call",
-      "line": 445,
+      "line": 468,
       "resolved": "local:capability/hooks.py#_retrieve_memory",
       "target": "_retrieve_memory"
      },
      {
       "kind": "call",
-      "line": 454,
+      "line": 477,
       "resolved": "local:capability/hooks.py#_run_comes",
       "target": "_run_comes"
      },
      {
       "kind": "call",
-      "line": 461,
+      "line": 484,
       "resolved": "local:capability/hooks.py#_run_skills",
       "target": "_run_skills"
      },
      {
       "kind": "call",
-      "line": 472,
+      "line": 495,
       "resolved": "external:asyncio",
       "target": "asyncio.gather"
      },
      {
       "condition": "failures",
       "kind": "branch",
-      "line": 485
+      "line": 508
      },
      {
       "kind": "call",
-      "line": 490,
+      "line": 513,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "kind": "call",
-      "line": 401,
+      "line": 424,
       "resolved": "local:capability/router/__init__.py#route",
       "target": "route_request"
      },
      {
       "kind": "call",
-      "line": 413,
+      "line": 436,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "kind": "call",
-      "line": 414,
+      "line": 437,
       "resolved": "local:capability/router/types.py#default_route",
       "target": "default_route"
      },
      {
       "kind": "call",
-      "line": 431,
+      "line": 454,
       "resolved": "local:capability/delegation.py#handle_delegation_turn",
       "target": "handle_delegation_turn"
      },
      {
       "kind": "call",
-      "line": 435,
+      "line": 458,
       "resolved": "unresolved",
       "target": "_logger(...).warning"
      },
      {
       "condition": "delegation_handled",
       "kind": "branch",
-      "line": 437
+      "line": 460
      },
      {
       "condition": "delegation_handled",
       "kind": "branch",
-      "line": 438
+      "line": 461
      },
      {
       "kind": "call",
-      "line": 448,
+      "line": 471,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 480,
+      "line": 503,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 493,
+      "line": 516,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "bool"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "bool"
      },
      {
       "kind": "call",
-      "line": 474,
+      "line": 497,
       "resolved": "unresolved",
       "target": "isinstance"
      },
      {
       "kind": "call",
-      "line": 490,
+      "line": 513,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 494,
+      "line": 517,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 413,
+      "line": 436,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 416,
+      "line": 439,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 435,
+      "line": 458,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      }
@@ -11652,6 +11676,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "f0e5e07d94173c71",
+     "file": "capability/hooks.py",
+     "qualname": "_direct_reply_text",
+     "resolution": "local"
+    },
+    {
      "body_hash": "1bf2b08edf109dfd",
      "file": "capability/hooks.py",
      "qualname": "_flow_decision",
@@ -11700,7 +11730,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4c09c158991454d",
+     "body_hash": "53202b56e8f4ffc1",
      "file": "capability/hooks.py",
      "qualname": "_set_direct_reply",
      "resolution": "local"
@@ -43465,6 +43495,10 @@
     },
     {
      "resolution": "unresolved",
+     "target": "capability/registry.py#registry.get"
+    },
+    {
+     "resolution": "unresolved",
      "target": "core/observability/turn_trace.py#scrub"
     },
     {
@@ -43489,153 +43523,153 @@
      {
       "condition": "not tasks",
       "kind": "branch",
-      "line": 175
+      "line": 179
      },
      {
       "condition": "event is None",
       "kind": "branch",
-      "line": 179
+      "line": 183
      },
      {
       "async": false,
       "context": "_flow_span(ctx, 'comes.execute_all')",
       "kind": "with",
-      "line": 185
+      "line": 189
      },
      {
       "iterate": "results",
       "kind": "loop",
-      "line": 197
+      "line": 201
      },
      {
       "condition": "not getattr(route, 'requires_generation', True)",
       "kind": "branch",
-      "line": 210
+      "line": 214
      },
      {
       "kind": "call",
-      "line": 174,
+      "line": 178,
       "resolved": "local:capability/hooks.py#build_tool_tasks",
       "target": "build_tool_tasks"
      },
      {
       "kind": "return",
-      "line": 176
+      "line": 180
      },
      {
       "kind": "await",
-      "line": 178
+      "line": 182
      },
      {
       "kind": "return",
-      "line": 181
+      "line": 185
      },
      {
       "kind": "call",
-      "line": 187,
+      "line": 191,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 191,
+      "line": 195,
       "resolved": "unresolved",
       "target": "list"
      },
      {
       "condition": "not (result.ok and result.summary)",
       "kind": "branch",
-      "line": 198
+      "line": 202
      },
      {
       "condition": "evidence is None",
       "kind": "branch",
-      "line": 205
+      "line": 209
      },
      {
       "kind": "call",
-      "line": 178,
+      "line": 182,
       "resolved": "local:capability/hooks.py#_build_astr_event",
       "target": "_build_astr_event"
      },
      {
       "kind": "call",
-      "line": 180,
+      "line": 184,
       "resolved": "unresolved",
       "target": "_logger(...).info"
      },
      {
       "kind": "call",
-      "line": 185,
+      "line": 189,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 186
+      "line": 190
      },
      {
       "condition": "result.metadata.get('capability') == KNOWLEDGE_SEARCH_CAPABILITY",
       "kind": "branch",
-      "line": 201
+      "line": 205
      },
      {
       "kind": "call",
-      "line": 210,
+      "line": 214,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 211,
+      "line": 215,
       "resolved": "local:capability/hooks.py#_set_direct_reply",
       "target": "_set_direct_reply"
      },
      {
       "kind": "call",
-      "line": 186,
+      "line": 190,
       "resolved": "local:capability/comes/__init__.py#execute_all",
       "target": "execute_all"
      },
      {
       "kind": "call",
-      "line": 201,
+      "line": 205,
       "resolved": "local:capability/hooks.py#_knowledge_evidence_of",
       "target": "_knowledge_evidence_of"
      },
      {
       "kind": "call",
-      "line": 206,
+      "line": 210,
       "resolved": "unresolved",
       "target": "summaries.append"
      },
      {
       "kind": "call",
-      "line": 208,
+      "line": 212,
       "resolved": "unresolved",
       "target": "ctx.knowledge_evidence.extend"
      },
      {
       "kind": "call",
-      "line": 180,
+      "line": 184,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 188,
+      "line": 192,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 189,
+      "line": 193,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 202,
+      "line": 206,
       "resolved": "unresolved",
       "target": "result.metadata.get"
      }
@@ -43915,6 +43949,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "f0e5e07d94173c71",
+     "file": "capability/hooks.py",
+     "qualname": "_direct_reply_text",
+     "resolution": "local"
+    },
+    {
      "body_hash": "1bf2b08edf109dfd",
      "file": "capability/hooks.py",
      "qualname": "_flow_decision",
@@ -43945,7 +43985,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4c09c158991454d",
+     "body_hash": "53202b56e8f4ffc1",
      "file": "capability/hooks.py",
      "qualname": "_set_direct_reply",
      "resolution": "local"
@@ -44454,6 +44494,10 @@
     },
     {
      "resolution": "unresolved",
+     "target": "capability/registry.py#registry.get"
+    },
+    {
+     "resolution": "unresolved",
      "target": "core/observability/turn_trace.py#scrub"
     },
     {
@@ -44478,153 +44522,153 @@
      {
       "condition": "not tasks",
       "kind": "branch",
-      "line": 175
+      "line": 179
      },
      {
       "condition": "event is None",
       "kind": "branch",
-      "line": 179
+      "line": 183
      },
      {
       "async": false,
       "context": "_flow_span(ctx, 'comes.execute_all')",
       "kind": "with",
-      "line": 185
+      "line": 189
      },
      {
       "iterate": "results",
       "kind": "loop",
-      "line": 197
+      "line": 201
      },
      {
       "condition": "not getattr(route, 'requires_generation', True)",
       "kind": "branch",
-      "line": 210
+      "line": 214
      },
      {
       "kind": "call",
-      "line": 174,
+      "line": 178,
       "resolved": "local:capability/hooks.py#build_tool_tasks",
       "target": "build_tool_tasks"
      },
      {
       "kind": "return",
-      "line": 176
+      "line": 180
      },
      {
       "kind": "await",
-      "line": 178
+      "line": 182
      },
      {
       "kind": "return",
-      "line": 181
+      "line": 185
      },
      {
       "kind": "call",
-      "line": 187,
+      "line": 191,
       "resolved": "local:capability/hooks.py#_flow_decision",
       "target": "_flow_decision"
      },
      {
       "kind": "call",
-      "line": 191,
+      "line": 195,
       "resolved": "unresolved",
       "target": "list"
      },
      {
       "condition": "not (result.ok and result.summary)",
       "kind": "branch",
-      "line": 198
+      "line": 202
      },
      {
       "condition": "evidence is None",
       "kind": "branch",
-      "line": 205
+      "line": 209
      },
      {
       "kind": "call",
-      "line": 178,
+      "line": 182,
       "resolved": "local:capability/hooks.py#_build_astr_event",
       "target": "_build_astr_event"
      },
      {
       "kind": "call",
-      "line": 180,
+      "line": 184,
       "resolved": "unresolved",
       "target": "_logger(...).info"
      },
      {
       "kind": "call",
-      "line": 185,
+      "line": 189,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 186
+      "line": 190
      },
      {
       "condition": "result.metadata.get('capability') == KNOWLEDGE_SEARCH_CAPABILITY",
       "kind": "branch",
-      "line": 201
+      "line": 205
      },
      {
       "kind": "call",
-      "line": 210,
+      "line": 214,
       "resolved": "unresolved",
       "target": "getattr"
      },
      {
       "kind": "call",
-      "line": 211,
+      "line": 215,
       "resolved": "local:capability/hooks.py#_set_direct_reply",
       "target": "_set_direct_reply"
      },
      {
       "kind": "call",
-      "line": 186,
+      "line": 190,
       "resolved": "local:capability/comes/__init__.py#execute_all",
       "target": "execute_all"
      },
      {
       "kind": "call",
-      "line": 201,
+      "line": 205,
       "resolved": "local:capability/hooks.py#_knowledge_evidence_of",
       "target": "_knowledge_evidence_of"
      },
      {
       "kind": "call",
-      "line": 206,
+      "line": 210,
       "resolved": "unresolved",
       "target": "summaries.append"
      },
      {
       "kind": "call",
-      "line": 208,
+      "line": 212,
       "resolved": "unresolved",
       "target": "ctx.knowledge_evidence.extend"
      },
      {
       "kind": "call",
-      "line": 180,
+      "line": 184,
       "resolved": "local:capability/hooks.py#_logger",
       "target": "_logger"
      },
      {
       "kind": "call",
-      "line": 188,
+      "line": 192,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 189,
+      "line": 193,
       "resolved": "unresolved",
       "target": "len"
      },
      {
       "kind": "call",
-      "line": 202,
+      "line": 206,
       "resolved": "unresolved",
       "target": "result.metadata.get"
      }
@@ -44904,6 +44948,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "f0e5e07d94173c71",
+     "file": "capability/hooks.py",
+     "qualname": "_direct_reply_text",
+     "resolution": "local"
+    },
+    {
      "body_hash": "1bf2b08edf109dfd",
      "file": "capability/hooks.py",
      "qualname": "_flow_decision",
@@ -44934,7 +44984,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "a4c09c158991454d",
+     "body_hash": "53202b56e8f4ffc1",
      "file": "capability/hooks.py",
      "qualname": "_set_direct_reply",
      "resolution": "local"
@@ -48398,7 +48448,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "51601da780fd07e0",
+     "body_hash": "d6735664d272dff2",
      "file": "capability/inventory.py",
      "qualname": "snapshot",
      "resolution": "local"
@@ -48416,7 +48466,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2c22a0b5ef62fa73",
+     "body_hash": "6fd84b9cb6641761",
      "file": "capability/loader.py",
      "qualname": "_parse_capability",
      "resolution": "local"
@@ -49293,7 +49343,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2c22a0b5ef62fa73",
+     "body_hash": "6fd84b9cb6641761",
      "file": "capability/loader.py",
      "qualname": "_parse_capability",
      "resolution": "local"
@@ -138404,76 +138454,66 @@
      {
       "condition": "not s.SKILLS_ENABLED",
       "kind": "branch",
-      "line": 244
+      "line": 248
      },
      {
       "condition": "rt is None",
       "kind": "branch",
-      "line": 249
+      "line": 253
      },
      {
       "condition": "not candidates",
       "kind": "branch",
-      "line": 253
+      "line": 257
      },
      {
       "condition": "s.SKILLS_EXECUTION_MODE != 'sandbox' or rt.orchestrator is None",
       "kind": "branch",
-      "line": 255
+      "line": 259
      },
      {
       "condition": "manifest is None",
       "kind": "branch",
-      "line": 260
+      "line": 264
      },
      {
       "async": false,
       "context": "_flow_span(ctx, 'skills.invoke', instance_key=top.name)",
       "kind": "with",
-      "line": 262
+      "line": 266
      },
      {
       "condition": "result.summary",
       "kind": "branch",
-      "line": 276
+      "line": 280
      },
      {
       "kind": "call",
-      "line": 243,
+      "line": 247,
       "resolved": "local:capability/hooks.py#_settings",
       "target": "_settings"
      },
      {
       "kind": "return",
-      "line": 245
+      "line": 249
      },
      {
       "kind": "call",
-      "line": 248,
+      "line": 252,
       "resolved": "external:skills",
       "target": "skills_runtime.current"
-     },
-     {
-      "kind": "return",
-      "line": 250
-     },
-     {
-      "kind": "await",
-      "line": 251
      },
      {
       "kind": "return",
       "line": 254
      },
      {
-      "kind": "return",
-      "line": 257
+      "kind": "await",
+      "line": 255
      },
      {
-      "kind": "call",
-      "line": 259,
-      "resolved": "unresolved",
-      "target": "rt.catalog.snapshot.get"
+      "kind": "return",
+      "line": 258
      },
      {
       "kind": "return",
@@ -138481,41 +138521,51 @@
      },
      {
       "kind": "call",
-      "line": 278,
+      "line": 263,
+      "resolved": "unresolved",
+      "target": "rt.catalog.snapshot.get"
+     },
+     {
+      "kind": "return",
+      "line": 265
+     },
+     {
+      "kind": "call",
+      "line": 282,
       "resolved": "unresolved",
       "target": "list"
      },
      {
       "kind": "call",
-      "line": 251,
+      "line": 255,
       "resolved": "unresolved",
       "target": "rt.selector.select"
      },
      {
       "kind": "call",
-      "line": 262,
+      "line": 266,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 263
+      "line": 267
      },
      {
       "kind": "call",
-      "line": 263,
+      "line": 267,
       "resolved": "unresolved",
       "target": "rt.orchestrator.invoke"
      },
      {
       "kind": "call",
-      "line": 268,
+      "line": 272,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 269,
+      "line": 273,
       "resolved": "unresolved",
       "target": "getattr"
      }
@@ -138630,76 +138680,66 @@
      {
       "condition": "not s.SKILLS_ENABLED",
       "kind": "branch",
-      "line": 244
+      "line": 248
      },
      {
       "condition": "rt is None",
       "kind": "branch",
-      "line": 249
+      "line": 253
      },
      {
       "condition": "not candidates",
       "kind": "branch",
-      "line": 253
+      "line": 257
      },
      {
       "condition": "s.SKILLS_EXECUTION_MODE != 'sandbox' or rt.orchestrator is None",
       "kind": "branch",
-      "line": 255
+      "line": 259
      },
      {
       "condition": "manifest is None",
       "kind": "branch",
-      "line": 260
+      "line": 264
      },
      {
       "async": false,
       "context": "_flow_span(ctx, 'skills.invoke', instance_key=top.name)",
       "kind": "with",
-      "line": 262
+      "line": 266
      },
      {
       "condition": "result.summary",
       "kind": "branch",
-      "line": 276
+      "line": 280
      },
      {
       "kind": "call",
-      "line": 243,
+      "line": 247,
       "resolved": "local:capability/hooks.py#_settings",
       "target": "_settings"
      },
      {
       "kind": "return",
-      "line": 245
+      "line": 249
      },
      {
       "kind": "call",
-      "line": 248,
+      "line": 252,
       "resolved": "external:skills",
       "target": "skills_runtime.current"
-     },
-     {
-      "kind": "return",
-      "line": 250
-     },
-     {
-      "kind": "await",
-      "line": 251
      },
      {
       "kind": "return",
       "line": 254
      },
      {
-      "kind": "return",
-      "line": 257
+      "kind": "await",
+      "line": 255
      },
      {
-      "kind": "call",
-      "line": 259,
-      "resolved": "unresolved",
-      "target": "rt.catalog.snapshot.get"
+      "kind": "return",
+      "line": 258
      },
      {
       "kind": "return",
@@ -138707,41 +138747,51 @@
      },
      {
       "kind": "call",
-      "line": 278,
+      "line": 263,
+      "resolved": "unresolved",
+      "target": "rt.catalog.snapshot.get"
+     },
+     {
+      "kind": "return",
+      "line": 265
+     },
+     {
+      "kind": "call",
+      "line": 282,
       "resolved": "unresolved",
       "target": "list"
      },
      {
       "kind": "call",
-      "line": 251,
+      "line": 255,
       "resolved": "unresolved",
       "target": "rt.selector.select"
      },
      {
       "kind": "call",
-      "line": 262,
+      "line": 266,
       "resolved": "local:capability/hooks.py#_flow_span",
       "target": "_flow_span"
      },
      {
       "kind": "await",
-      "line": 263
+      "line": 267
      },
      {
       "kind": "call",
-      "line": 263,
+      "line": 267,
       "resolved": "unresolved",
       "target": "rt.orchestrator.invoke"
      },
      {
       "kind": "call",
-      "line": 268,
+      "line": 272,
       "resolved": "unresolved",
       "target": "str"
      },
      {
       "kind": "call",
-      "line": 269,
+      "line": 273,
       "resolved": "unresolved",
       "target": "getattr"
      }
@@ -139590,7 +139640,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "51601da780fd07e0",
+     "body_hash": "d6735664d272dff2",
      "file": "capability/inventory.py",
      "qualname": "snapshot",
      "resolution": "local"
@@ -139608,7 +139658,7 @@
      "resolution": "local"
     },
     {
-     "body_hash": "2c22a0b5ef62fa73",
+     "body_hash": "6fd84b9cb6641761",
      "file": "capability/loader.py",
      "qualname": "_parse_capability",
      "resolution": "local"
@@ -159063,6 +159113,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "3de22b1520a105f853af8490d5cb9baa888fd7af",
+ "source_revision": "8740f03a677ddda8a875919f3177e4f48621e0f1",
  "topology_version": "2026.10.21"
 }
