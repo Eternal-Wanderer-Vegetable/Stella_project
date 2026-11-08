@@ -162,18 +162,36 @@ def _missing_required_params(task: Task | None, tool: Any) -> list[str]:
     return [name for name in required if name not in (task.input or {})]
 
 
+def _unfilled_params(task: Task | None, tool: Any) -> list[str]:
+    """schema 声明了、但任务没有给出值的参数名（必填与可选都算）。"""
+    params = getattr(tool, "parameters", None) or {}
+    properties = params.get("properties") or {}
+    if not isinstance(properties, dict):
+        return []
+    known = (task.input or {}) if task is not None else {}
+    return [str(name) for name in properties if name not in known]
+
+
 def can_direct_call(tool_set: Any, task: Task | None = None) -> bool:
     """能否跳过 LLM 直接调工具。
 
-    条件：只有一个工具，且它没有必填参数。此时模型唯一能做的就是「调它、不带参数」，
-    那一次 27B 往返纯属浪费，且模型还有概率编出多余参数或干脆不调。
+    条件：只有一个工具，它没有必填参数，可选参数也都已由任务给出（或根本没有参数）。
+    此时模型唯一能做的就是「照原样调它」，那一次 27B 往返纯属浪费，且模型还有概率
+    编出多余参数或干脆不调。
+
+    只看必填不够：参数全为可选的工具（如 ``nickname: str = ""``）若被直调，会以空
+    参数执行，用户原话里的值就丢了。确定性路由（``deterministic_route``）的槽位已
+    由路由器抽取完毕，仍只要求必填参数齐全。
     """
     if len(tool_set.tools) != 1:
         return False
-    required = _required_params(tool_set.tools[0])
-    if required and not bool((task.constraints if task else {}).get("deterministic_route")):
+    tool = tool_set.tools[0]
+    deterministic = bool((task.constraints if task else {}).get("deterministic_route"))
+    if deterministic:
+        return not _missing_required_params(task, tool)
+    if _required_params(tool):
         return False
-    return not _missing_required_params(task, tool_set.tools[0])
+    return not _unfilled_params(task, tool)
 
 
 # ============================================================

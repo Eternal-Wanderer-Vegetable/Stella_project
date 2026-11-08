@@ -63,8 +63,18 @@ _active_send_tasks: set[asyncio.Task[Any]] = set()
 _quarantined_send_tasks: set[asyncio.Task[Any]] = set()
 _quarantined_send_conversations: dict[str, set[asyncio.Task[Any]]] = {}
 _DELIVERABLE_DISPOSITIONS = frozenset({"deliver", "fallback", "direct"})
+# 能力路由不经生成、由 Comes 结果直接成稿的回复（capability/hooks.py 的
+# _set_direct_reply）。它既不是模型直出，也不是服务端固定文案，单列一个来源，
+# 投递计划与审计里能分辨出来。
+CAPABILITY_DIRECT_SOURCE_KIND = "capability-direct"
 _TRUSTED_SOURCE_KINDS = frozenset(
-    {"model", "trusted-server", "trusted-server-fallback", "proactive-contract"}
+    {
+        "model",
+        "trusted-server",
+        "trusted-server-fallback",
+        "proactive-contract",
+        CAPABILITY_DIRECT_SOURCE_KIND,
+    }
 )
 
 

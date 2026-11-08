@@ -131,6 +131,7 @@ from core.social.contracts import (
     new_trace_id,
 )
 from core.social.delivery import (
+    CAPABILITY_DIRECT_SOURCE_KIND,
     DeliveryPlanError,
     create_delivery_draft,
     deliver_lines,
@@ -698,7 +699,7 @@ async def attribution_guard_hook(ctx: ChatContext) -> ChatContext:
         trusted_direct_fallback = (
             not typed_error
             and getattr(ctx, "delivery_source_kind", "")
-            in {"trusted-server", "trusted-server-fallback"}
+            in {"trusted-server", "trusted-server-fallback", CAPABILITY_DIRECT_SOURCE_KIND}
             and getattr(ctx, "reply_disposition", "")
             in {"", "direct", "fallback"}
         )
@@ -1883,6 +1884,12 @@ async def handle_chat(bot: Bot, event: GroupMessageEvent):
                 ctx, list(ctx.lines), target_user_id=delivery_target,
             )
         except DeliveryPlanError as e:
+            # 这里会静默丢弃整条回复；只写 flow trace 时现场几乎无从发现，留一条 WARNING。
+            logger.warning(
+                f"⚠️ [Delivery] 投递计划被拒绝，回复未发送: {e}"
+                f"（source={getattr(ctx, 'delivery_source_kind', '') or 'unknown'}"
+                f" trace={getattr(ctx, 'trace_id', '')}）"
+            )
             _flow_decision(fctx, "send.plan", status="blocked",
                            reason_code="invalid_delivery_plan",
                            summary=str(e)[:160])
@@ -2448,6 +2455,12 @@ async def handle_private_chat(bot: Bot, event: PrivateMessageEvent):
                 ctx, list(ctx.lines), target_user_id=delivery_target,
             )
         except DeliveryPlanError as e:
+            # 这里会静默丢弃整条回复；只写 flow trace 时现场几乎无从发现，留一条 WARNING。
+            logger.warning(
+                f"⚠️ [Delivery] 投递计划被拒绝，回复未发送: {e}"
+                f"（source={getattr(ctx, 'delivery_source_kind', '') or 'unknown'}"
+                f" trace={getattr(ctx, 'trace_id', '')}）"
+            )
             _flow_decision(fctx, "send.plan", status="blocked",
                            reason_code="invalid_delivery_plan",
                            summary=str(e)[:160])

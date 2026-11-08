@@ -24,6 +24,7 @@ from core.social.contracts import (
     delivered_texts,
 )
 from core.social.delivery import (
+    CAPABILITY_DIRECT_SOURCE_KIND,
     DeliveryPlanError,
     coerce_platform_message_id,
     create_delivery_draft,
@@ -285,6 +286,31 @@ class TestDeliverLines:
         assert draft["scope_versions_available"] is False
         with pytest.raises(DeliveryPlanError, match="scope version is unavailable"):
             seal_delivery_plan(draft)
+
+    def test_capability_direct_reply_is_a_trusted_source(self, monkeypatch):
+        """能力直回（不经生成、ctx.llm_call_count == 0）必须能封存投递计划。
+
+        回归：此前直回路径没有来源标记，回落为 unknown，被投递门静默拒绝。
+        """
+        from memory import scope_versions
+
+        monkeypatch.setattr(scope_versions, "current_versions_strict", lambda _keys: {})
+        base = {
+            "trace_id": "cap-trace", "turn_id": "cap-turn", "reply_disposition": "",
+            "lines": ["掷骰结果：10"], "conversation_key": "qq:10001:group:42",
+            "bot_id": "10001", "user_id": 7, "llm_call_count": 0,
+        }
+        draft = delivery_draft_from_context(
+            SimpleNamespace(delivery_source_kind=CAPABILITY_DIRECT_SOURCE_KIND, **base),
+        )
+        assert draft["source_kind"] == "capability-direct"
+        plan = seal_delivery_plan(draft)
+        assert [segment["text"] for segment in plan["segments"]] == ["掷骰结果：10"]
+
+        unlabelled = delivery_draft_from_context(SimpleNamespace(delivery_source_kind="", **base))
+        assert unlabelled["source_kind"] == "unknown"
+        with pytest.raises(DeliveryPlanError, match="delivery source"):
+            seal_delivery_plan(unlabelled)
 
     async def test_rejects_unsealed_payload_before_send(self, social_db):
         adapter = FakeAdapter()
