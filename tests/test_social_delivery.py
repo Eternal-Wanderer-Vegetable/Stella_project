@@ -295,11 +295,11 @@ class TestDeliverLines:
         from memory import scope_versions
 
         monkeypatch.setattr(scope_versions, "current_versions_strict", lambda _keys: {})
-        base = dict(
-            trace_id="cap-trace", turn_id="cap-turn", reply_disposition="",
-            lines=["掷骰结果：10"], conversation_key="qq:10001:group:42",
-            bot_id="10001", user_id=7, llm_call_count=0,
-        )
+        base = {
+            "trace_id": "cap-trace", "turn_id": "cap-turn", "reply_disposition": "",
+            "lines": ["掷骰结果：10"], "conversation_key": "qq:10001:group:42",
+            "bot_id": "10001", "user_id": 7, "llm_call_count": 0,
+        }
         draft = delivery_draft_from_context(
             SimpleNamespace(delivery_source_kind=CAPABILITY_DIRECT_SOURCE_KIND, **base),
         )
