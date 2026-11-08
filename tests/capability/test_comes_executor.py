@@ -137,6 +137,21 @@ def test_can_direct_call_only_for_single_no_arg_tool():
     assert can_direct_call(ToolSet(tools=[])) is False
 
 
+def test_can_direct_call_refuses_tools_whose_parameters_are_all_optional():
+    """``nickname: str = ""`` 这类可选参数：直调会以空参数执行，丢掉用户原话里的值。"""
+    from astrbot_compat.llm.tool import FunctionTool, ToolSet
+
+    optional = FunctionTool(
+        name="nick",
+        parameters={"type": "object", "properties": {"nickname": {"type": "string"}}},
+    )
+    assert can_direct_call(ToolSet(tools=[optional])) is False
+    assert can_direct_call(ToolSet(tools=[optional]), _task(input={"nickname": "测试员"})) is True
+    # 确定性路由的槽位由路由器抽取，仍只看必填参数
+    deterministic = _task(constraints={"deterministic_route": True})
+    assert can_direct_call(ToolSet(tools=[optional]), deterministic) is True
+
+
 # ---------- 早退路径 ----------
 
 
@@ -729,6 +744,22 @@ def test_mcp_tool_flows_through_agent_loop(astr_event, fake_llm):
     assert result.data == [("mcp_brave_search", session.text)]
     assert "东京明天晴" in result.summary
     assert result.metadata["tools"] == ["mcp_brave_search"]
+
+
+def test_mcp_tool_with_only_optional_params_goes_through_the_model(astr_event, fake_llm):
+    """插件命令工具常见形态：原样文本 ``arguments`` 与类型化字段都可选（例如
+    AstrBot 的 ``nickname: str = ""``）。必须由模型填参，不能无参直调。"""
+    reg, session, client = _wire_mcp_runtime(required=[])
+    client._apply_catalog([("search", "set nickname", {
+        "type": "object",
+        "properties": {"arguments": {"type": "string"}, "nickname": {"type": "string"}},
+    })])
+    fake_llm.default_text = "已设置。"
+    fake_llm.push_tool_call("mcp_brave_search", '{"nickname": "测试员"}')
+
+    result = _run(execute(_task("web.search", "把我的昵称设置成 测试员"), event=astr_event, target=reg))
+    assert result.metadata["direct_call"] is False
+    assert session.calls == [("search", {"nickname": "测试员"})]
 
 
 def test_mcp_tool_direct_call_without_model(astr_event):

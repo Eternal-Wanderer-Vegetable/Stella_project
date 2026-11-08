@@ -313,6 +313,11 @@ def _set_direct_reply(ctx: ChatContext, results: list[Result]) -> None:
             return
     ctx.reply = text
     ctx.lines = [text]
+    # 直回不经生成：没有这个来源标记，投递计划会把它当作来源 unknown 拒绝封存，
+    # 回复被静默丢弃（Comes 内部的模型调用不计入 ctx.llm_call_count）。
+    from core.social.delivery import CAPABILITY_DIRECT_SOURCE_KIND
+
+    ctx.delivery_source_kind = CAPABILITY_DIRECT_SOURCE_KIND
 
 
 async def _build_astr_event(ctx: ChatContext) -> Any:

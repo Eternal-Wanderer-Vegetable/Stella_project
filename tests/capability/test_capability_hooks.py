@@ -274,6 +274,33 @@ def test_deterministic_result_populates_direct_reply(
     _run(activate_capabilities(ctx))
     assert ctx.reply == "weather.query 的结果"
     assert ctx.lines == ["weather.query 的结果"]
+    assert ctx.delivery_source_kind == "capability-direct"
+
+
+def test_deterministic_direct_reply_can_be_sealed_for_delivery(
+    monkeypatch, stub_route, spy_memory, spy_comes, fake_bot, fake_nb_event,
+):
+    """能力直回 → 投递计划封存成功（此前因来源 unknown 被静默拒绝，回复不出现）。"""
+    from core.social.delivery import delivery_draft_from_context, seal_delivery_plan
+    from memory import scope_versions
+
+    monkeypatch.setattr(scope_versions, "current_versions_strict", lambda _keys: {})
+    stub_route(
+        Route(
+            tool=True,
+            requires_generation=False,
+            deterministic=True,
+            capabilities=[CapabilityHit("weather.query", 1.0)],
+        ),
+    )
+    ctx = _ctx(raw_event=fake_nb_event, bot=fake_bot)
+    ctx.trace_id, ctx.turn_id = "cap-trace", "cap-turn"
+    ctx.conversation_key = "qq:10001:group:42"
+    _run(activate_capabilities(ctx))
+    assert ctx.llm_call_count == 0
+    plan = seal_delivery_plan(delivery_draft_from_context(ctx))
+    assert plan["source_kind"] == "capability-direct"
+    assert [segment["text"] for segment in plan["segments"]] == ["weather.query 的结果"]
 
 
 def test_deterministic_missing_input_populates_clarification_reply(
