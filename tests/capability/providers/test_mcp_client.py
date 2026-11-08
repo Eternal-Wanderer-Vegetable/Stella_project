@@ -400,3 +400,46 @@ async def test_session_context_is_entered_and_exited_in_one_owner_task(stdio_con
     await host
     assert outcome == ["ended normally"]
     await client.close()
+
+
+def _session_terminated() -> McpError:
+    """SDK 收到 404 时合成的错误：``McpError(ErrorData(code=32600, "Session terminated"))``。"""
+    error = McpError("Session terminated")
+    error.error = SimpleNamespace(code=32600, message="Session terminated")
+    return error
+
+
+async def test_terminated_session_is_renewed_and_the_call_retried_once(stdio_config, session_factory):
+    """Server 空闲超时关掉会话后，下一次调用重建会话并重试一次，调用方无感。"""
+    session_factory.session.add_tool("search")
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+    original_call = session_factory.session.call_tool
+    failures = [_session_terminated()]
+
+    async def call_tool(name, arguments):
+        if failures:
+            raise failures.pop()
+        return await original_call(name, arguments)
+
+    session_factory.session.call_tool = call_tool
+    assert await client.call_tool("search", {"q": "x"}) == "ok"
+    assert len(session_factory.sessions) == 2, "a fresh session was initialized"
+    assert session_factory.session.close_calls == 1, "the terminated session was closed"
+    assert client.status.state == SERVER_READY
+    await client.close()
+
+
+async def test_terminated_session_is_not_retried_forever(stdio_config, session_factory):
+    session_factory.session.add_tool("search")
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+
+    async def call_tool(name, arguments):
+        raise _session_terminated()
+
+    session_factory.session.call_tool = call_tool
+    with pytest.raises(McpClientError, match="会话已终止"):
+        await client.call_tool("search", {})
+    assert len(session_factory.sessions) == 2
+    await client.close()

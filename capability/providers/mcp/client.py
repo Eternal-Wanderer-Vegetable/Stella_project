@@ -67,6 +67,10 @@ class McpToolError(McpClientError):
     """Server 对一次 tools/call 明确返回错误（业务失败，连接不受影响）。"""
 
 
+class _SessionTerminatedError(Exception):
+    """内部信号：Server 不再认这个会话，调用方应重建会话后重试。"""
+
+
 # factory(config) → 异步上下文管理器，yield 会话鸭子（见模块 docstring）
 SessionFactory = Callable[[ServerConfig], Any]
 
@@ -87,6 +91,21 @@ def _is_protocol_error(exc: BaseException) -> bool:
     if McpError is not None and isinstance(exc, McpError):
         return True
     return type(exc).__name__ == "McpError"
+
+
+def _is_session_terminated(exc: BaseException) -> bool:
+    """Streamable HTTP：Server 对带旧会话 ID 的请求回了 404（会话已过期或被关闭）。
+
+    SDK 把它转成 ``McpError(code=32600, "Session terminated")``，且请求根本没被
+    Server 处理——按 MCP 规范，客户端此时应重新初始化会话，重试是安全的。
+    Server 侧常见原因是空闲超时（rmcp 默认 5 分钟）。
+    """
+    if not _is_protocol_error(exc):
+        return False
+    error = getattr(exc, "error", None)
+    code = getattr(error, "code", None)
+    message = str(getattr(error, "message", "") or exc).strip().lower()
+    return code in (32600, -32600) and message == "session terminated"
 
 
 def _tools_from_result(result: Any) -> list[tuple[str, str, Any]]:
@@ -413,12 +432,41 @@ class McpServerClient:
         arguments: dict[str, Any] | None,
         timeout: float | None = None,
     ) -> str:
-        """调用一个远程工具，返回受限文本。失败统一抛 McpClientError（已脱敏）。"""
+        """调用一个远程工具，返回受限文本。失败统一抛 McpClientError（已脱敏）。
+
+        Server 报会话已终止（空闲超时等）时，重建会话后重试一次：该请求未被 Server
+        处理，重试不会重复执行工具。
+        """
         if not self.config.enabled:
             raise McpClientError(f"MCP server {self.server_id} 未启用")
-        session = self._session
-        if session is None or self.status.state != SERVER_READY:
-            raise McpClientError(f"MCP server {self.server_id} 当前不可用")
+        for attempt in range(2):
+            session = self._session
+            if session is None or self.status.state != SERVER_READY:
+                raise McpClientError(f"MCP server {self.server_id} 当前不可用")
+            try:
+                return await self._call_once(session, remote_name, arguments, timeout)
+            except _SessionTerminatedError:
+                if attempt:
+                    raise McpClientError(
+                        f"MCP server {self.server_id} 会话已终止，重建后仍不可用",
+                    ) from None
+                await self._renew_session(session)
+        raise McpClientError(f"MCP server {self.server_id} 当前不可用")  # pragma: no cover
+
+    async def _renew_session(self, stale: Any) -> None:
+        """丢弃已被 Server 终止的会话并立即重连（并发调用只重建一次）。"""
+        self.status.last_error = sanitize_error("会话已被 Server 终止，正在重建")
+        if self._session is stale:
+            await self._teardown_session()
+        await self._attempt_connect()
+
+    async def _call_once(
+        self,
+        session: Any,
+        remote_name: str,
+        arguments: dict[str, Any] | None,
+        timeout: float | None,
+    ) -> str:
         if remote_name not in self._catalog:
             raise McpClientError(f"工具 {remote_name} 不在 {self.server_id} 的目录里")
         effective = timeout if timeout is not None else self.config.call_timeout
@@ -435,6 +483,8 @@ class McpServerClient:
         except asyncio.CancelledError:
             raise
         except Exception as e:
+            if _is_session_terminated(e):
+                raise _SessionTerminatedError from None
             if _is_protocol_error(e):
                 # 对端用 JSON-RPC error 拒绝了这次调用（如参数不合 schema）：连接完好，
                 # 按工具错误返回，会话保留，错误文本带回给 agent 以便改参重试
