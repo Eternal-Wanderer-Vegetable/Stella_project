@@ -369,6 +369,13 @@ async def execute(
     if not providers:
         return _failed(task, f"能力 {task.capability} 没有可用 provider")
 
+    runtime = _wired_runtime()
+    if runtime is not None:
+        # 远程目录可能已过时（Server 或 Host 重启后旧会话收不到变化通知）：执行前让
+        # 不可用的 provider 尽力恢复一次，再解析工具。
+        for provider in providers:
+            if not runtime.is_live(provider):
+                await runtime.ensure_live(provider)
     tool_set, missing = resolve_tools(providers, tool_manager)
     if missing:
         _logger().warning(

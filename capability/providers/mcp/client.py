@@ -80,6 +80,8 @@ SessionFactory = Callable[[ServerConfig], Any]
 
 # 会话属主任务收尾的等待上限；超时就取消它（关闭失败不拦停机）
 _OWNER_CLOSE_TIMEOUT_SECONDS = 10.0
+# 因“工具不在目录里”而重建会话的最小间隔
+_RELIST_INTERVAL_SECONDS = 10.0
 
 
 def _is_protocol_error(exc: BaseException) -> bool:
@@ -185,6 +187,7 @@ class McpServerClient:
         # 取消打到当初进入它的任务上——Bot 进程里那就是 NoneBot 的 lifespan 任务。
         self._owner_task: asyncio.Task | None = None
         self._owner_closing: asyncio.Event | None = None
+        self._last_relist_at = float("-inf")
         self._lifecycle_lock = asyncio.Lock()
         self._close_requested = False
         self._reconnect_task: asyncio.Task | None = None
@@ -463,6 +466,20 @@ class McpServerClient:
                     ) from None
                 await self._renew_session(session)
         raise McpClientError(f"MCP server {self.server_id} 当前不可用")  # pragma: no cover
+
+    async def ensure_listed(self, remote_name: str) -> bool:
+        """工具不在本地目录时重建一次会话以重新列出工具；同一 Server 至多每
+        ``_RELIST_INTERVAL_SECONDS`` 秒一次，真不存在的工具不会让每条消息都重连。"""
+        if remote_name in self._catalog:
+            return True
+        if not self.config.enabled or self._close_requested:
+            return False
+        now = time.monotonic()
+        if now - self._last_relist_at < _RELIST_INTERVAL_SECONDS:
+            return False
+        self._last_relist_at = now
+        await self._renew_session(self._session)
+        return remote_name in self._catalog
 
     async def _renew_session(self, stale: Any) -> None:
         """丢弃已被 Server 终止的会话并立即重连（并发调用只重建一次）。"""

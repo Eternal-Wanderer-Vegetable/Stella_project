@@ -87,6 +87,22 @@ class ProviderRuntime:
             return {}
         return schema if isinstance(schema, dict) else {}
 
+    async def ensure_live(self, provider: CapabilityProvider) -> bool:
+        """执行前尽力让 provider 可用（例如重新列出远程工具）。不许抛异常。
+
+        backend 没有这个能力时按 ``is_live`` 返回。
+        """
+        backend = self._backends.get(provider.kind)
+        if backend is None:
+            return True
+        ensure = getattr(backend, "ensure_live", None)
+        try:
+            if ensure is not None:
+                return bool(await ensure(provider))
+            return bool(backend.is_live(provider))
+        except Exception:
+            return False
+
     def is_live(self, provider: CapabilityProvider) -> bool:
         """没有 backend 的 kind 不过滤（缺省语义见模块 docstring）。不许抛异常。"""
         backend = self._backends.get(provider.kind)

@@ -461,3 +461,24 @@ async def test_stale_catalog_is_refreshed_once_before_reporting_a_missing_tool(s
         await client.call_tool("nope", {})
     assert len(session_factory.sessions) == 3
     await client.close()
+
+
+async def test_ensure_listed_relists_a_stale_catalog_and_is_rate_limited(stdio_config, session_factory):
+    """回归（2026-11-08 QQ 重启轮）：Comes 在调用前按本地目录判定工具不可用，根本走不到
+    call_tool；执行前的 ensure_listed 让过时目录恢复，但真不存在的工具不会每条消息都重连。"""
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+    session_factory.session.add_tool("search")  # Server 侧已恢复，本地目录仍是旧的
+
+    assert await client.ensure_listed("search") is True
+    assert client.tool("search") is not None
+    assert len(session_factory.sessions) == 2
+
+    assert await client.ensure_listed("search") is True, "listed tools never reconnect"
+    assert await client.ensure_listed("nope") is False
+    assert len(session_factory.sessions) == 2, "the interval is per server: a relist just happened"
+    client._last_relist_at = float("-inf")  # the interval has passed
+    assert await client.ensure_listed("nope") is False
+    assert await client.ensure_listed("nope") is False
+    assert len(session_factory.sessions) == 3, "a missing tool triggers at most one renewal per interval"
+    await client.close()
