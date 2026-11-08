@@ -313,3 +313,90 @@ def test_http_auth_env_present_builds_bearer_header(http_config, monkeypatch):
     assert headers == {"Authorization": "Bearer super-secret-token"}
     # 状态面永远不出现值
     assert "super-secret-token" not in str(client.status_dict())
+
+
+# ---------- 协议错误与会话属主任务（2026-11-08 联调回归） ----------
+
+
+class McpError(Exception):
+    """与 MCP SDK 的 ``mcp.shared.exceptions.McpError`` 同名：Server 回了 JSON-RPC error。"""
+
+
+async def test_protocol_error_is_a_tool_error_and_keeps_the_session(stdio_config, session_factory):
+    """参数不合 schema 时 Server 回 JSON-RPC error：连接完好，不能拆会话。"""
+    session_factory.session.add_tool("search")
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+    session_factory.session.scripted["search"] = McpError("unexpected argument field: dice")
+
+    with pytest.raises(McpToolError, match="unexpected argument field"):
+        await client.call_tool("search", {"dice": "2d6"})
+    assert client.status.state == SERVER_READY
+    assert session_factory.session.close_calls == 0
+
+    session_factory.session.scripted.pop("search")
+    assert await client.call_tool("search", {"q": "x"}) == "ok"
+    assert len(session_factory.sessions) == 1
+    await client.close()
+
+
+async def test_session_context_is_entered_and_exited_in_one_owner_task(stdio_config):
+    """会话上下文由专属任务进出。从别的任务拆会话（调用时传输出错）不能把取消打到
+    启动客户端的任务上——Bot 进程里那是 NoneBot 的 lifespan 任务，被取消会触发停机钩子。
+    """
+    from contextlib import asynccontextmanager
+
+    import anyio
+
+    from tests.capability.providers.conftest import FakeSession
+
+    session = FakeSession()
+    session.add_tool("search")
+    tasks: dict[str, list] = {"enter": [], "exit": []}
+
+    @asynccontextmanager
+    async def factory(config):
+        # 与 SDK 传输一样持有一个 anyio task group（cancel scope 绑定进入它的任务）
+        async with anyio.create_task_group() as tg:
+            tasks["enter"].append(asyncio.current_task())
+            try:
+                yield session
+            finally:
+                tasks["exit"].append(asyncio.current_task())
+                tg.cancel_scope.cancel()
+
+    client = McpServerClient(stdio_config, session_factory=factory)
+    started = asyncio.Event()
+    stop = asyncio.Event()
+    outcome: list[str] = []
+
+    async def lifespan():
+        try:
+            await client.start()
+            started.set()
+            await stop.wait()
+            outcome.append("ended normally")
+        except asyncio.CancelledError:
+            outcome.append("cancelled")
+            raise
+
+    host = asyncio.create_task(lifespan())
+    await started.wait()
+    assert client.status.state == SERVER_READY
+
+    session.scripted["search"] = RuntimeError("transport broke")
+    with pytest.raises(McpClientError, match="连接中断"):
+        await asyncio.create_task(client.call_tool("search", {}))
+    await asyncio.sleep(0.05)
+
+    assert not host.done(), f"host task was cancelled: {outcome}"
+    assert tasks["enter"] and tasks["exit"]
+    assert tasks["enter"][0] is tasks["exit"][0], "session context must exit in the task that entered it"
+    assert tasks["enter"][0] is not host
+
+    session.scripted.pop("search")
+    assert await wait_for(lambda: client.status.state == SERVER_READY), client.status
+    stop.set()
+    await host
+    assert outcome == ["ended normally"]
+    await client.close()

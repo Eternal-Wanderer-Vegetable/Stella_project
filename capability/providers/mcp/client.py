@@ -70,6 +70,24 @@ class McpToolError(McpClientError):
 # factory(config) → 异步上下文管理器，yield 会话鸭子（见模块 docstring）
 SessionFactory = Callable[[ServerConfig], Any]
 
+# 会话属主任务收尾的等待上限；超时就取消它（关闭失败不拦停机）
+_OWNER_CLOSE_TIMEOUT_SECONDS = 10.0
+
+
+def _is_protocol_error(exc: BaseException) -> bool:
+    """Server 用 JSON-RPC error 回答了这次请求（参数不合 schema、方法不存在……）。
+
+    这说明连接是好的、对端也在正常应答，只是这次调用本身被拒绝——应当按工具错误
+    处理，不能当作传输中断去拆会话。SDK 是可选依赖，所以按类型名兜底识别。
+    """
+    try:
+        from mcp.shared.exceptions import McpError
+    except ImportError:  # pragma: no cover - SDK 未安装时只剩鸭子识别
+        McpError = None  # noqa: N806
+    if McpError is not None and isinstance(exc, McpError):
+        return True
+    return type(exc).__name__ == "McpError"
+
 
 def _tools_from_result(result: Any) -> list[tuple[str, str, Any]]:
     """从 list_tools 的返回里取出 ``[(name, description, inputSchema), ...]``（鸭子类型）。"""
@@ -139,6 +157,11 @@ class McpServerClient:
 
         self._stack: AsyncExitStack | None = None
         self._session: Any | None = None
+        # 会话由一个专属任务持有：传输与会话的异步上下文在它里面进入、也在它里面退出。
+        # SDK（anyio）的 cancel scope 必须在同一任务内进出；从别的任务关闭，会把
+        # 取消打到当初进入它的任务上——Bot 进程里那就是 NoneBot 的 lifespan 任务。
+        self._owner_task: asyncio.Task | None = None
+        self._owner_closing: asyncio.Event | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._close_requested = False
         self._reconnect_task: asyncio.Task | None = None
@@ -207,20 +230,27 @@ class McpServerClient:
         async with self._lifecycle_lock:
             if self._session is not None or self._close_requested:
                 return
-            stack = AsyncExitStack()
+            loop = asyncio.get_running_loop()
+            ready: asyncio.Future = loop.create_future()
+            closing = asyncio.Event()
+            owner = asyncio.create_task(
+                self._own_session(ready, closing),
+                name=f"mcp-session-{self.server_id}",
+            )
             try:
-                session = await stack.enter_async_context(self._factory(self.config))
-                await asyncio.wait_for(
-                    session.initialize(), timeout=self.config.connect_timeout,
-                )
-                result = await asyncio.wait_for(
-                    session.list_tools(), timeout=self.config.connect_timeout,
-                )
-                session.set_tools_changed_callback(self._on_tools_changed_notification)
+                session, result = await asyncio.shield(ready)
             except BaseException:
-                await stack.aclose()
+                closing.set()
+                if not owner.done():
+                    owner.cancel()
+                with suppress(BaseException):
+                    await owner
                 raise
-            self._stack = stack
+            if owner.done():
+                # 交出会话后、登记前传输就已失效
+                raise McpClientError(f"MCP server {self.server_id} 会话在就绪后立即中断")
+            self._owner_task = owner
+            self._owner_closing = closing
             self._session = session
             now = time.time()
             self.status.state = SERVER_READY
@@ -232,10 +262,60 @@ class McpServerClient:
             self._apply_catalog(_tools_from_result(result))
             self._backoff = max(self.config.reconnect_base_seconds, 0.5)
 
+    async def _own_session(self, ready: asyncio.Future, closing: asyncio.Event) -> None:
+        """会话属主任务：进入传输与会话 → 交出会话 → 等待关闭 → 在本任务内退出。
+
+        传输层在会话存活期间崩溃（SDK 的 task group 抛错）时，取消只会落在本任务，
+        不会波及调用方或启动它的任务；这里把会话标记为失效并安排重连。
+        """
+        try:
+            async with AsyncExitStack() as stack:
+                session = await stack.enter_async_context(self._factory(self.config))
+                await asyncio.wait_for(
+                    session.initialize(), timeout=self.config.connect_timeout,
+                )
+                result = await asyncio.wait_for(
+                    session.list_tools(), timeout=self.config.connect_timeout,
+                )
+                session.set_tools_changed_callback(self._on_tools_changed_notification)
+                ready.set_result((session, result))
+                await closing.wait()
+        except BaseException as e:
+            if not ready.done():
+                # 连接阶段失败：交给 _connect 走既有的退避重连
+                if isinstance(e, Exception):
+                    ready.set_exception(e)
+                else:
+                    ready.set_exception(McpClientError(f"MCP server {self.server_id} 会话任务被取消"))
+                return
+            if not closing.is_set() and self._owner_task is asyncio.current_task():
+                # 会话存活期间传输层失效
+                self._session = None
+                self._owner_task = None
+                self._owner_closing = None
+                self._catalog.clear()
+                self._record_failure(e if isinstance(e, Exception) else McpClientError("会话任务被取消"))
+                self._schedule_reconnect(self._backoff)
+                self._backoff = min(self._backoff * 2, self.config.reconnect_max_seconds)
+            if not isinstance(e, Exception) and not isinstance(e, asyncio.CancelledError):
+                raise
+
     async def _teardown_session(self) -> None:
+        owner, closing = self._owner_task, self._owner_closing
+        self._owner_task = None
+        self._owner_closing = None
         stack, self._stack = self._stack, None
         self._session = None
         self._catalog.clear()
+        if owner is not None and closing is not None:
+            # 只通知属主任务自己收尾；绝不在当前任务里退出它进入的上下文
+            closing.set()
+            if owner is not asyncio.current_task():
+                done, _ = await asyncio.wait({owner}, timeout=_OWNER_CLOSE_TIMEOUT_SECONDS)
+                if not done:
+                    owner.cancel()
+                    await asyncio.wait({owner}, timeout=1.0)
+                    self.status.last_error = sanitize_error("MCP 会话关闭超时，已强制取消")
         if stack is not None:
             try:
                 await stack.aclose()
@@ -355,6 +435,14 @@ class McpServerClient:
         except asyncio.CancelledError:
             raise
         except Exception as e:
+            if _is_protocol_error(e):
+                # 对端用 JSON-RPC error 拒绝了这次调用（如参数不合 schema）：连接完好，
+                # 按工具错误返回，会话保留，错误文本带回给 agent 以便改参重试
+                self.status.failure_count += 1
+                detail = sanitize_error(str(e))[:200]
+                raise McpToolError(
+                    f"工具 {remote_name} 被拒绝: {detail}" if detail else f"工具 {remote_name} 被拒绝",
+                ) from None
             # 传输层坏了：作废会话并安排重连，但给调用方的仍是脱敏后的失败
             self.status.failure_count += 1
             self.status.last_error = sanitize_error(str(e))
