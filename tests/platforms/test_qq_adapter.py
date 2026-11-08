@@ -26,6 +26,9 @@ if _qq_source:
     if _adapter_path not in nonebot.adapters.__path__:
         nonebot.adapters.__path__.append(_adapter_path)
 
+# nonebot-adapter-qq is temporarily not installed (stella_bootstrap/adapter_policy.py).
+pytest.importorskip("nonebot.adapters.qq")
+
 from nonebot.adapters.qq.event import (
     AtMessageCreateEvent,
     C2CMessageCreateEvent,

@@ -6,6 +6,8 @@ Stella uses NoneBot adapters to connect to chat platforms. NoneBot separates ins
 
 ## Catalog and installation
 
+> **Temporarily disabled (2026-11-08):** only OneBot V11 is enabled. The other catalog adapters (OneBot V12 included) are not shipped with the installers for now; the Platforms page shows them as unavailable and boot skips them with a warning. Their integration code and tests are kept. See [#134](https://github.com/Eternal-Wanderer-Vegetable/stella_project/issues/134) for the reason and how to restore them; the bundling notes below apply again after that.
+
 The catalog snapshot in the Platforms page follows the [official NoneBot adapter directory](https://raw.githubusercontent.com/nonebot/nonebot2/master/assets/adapters.json5) and contains 32 entries. OneBot V11 and V12 share `nonebot-adapter-onebot`. Stella bundles 28 distributions for the 29 selectable entries in its standard installers. Walle-Q, NTChat, and Mail are unavailable; see the table below.
 
 These dependencies are declared in `requirements.txt` and `pyproject.toml`, so they are included in Docker, online/offline Windows installers, and source installations. Adapter credentials, platform permissions, and callback URLs remain adapter-specific. NoneBot's `DRIVER` is global; edit it from any selected adapter's **Runtime settings** dialog and it applies to all selected adapters. The installer does not create platform accounts or enable adapters automatically. Use **Runtime settings** on a custom adapter card to enter variables documented by its project.

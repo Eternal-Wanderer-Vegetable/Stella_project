@@ -67,13 +67,10 @@ jobs:
         run: pip install pip-audit bandit
 
       - name: Audit dependencies for vulnerabilities
-        # nonebot-adapter-qq currently caps cryptography below the fixed releases.
-        # Ignore only the PKCS#7/X.509 advisories; every other advisory remains blocking.
-        run: >-
-          pip-audit -r requirements.txt
-          --ignore-vuln PYSEC-2026-3552
-          --ignore-vuln PYSEC-2026-3553
-          --ignore-vuln PYSEC-2026-3554
+        # No advisory is ignored. The cryptography ignores for nonebot-adapter-qq were
+        # dropped together with the temporarily disabled adapters (see
+        # stella_bootstrap/adapter_policy.py); restore them only if that adapter returns.
+        run: pip-audit -r requirements.txt
 
       - name: Run Bandit (security linter)
         run: bandit -r . -f json -o bandit-report.json || true
