@@ -443,3 +443,21 @@ async def test_terminated_session_is_not_retried_forever(stdio_config, session_f
         await client.call_tool("search", {})
     assert len(session_factory.sessions) == 2
     await client.close()
+
+
+async def test_stale_catalog_is_refreshed_once_before_reporting_a_missing_tool(stdio_config, session_factory):
+    """回归（2026-11-08 QQ 实测）：Host 重启时目录被清空，旧会话随后失效、收不到目录变化；
+    客户端只查本地目录就一直报“不在目录里”，永远不会去重建会话。"""
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+    assert client.tool("search") is None
+    session_factory.session.add_tool("search")  # Server 侧已恢复，本地目录仍是旧的
+
+    assert await client.call_tool("search", {"q": "x"}) == "ok"
+    assert len(session_factory.sessions) == 2, "the session was renewed to re-list tools"
+
+    # 真不存在的工具：重建一次后如实报告，不无限重试
+    with pytest.raises(McpClientError, match="不在"):
+        await client.call_tool("nope", {})
+    assert len(session_factory.sessions) == 3
+    await client.close()

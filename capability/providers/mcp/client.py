@@ -71,6 +71,10 @@ class _SessionTerminatedError(Exception):
     """内部信号：Server 不再认这个会话，调用方应重建会话后重试。"""
 
 
+class _ToolNotListedError(Exception):
+    """内部信号：工具不在本地目录里；目录可能已过时（Server 或 Host 重启），重建后再查一次。"""
+
+
 # factory(config) → 异步上下文管理器，yield 会话鸭子（见模块 docstring）
 SessionFactory = Callable[[ServerConfig], Any]
 
@@ -435,7 +439,8 @@ class McpServerClient:
         """调用一个远程工具，返回受限文本。失败统一抛 McpClientError（已脱敏）。
 
         Server 报会话已终止（空闲超时等）时，重建会话后重试一次：该请求未被 Server
-        处理，重试不会重复执行工具。
+        处理，重试不会重复执行工具。工具不在本地目录时同样重建一次：Host 重启后目录
+        曾被清空，而旧会话已失效、收不到目录变化通知，不重建就会一直报“不在目录里”。
         """
         if not self.config.enabled:
             raise McpClientError(f"MCP server {self.server_id} 未启用")
@@ -449,6 +454,12 @@ class McpServerClient:
                 if attempt:
                     raise McpClientError(
                         f"MCP server {self.server_id} 会话已终止，重建后仍不可用",
+                    ) from None
+                await self._renew_session(session)
+            except _ToolNotListedError:
+                if attempt:
+                    raise McpClientError(
+                        f"工具 {remote_name} 不在 {self.server_id} 的目录里",
                     ) from None
                 await self._renew_session(session)
         raise McpClientError(f"MCP server {self.server_id} 当前不可用")  # pragma: no cover
@@ -468,7 +479,7 @@ class McpServerClient:
         timeout: float | None,
     ) -> str:
         if remote_name not in self._catalog:
-            raise McpClientError(f"工具 {remote_name} 不在 {self.server_id} 的目录里")
+            raise _ToolNotListedError
         effective = timeout if timeout is not None else self.config.call_timeout
         try:
             result = await asyncio.wait_for(
