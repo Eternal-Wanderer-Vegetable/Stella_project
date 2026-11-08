@@ -167,6 +167,11 @@ def provider_claim_key(provider: CapabilityProvider) -> str | None:
     return None
 
 
+DIRECT_REPLY_SUMMARY = "summary"
+DIRECT_REPLY_TOOL_OUTPUT = "tool_output"
+DIRECT_REPLY_MODES = frozenset({DIRECT_REPLY_SUMMARY, DIRECT_REPLY_TOOL_OUTPUT})
+
+
 @dataclass
 class Capability:
     """一项能力。
@@ -184,6 +189,9 @@ class Capability:
             Level 0 的职责是「处理高置信度请求」，猜出来的词达不到这个标准；
         input_schema: 输入契约（可选，给 Comes 做槽位提示）；
         providers: 实现方式列表；
+        direct_reply: 不经生成的直回路由用什么作回复。``summary``（缺省）用 Comes 的
+            摘要；``tool_output`` 用工具自己的输出原文——适合插件命令这类本身就写给
+            用户看的回复，避免模型转述时改错数字或措辞。只影响直回，不影响生成路径；
         route_enabled: 是否参与 Router 的能力选择。``False`` 时能力照常注册、
             照常可被显式指定执行，但不进 ``routable()``，因此不参与 Level 0/1/2 的
             任何竞争。自动派生的能力按 ``ROUTER_ROUTE_AUTO_CAPABILITIES`` 落到这里，
@@ -200,6 +208,7 @@ class Capability:
     input_schema: dict[str, Any] = field(default_factory=dict)
     providers: list[CapabilityProvider] = field(default_factory=list)
     route_enabled: bool = True
+    direct_reply: str = "summary"
     source: str = ""
 
     @property

@@ -40,7 +40,11 @@ from typing import Any
 
 from capability.input_parser import merge_schemas, parse_input
 from capability.providers.knowledge import KNOWLEDGE_SEARCH_CAPABILITY
-from capability.registry import KIND_ASTRBOT_TOOL, CapabilityRegistry
+from capability.registry import (
+    DIRECT_REPLY_TOOL_OUTPUT,
+    KIND_ASTRBOT_TOOL,
+    CapabilityRegistry,
+)
 from capability.registry import registry as _default_registry
 from core.context import ChatContext
 from core.tasks import Result, ResultStatus, Task, TaskType, next_task_id
@@ -288,7 +292,7 @@ def _set_direct_reply(ctx: ChatContext, results: list[Result]) -> None:
         if r.metadata.get("capability") != KNOWLEDGE_SEARCH_CAPABILITY
     ]
     results = replies
-    summaries = [r.summary.strip() for r in results if r.ok and r.summary.strip()]
+    summaries = [text for r in results if r.ok and (text := _direct_reply_text(r))]
     if summaries:
         text = "\n".join(summaries)
     else:
@@ -318,6 +322,25 @@ def _set_direct_reply(ctx: ChatContext, results: list[Result]) -> None:
     from core.social.delivery import CAPABILITY_DIRECT_SOURCE_KIND
 
     ctx.delivery_source_kind = CAPABILITY_DIRECT_SOURCE_KIND
+
+
+def _direct_reply_text(result: Result) -> str:
+    """一条成功结果的直回文本：按能力声明取 Comes 摘要或工具输出原文。"""
+    capability = _default_registry.get(str(result.metadata.get("capability") or ""))
+    if capability is not None and capability.direct_reply == DIRECT_REPLY_TOOL_OUTPUT:
+        from capability.comes import summarizer
+
+        texts = [
+            content.strip()
+            for _, content in (result.data or [])
+            if isinstance(content, str)
+            and content.strip()
+            and not summarizer.is_error(content)
+            and not summarizer.is_no_return(content)
+        ]
+        if texts:
+            return "\n".join(texts)
+    return (result.summary or "").strip()
 
 
 async def _build_astr_event(ctx: ChatContext) -> Any:

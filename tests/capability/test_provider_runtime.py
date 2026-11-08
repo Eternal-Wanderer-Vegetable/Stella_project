@@ -245,3 +245,34 @@ def test_backends_satisfy_the_protocol():
     """两个实现都满足 ProviderBackend 协议（runtime_checkable 鸭子检查）。"""
     assert isinstance(AstrbotToolBackend(), ProviderBackend)
     assert isinstance(McpBackend(), ProviderBackend)
+
+
+def test_ensure_live_asks_the_mcp_client_to_relist_and_falls_back_to_is_live():
+    """执行前的 ensure_live：MCP backend 交给客户端重新列出；没有该能力的 backend 按 is_live。"""
+    import asyncio
+
+    manager, client = _ready_manager()
+    backend = McpBackend(manager)
+    runtime = ProviderRuntime()
+    runtime.register_backend(backend)
+    provider = _mcp_provider()
+
+    relisted: list[str] = []
+    catalog = dict(client._catalog)
+    client._catalog.clear()
+
+    async def ensure_listed(remote_name):
+        relisted.append(remote_name)
+        client._catalog.update(catalog)
+        return True
+
+    client.ensure_listed = ensure_listed
+    assert runtime.is_live(provider) is False
+    assert asyncio.run(runtime.ensure_live(provider)) is True
+    assert relisted == ["search"]
+    assert asyncio.run(runtime.ensure_live(provider)) is True
+    assert relisted == ["search"], "a live provider is not re-listed"
+
+    plain = ProviderRuntime()
+    plain.register_backend(AstrbotToolBackend())
+    assert asyncio.run(plain.ensure_live(_astrbot_provider("absent"))) is False

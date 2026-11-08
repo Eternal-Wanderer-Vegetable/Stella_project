@@ -76,6 +76,16 @@ class McpBackend:
             return False
         return client.config.tool_allowed(provider.remote_tool_name)
 
+    async def ensure_live(self, provider: CapabilityProvider) -> bool:
+        """工具不在目录里时请客户端重新列出一次（目录可能因 Server/Host 重启而过时）。"""
+        if self.is_live(provider):
+            return True
+        client = self._client(provider)
+        if client is None:
+            return False
+        await client.ensure_listed(provider.remote_tool_name)
+        return self.is_live(provider)
+
     def status(self, provider: CapabilityProvider) -> dict[str, Any]:
         """Provider 视角的脱敏状态（inventory 快照用，方案 §7.9 的字段面）。"""
         client = self._client(provider)

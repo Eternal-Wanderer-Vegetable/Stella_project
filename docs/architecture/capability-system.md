@@ -267,7 +267,9 @@ Result(status, data, summary, metadata)
 
 **知识库原生 provider**：`knowledge.search` 以原生能力注册（`capability/adapters/knowledge.py`），只配 Level 1 语料、**刻意不给 L0 关键词**——「查一下」这类词没有专属性，字面命中会把普通对话误伤成强制检索。检索结果不走工具摘要那条轨：作为结构化证据落进 `ChatContext.knowledge_evidence`（与聊天上下文、工具摘要三轨分离，见 [知识库](knowledge-base.md)），先过证据专属预算（`core/context_budget.py::fit_evidence_to_budget`，条数 + token 双上限），再渲染成带编号引用的 prompt 段落（`core/runtime/turn_service.py::_knowledge_evidence_section`），Stella 回答时可以标注出处。
 
-**确定性无模型执行**：能力声明可带 `input_schema`（`capability/loader.py` 载入，`capability/input_parser.py` 做确定性抽取与校验，无模型兜底）。当路由判定为确定性（`Route.deterministic`）、能力解析到唯一的 provider/工具、且必填输入校验通过时，Comes 可以**不经生成模型**直接调工具，摘要由工具原文构造；输入缺失或歧义、又没有可用的生成模型时，返回 `needs_clarification` 而不是编参数。这条路径与 LLM 工具循环互补：模型可用时仍走受限 agent。
+**确定性无模型执行**：能力声明可带 `input_schema`（`capability/loader.py` 载入，`capability/input_parser.py` 做确定性抽取与校验，无模型兜底）。当路由判定为确定性（`Route.deterministic`）、能力解析到唯一的 provider/工具、必填输入校验通过、且工具 schema 里**没有空着的可选参数**时，Comes 可以**不经生成模型**直接调工具，摘要由工具原文构造；输入缺失或歧义、又没有可用的生成模型时，返回 `needs_clarification` 而不是编参数。这条路径与 LLM 工具循环互补：模型可用时仍走受限 agent。只剩可选参数空着（如 `nickname: str = ""`）时交给受限 agent 填参——关键词命中只决定调哪个工具，`input_schema` 抽不到的值仍在用户原话里；没有可用模型时才退回直调，让工具按默认值执行。
+
+**直回文本**（`direct_reply`）：不经生成的能力路由直接把 Comes 结果作为回复。缺省（`"summary"`）用受限 agent 的摘要；声明 `direct_reply = "tool_output"` 时改用工具输出原文（跳过错误输出，全部失败时仍按原规则回落）。插件命令这类本身就写给用户看的回复适合后者：小模型转述可能改错数字（实测把「两颗骰子合计 2」说成「各掷出 2」）。只影响直回，不影响生成路径；无效取值按 `summary` 处理并记 warning。
 
 **Skills 层**：Skills 运行时（`SKILLS_ENABLED`，默认 `false`）在 `bot.py::_bootstrap_capabilities` 里装配——插件能力准备之后、Router 预热之前。设计与用法见 [skills.md](../guides/skills.md)，此处不展开。
 

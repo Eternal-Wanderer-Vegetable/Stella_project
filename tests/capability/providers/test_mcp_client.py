@@ -313,3 +313,172 @@ def test_http_auth_env_present_builds_bearer_header(http_config, monkeypatch):
     assert headers == {"Authorization": "Bearer super-secret-token"}
     # 状态面永远不出现值
     assert "super-secret-token" not in str(client.status_dict())
+
+
+# ---------- 协议错误与会话属主任务（2026-11-08 联调回归） ----------
+
+
+class McpError(Exception):
+    """与 MCP SDK 的 ``mcp.shared.exceptions.McpError`` 同名：Server 回了 JSON-RPC error。"""
+
+
+async def test_protocol_error_is_a_tool_error_and_keeps_the_session(stdio_config, session_factory):
+    """参数不合 schema 时 Server 回 JSON-RPC error：连接完好，不能拆会话。"""
+    session_factory.session.add_tool("search")
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+    session_factory.session.scripted["search"] = McpError("unexpected argument field: dice")
+
+    with pytest.raises(McpToolError, match="unexpected argument field"):
+        await client.call_tool("search", {"dice": "2d6"})
+    assert client.status.state == SERVER_READY
+    assert session_factory.session.close_calls == 0
+
+    session_factory.session.scripted.pop("search")
+    assert await client.call_tool("search", {"q": "x"}) == "ok"
+    assert len(session_factory.sessions) == 1
+    await client.close()
+
+
+async def test_session_context_is_entered_and_exited_in_one_owner_task(stdio_config):
+    """会话上下文由专属任务进出。从别的任务拆会话（调用时传输出错）不能把取消打到
+    启动客户端的任务上——Bot 进程里那是 NoneBot 的 lifespan 任务，被取消会触发停机钩子。
+    """
+    from contextlib import asynccontextmanager
+
+    import anyio
+
+    from tests.capability.providers.conftest import FakeSession
+
+    session = FakeSession()
+    session.add_tool("search")
+    tasks: dict[str, list] = {"enter": [], "exit": []}
+
+    @asynccontextmanager
+    async def factory(config):
+        # 与 SDK 传输一样持有一个 anyio task group（cancel scope 绑定进入它的任务）
+        async with anyio.create_task_group() as tg:
+            tasks["enter"].append(asyncio.current_task())
+            try:
+                yield session
+            finally:
+                tasks["exit"].append(asyncio.current_task())
+                tg.cancel_scope.cancel()
+
+    client = McpServerClient(stdio_config, session_factory=factory)
+    started = asyncio.Event()
+    stop = asyncio.Event()
+    outcome: list[str] = []
+
+    async def lifespan():
+        try:
+            await client.start()
+            started.set()
+            await stop.wait()
+            outcome.append("ended normally")
+        except asyncio.CancelledError:
+            outcome.append("cancelled")
+            raise
+
+    host = asyncio.create_task(lifespan())
+    await started.wait()
+    assert client.status.state == SERVER_READY
+
+    session.scripted["search"] = RuntimeError("transport broke")
+    with pytest.raises(McpClientError, match="连接中断"):
+        await asyncio.create_task(client.call_tool("search", {}))
+    await asyncio.sleep(0.05)
+
+    assert not host.done(), f"host task was cancelled: {outcome}"
+    assert tasks["enter"] and tasks["exit"]
+    assert tasks["enter"][0] is tasks["exit"][0], "session context must exit in the task that entered it"
+    assert tasks["enter"][0] is not host
+
+    session.scripted.pop("search")
+    assert await wait_for(lambda: client.status.state == SERVER_READY), client.status
+    stop.set()
+    await host
+    assert outcome == ["ended normally"]
+    await client.close()
+
+
+def _session_terminated() -> McpError:
+    """SDK 收到 404 时合成的错误：``McpError(ErrorData(code=32600, "Session terminated"))``。"""
+    error = McpError("Session terminated")
+    error.error = SimpleNamespace(code=32600, message="Session terminated")
+    return error
+
+
+async def test_terminated_session_is_renewed_and_the_call_retried_once(stdio_config, session_factory):
+    """Server 空闲超时关掉会话后，下一次调用重建会话并重试一次，调用方无感。"""
+    session_factory.session.add_tool("search")
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+    original_call = session_factory.session.call_tool
+    failures = [_session_terminated()]
+
+    async def call_tool(name, arguments):
+        if failures:
+            raise failures.pop()
+        return await original_call(name, arguments)
+
+    session_factory.session.call_tool = call_tool
+    assert await client.call_tool("search", {"q": "x"}) == "ok"
+    assert len(session_factory.sessions) == 2, "a fresh session was initialized"
+    assert session_factory.session.close_calls == 1, "the terminated session was closed"
+    assert client.status.state == SERVER_READY
+    await client.close()
+
+
+async def test_terminated_session_is_not_retried_forever(stdio_config, session_factory):
+    session_factory.session.add_tool("search")
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+
+    async def call_tool(name, arguments):
+        raise _session_terminated()
+
+    session_factory.session.call_tool = call_tool
+    with pytest.raises(McpClientError, match="会话已终止"):
+        await client.call_tool("search", {})
+    assert len(session_factory.sessions) == 2
+    await client.close()
+
+
+async def test_stale_catalog_is_refreshed_once_before_reporting_a_missing_tool(stdio_config, session_factory):
+    """回归（2026-11-08 QQ 实测）：Host 重启时目录被清空，旧会话随后失效、收不到目录变化；
+    客户端只查本地目录就一直报“不在目录里”，永远不会去重建会话。"""
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+    assert client.tool("search") is None
+    session_factory.session.add_tool("search")  # Server 侧已恢复，本地目录仍是旧的
+
+    assert await client.call_tool("search", {"q": "x"}) == "ok"
+    assert len(session_factory.sessions) == 2, "the session was renewed to re-list tools"
+
+    # 真不存在的工具：重建一次后如实报告，不无限重试
+    with pytest.raises(McpClientError, match="不在"):
+        await client.call_tool("nope", {})
+    assert len(session_factory.sessions) == 3
+    await client.close()
+
+
+async def test_ensure_listed_relists_a_stale_catalog_and_is_rate_limited(stdio_config, session_factory):
+    """回归（2026-11-08 QQ 重启轮）：Comes 在调用前按本地目录判定工具不可用，根本走不到
+    call_tool；执行前的 ensure_listed 让过时目录恢复，但真不存在的工具不会每条消息都重连。"""
+    client = McpServerClient(stdio_config, session_factory=session_factory)
+    await _start(client)
+    session_factory.session.add_tool("search")  # Server 侧已恢复，本地目录仍是旧的
+
+    assert await client.ensure_listed("search") is True
+    assert client.tool("search") is not None
+    assert len(session_factory.sessions) == 2
+
+    assert await client.ensure_listed("search") is True, "listed tools never reconnect"
+    assert await client.ensure_listed("nope") is False
+    assert len(session_factory.sessions) == 2, "the interval is per server: a relist just happened"
+    client._last_relist_at = float("-inf")  # the interval has passed
+    assert await client.ensure_listed("nope") is False
+    assert await client.ensure_listed("nope") is False
+    assert len(session_factory.sessions) == 3, "a missing tool triggers at most one renewal per interval"
+    await client.close()
