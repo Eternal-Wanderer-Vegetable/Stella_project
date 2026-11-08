@@ -246,6 +246,7 @@ def snapshot(
                 "domain": cap.domain,
                 "source": cap.source,
                 "route_enabled": cap.route_enabled,
+                "direct_reply": cap.direct_reply,
                 "routable": cap.id in routable_ids,
                 "auto": cap.is_auto,
                 "examples": len(cap.examples),
