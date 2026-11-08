@@ -8,7 +8,7 @@
   "edges": 151,
   "explicit_boundaries": 19,
   "lanes": 14,
-  "reachable_symbols": 14912,
+  "reachable_symbols": 14918,
   "reachable_truncated_nodes": [],
   "source_resolved": 142,
   "total_nodes": 144,
@@ -6582,6 +6582,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "c62543fbb64831f7",
+     "file": "capability/comes/executor.py",
+     "qualname": "_plugin_generation_available",
+     "resolution": "local"
+    },
+    {
      "body_hash": "a030eb010bf8e631",
      "file": "capability/comes/executor.py",
      "qualname": "_record_health",
@@ -6624,13 +6630,13 @@
      "resolution": "local"
     },
     {
-     "body_hash": "8ab207cb983d700c",
+     "body_hash": "a974621e77ae0fe6",
      "file": "capability/comes/executor.py",
      "qualname": "can_direct_call",
      "resolution": "local"
     },
     {
-     "body_hash": "af2eb3e7ad0599b2",
+     "body_hash": "3a0239bf59917859",
      "file": "capability/comes/executor.py",
      "qualname": "execute",
      "resolution": "local"
@@ -9018,6 +9024,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "c62543fbb64831f7",
+     "file": "capability/comes/executor.py",
+     "qualname": "_plugin_generation_available",
+     "resolution": "local"
+    },
+    {
      "body_hash": "a030eb010bf8e631",
      "file": "capability/comes/executor.py",
      "qualname": "_record_health",
@@ -9060,13 +9072,13 @@
      "resolution": "local"
     },
     {
-     "body_hash": "8ab207cb983d700c",
+     "body_hash": "a974621e77ae0fe6",
      "file": "capability/comes/executor.py",
      "qualname": "can_direct_call",
      "resolution": "local"
     },
     {
-     "body_hash": "af2eb3e7ad0599b2",
+     "body_hash": "3a0239bf59917859",
      "file": "capability/comes/executor.py",
      "qualname": "execute",
      "resolution": "local"
@@ -11454,6 +11466,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "c62543fbb64831f7",
+     "file": "capability/comes/executor.py",
+     "qualname": "_plugin_generation_available",
+     "resolution": "local"
+    },
+    {
      "body_hash": "a030eb010bf8e631",
      "file": "capability/comes/executor.py",
      "qualname": "_record_health",
@@ -11496,13 +11514,13 @@
      "resolution": "local"
     },
     {
-     "body_hash": "8ab207cb983d700c",
+     "body_hash": "a974621e77ae0fe6",
      "file": "capability/comes/executor.py",
      "qualname": "can_direct_call",
      "resolution": "local"
     },
     {
-     "body_hash": "af2eb3e7ad0599b2",
+     "body_hash": "3a0239bf59917859",
      "file": "capability/comes/executor.py",
      "qualname": "execute",
      "resolution": "local"
@@ -43795,6 +43813,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "c62543fbb64831f7",
+     "file": "capability/comes/executor.py",
+     "qualname": "_plugin_generation_available",
+     "resolution": "local"
+    },
+    {
      "body_hash": "a030eb010bf8e631",
      "file": "capability/comes/executor.py",
      "qualname": "_record_health",
@@ -43837,13 +43861,13 @@
      "resolution": "local"
     },
     {
-     "body_hash": "8ab207cb983d700c",
+     "body_hash": "a974621e77ae0fe6",
      "file": "capability/comes/executor.py",
      "qualname": "can_direct_call",
      "resolution": "local"
     },
     {
-     "body_hash": "af2eb3e7ad0599b2",
+     "body_hash": "3a0239bf59917859",
      "file": "capability/comes/executor.py",
      "qualname": "execute",
      "resolution": "local"
@@ -44292,6 +44316,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "c62543fbb64831f7",
+     "file": "capability/comes/executor.py",
+     "qualname": "_plugin_generation_available",
+     "resolution": "local"
+    },
+    {
      "body_hash": "a030eb010bf8e631",
      "file": "capability/comes/executor.py",
      "qualname": "_record_health",
@@ -44334,13 +44364,13 @@
      "resolution": "local"
     },
     {
-     "body_hash": "8ab207cb983d700c",
+     "body_hash": "a974621e77ae0fe6",
      "file": "capability/comes/executor.py",
      "qualname": "can_direct_call",
      "resolution": "local"
     },
     {
-     "body_hash": "af2eb3e7ad0599b2",
+     "body_hash": "3a0239bf59917859",
      "file": "capability/comes/executor.py",
      "qualname": "execute",
      "resolution": "local"
@@ -44772,6 +44802,12 @@
      "resolution": "local"
     },
     {
+     "body_hash": "c62543fbb64831f7",
+     "file": "capability/comes/executor.py",
+     "qualname": "_plugin_generation_available",
+     "resolution": "local"
+    },
+    {
      "body_hash": "a030eb010bf8e631",
      "file": "capability/comes/executor.py",
      "qualname": "_record_health",
@@ -44814,13 +44850,13 @@
      "resolution": "local"
     },
     {
-     "body_hash": "8ab207cb983d700c",
+     "body_hash": "a974621e77ae0fe6",
      "file": "capability/comes/executor.py",
      "qualname": "can_direct_call",
      "resolution": "local"
     },
     {
-     "body_hash": "af2eb3e7ad0599b2",
+     "body_hash": "3a0239bf59917859",
      "file": "capability/comes/executor.py",
      "qualname": "execute",
      "resolution": "local"
@@ -159027,6 +159063,6 @@
    "reachable_truncated": false
   }
  },
- "source_revision": "e4a16ef3ed4e352c403b9097dda48645e2217f19",
+ "source_revision": "3de22b1520a105f853af8490d5cb9baa888fd7af",
  "topology_version": "2026.10.21"
 }

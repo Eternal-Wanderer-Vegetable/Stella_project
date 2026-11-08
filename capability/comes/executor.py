@@ -180,18 +180,28 @@ def can_direct_call(tool_set: Any, task: Task | None = None) -> bool:
     编出多余参数或干脆不调。
 
     只看必填不够：参数全为可选的工具（如 ``nickname: str = ""``）若被直调，会以空
-    参数执行，用户原话里的值就丢了。确定性路由（``deterministic_route``）的槽位已
-    由路由器抽取完毕，仍只要求必填参数齐全。
+    参数执行，用户原话里的值就丢了。确定性路由（``deterministic_route``）同样如此：
+    关键词命中只说明「该调哪个工具」，``parse_input`` 抽不到的可选值仍在用户原话里，
+    因此也要求必填参数齐全且没有空着的可选参数；没有可用模型时由执行器退回直调。
     """
     if len(tool_set.tools) != 1:
         return False
     tool = tool_set.tools[0]
     deterministic = bool((task.constraints if task else {}).get("deterministic_route"))
     if deterministic:
-        return not _missing_required_params(task, tool)
+        return not _missing_required_params(task, tool) and not _unfilled_params(task, tool)
     if _required_params(tool):
         return False
     return not _unfilled_params(task, tool)
+
+
+def _plugin_generation_available() -> bool:
+    try:
+        from astrbot_compat.llm.manager import get_provider_manager
+
+        return bool(get_provider_manager().availability("plugin").available)
+    except Exception:
+        return False
 
 
 # ============================================================
@@ -415,6 +425,20 @@ async def execute(
                 )
             completion, outputs = await asyncio.wait_for(
                 _agent_call(task, tool_set, event, _session_of(event)),
+                timeout=s.COMES_TASK_TIMEOUT,
+            )
+        elif (
+            deterministic_route
+            and s.COMES_DIRECT_CALL_NO_ARGS
+            and not direct_missing
+            and not _plugin_generation_available()
+        ):
+            # 必填齐全、只剩可选参数空着，且没有可用模型：退回直调（与修复前一致），
+            # 让工具按自己的默认值执行，而不是整条失败
+            used_direct = True
+            completion = ""
+            outputs = await asyncio.wait_for(
+                _direct_call(task, tool_set.tools[0], event, s.COMES_TOOL_TIMEOUT),
                 timeout=s.COMES_TASK_TIMEOUT,
             )
         else:

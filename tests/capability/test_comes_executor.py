@@ -147,9 +147,11 @@ def test_can_direct_call_refuses_tools_whose_parameters_are_all_optional():
     )
     assert can_direct_call(ToolSet(tools=[optional])) is False
     assert can_direct_call(ToolSet(tools=[optional]), _task(input={"nickname": "测试员"})) is True
-    # 确定性路由的槽位由路由器抽取，仍只看必填参数
+    # 确定性路由（关键词命中）同样不能丢掉原话里的可选值
     deterministic = _task(constraints={"deterministic_route": True})
-    assert can_direct_call(ToolSet(tools=[optional]), deterministic) is True
+    assert can_direct_call(ToolSet(tools=[optional]), deterministic) is False
+    filled = _task(input={"nickname": "测试员"}, constraints={"deterministic_route": True})
+    assert can_direct_call(ToolSet(tools=[optional]), filled) is True
 
 
 # ---------- 早退路径 ----------
@@ -760,6 +762,44 @@ def test_mcp_tool_with_only_optional_params_goes_through_the_model(astr_event, f
     result = _run(execute(_task("web.search", "把我的昵称设置成 测试员"), event=astr_event, target=reg))
     assert result.metadata["direct_call"] is False
     assert session.calls == [("search", {"nickname": "测试员"})]
+
+
+def test_deterministic_route_with_optional_params_uses_the_model(astr_event, fake_llm):
+    """关键词路由命中「组队昵称」：nickname 可选、parse_input 抽不到，交给模型填参。
+
+    回归：2026-11-08 QQ 实测中确定性路由仍按「无必填」直调，插件只回用法说明。
+    """
+    reg, session, client = _wire_mcp_runtime(required=[])
+    client._apply_catalog([("search", "set nickname", {
+        "type": "object",
+        "properties": {"arguments": {"type": "string"}, "nickname": {"type": "string"}},
+    })])
+    fake_llm.default_text = "已设置。"
+    fake_llm.push_tool_call("mcp_brave_search", '{"nickname": "测试员A"}')
+    task = _task("web.search", "把我的组队昵称设置成 测试员A",
+                 constraints={"deterministic_route": True, "input_status": "complete"})
+
+    result = _run(execute(task, event=astr_event, target=reg))
+    assert result.metadata["direct_call"] is False
+    assert session.calls == [("search", {"nickname": "测试员A"})]
+
+
+def test_deterministic_route_with_optional_params_direct_calls_without_a_model(monkeypatch, astr_event):
+    """没有可用模型时退回直调（与修复前一致），工具按默认值执行而不是整条失败。"""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ASTRBOT_LLM_ENABLED", False)
+    reg, session, client = _wire_mcp_runtime(required=[])
+    client._apply_catalog([("search", "set nickname", {
+        "type": "object",
+        "properties": {"nickname": {"type": "string"}},
+    })])
+    task = _task("web.search", "把我的组队昵称设置成 测试员A",
+                 constraints={"deterministic_route": True, "input_status": "complete"})
+
+    result = _run(execute(task, event=astr_event, target=reg))
+    assert result.metadata["direct_call"] is True
+    assert session.calls == [("search", {})]
 
 
 def test_mcp_tool_direct_call_without_model(astr_event):
