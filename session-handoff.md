@@ -1,4 +1,13 @@
-## Current Handoff — proactive / memory benchmark B03 (2026-11-04)
+## Current Handoff — proactive / memory benchmark B04 (2026-11-11)
+
+- Current Objective：B04 双轨记忆评测已完成（10/10 LoCoMo 场景 × 受控/生产等价两轨，生产引擎 Strata qwen3.8-flash-next-iq2_xs@8081）。整体行为效果仍 NOT READY。下一步按依赖进入 B05：MemUse/ChMap、`proactive_eval` 联合条件与内容评分、T3/guard 单变量配对（不得无批准重写生产 prompt）。
+- Files：`memory_eval/b04.py`、`b04_ingress.py`、`b04_lineage.py`、`llm.py`（reasoning_effort）、`memory_eval/schemas/memory-eval-report-2.schema.json`、`tests/evaluation/test_proactive_b04.py`、`tests/evaluation/proactive_plugin_fixtures.py`、[B04 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b04.md)，以及计划/progress/feature 状态。
+- Verification Evidence：主运行（1600 预算）10/10×2 轨 MEASURED_IN_SCOPE、0 errors、919 调用（consolidation 604/extract 177/probe 118/QA 20）、8,748 s、schema PASS、SHA `f93a3086e6e5e4e6fe9b9c4a1fc677c3cea5aeeef8a1c2a77efa4b78727e4230`；首轮 800 预算 conv-50 生产轨 fail-closed 留档 SHA `68fe16b4...`。关键基线：828 候选全 OBSERVING、0 晋升、memories 0、检索空；consolidation 71%/extract 99% 在 1200 token 上限截断；QA answerable≈0、adversarial 弃答对。B04 定向 13 passed、tests/evaluation 70 passed、Ruff、docs 127/1362/577/0。真实 QQ/WebChat、生产数据/配置、clean VM 未运行。
+- Recovery Notes：复跑命令与两轮预算差异见报告「验证命令」；预算进 fingerprint，改预算必须换 workdir。若 Strata 未启动：`E:\Strata\START-HERE.bat`（生产引擎，8081）；LM Studio 1234 只挂 embedding，B04 mode=rule 不需要。本机 python 3.14 第三方包在用户 site，`PYTHONNOUSERSITE=1` 子进程只能 import stdlib-only 模块（插件 spec 必须指向 `tests.evaluation.proactive_plugin_fixtures`）。
+- Blockers：B00 embedding/hybrid 与新 LoCoMo judge 未运行；B06 标注人员/排期未定；B08 未获明确 scope 授权（目标/同意/模型/窗口/回滚均未指定）；本分支 evidence contract 仍两族（MEMWRT-001 四族扩展在独立分支），晋升门基线即 0 晋升——B05 前不要把 0 晋升当作回归。
+- Preserve：不要触碰既有无关未跟踪 `.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`、`docs/reports/2026-11-07-capability-tool-reply-delivery-rejected.md`。
+
+## Previous Handoff — proactive / memory benchmark B03 (2026-11-04)
 
 - Current Objective：B03 已完成并推送到 `codex/proactive-memory-benchmark-implementation`，提交 `152e7e6bdb25d463865a445a349781ccc0514d45`；PR #130 双语评测评论 ID `6630358374`。整体行为效果仍 NOT READY。下一步按 B04 执行记忆双摄入、lineage、batch/capture、LoCoMo/PersonaMem 复跑及写侧更新/撤回/过期矩阵。
 - Files：`proactive_eval/b03.py`、`pitch_windows.py`、`virtual_time.py`、`schemas/pitch-window-audit-1.schema.json`、两份定向测试、[B03 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b03.md)，以及计划/progress/feature 状态。
