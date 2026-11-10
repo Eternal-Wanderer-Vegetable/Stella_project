@@ -24,15 +24,6 @@ from proactive_eval.report import validate_proactive_report, write_proactive_rep
 from proactive_eval.runner import run_actor_stage, score_actor_outputs
 
 
-def _subprocess_fixture_actor(scenario: dict) -> dict:
-    assert "source_label" not in scenario
-    return {"predictions": {event["event_id"]: "SPEAK" for event in scenario["events"]}}
-
-
-def _subprocess_fixture_scorer(gold: dict, actor_output: dict) -> dict:
-    return {"correct": actor_output["predictions"][gold["event_id"]] == gold["source_label"]}
-
-
 def _scenario(scenario_id: str, episode_id: str = "episode-1", split: str = "test") -> dict:
     return {
         "schema": "stella-proactive-scenario/1",
@@ -223,11 +214,11 @@ def test_actor_and_scorer_plugins_run_in_separate_processes(tmp_path: Path):
     home.mkdir()
 
     with PluginProcess(
-        "actor", "tests.evaluation.test_proactive_eval_contracts:_subprocess_fixture_actor", home
+        "actor", "tests.evaluation.proactive_plugin_fixtures:_subprocess_fixture_actor", home
     ) as actor:
         output = actor.call({"scenario": scenario})
     with PluginProcess(
-        "scorer", "tests.evaluation.test_proactive_eval_contracts:_subprocess_fixture_scorer", home
+        "scorer", "tests.evaluation.proactive_plugin_fixtures:_subprocess_fixture_scorer", home
     ) as scorer:
         result = scorer.call({"gold": gold, "actor_output": output})
 

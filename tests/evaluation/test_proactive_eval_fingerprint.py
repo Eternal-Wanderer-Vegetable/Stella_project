@@ -64,19 +64,6 @@ def _gold() -> dict:
     }
 
 
-def _actor(scenario: dict) -> dict:
-    return {"predictions": {scenario["events"][-1]["event_id"]: "SPEAK"}}
-
-
-def _different_actor(scenario: dict) -> dict:
-    raise AssertionError(f"replacement actor must not run during resume: {scenario['scenario_id']}")
-
-
-def _scorer(gold: dict, actor_output: dict) -> dict:
-    prediction = actor_output["predictions"][gold["event_id"]]
-    return {"correct": prediction == gold["source_label"]}
-
-
 def _write_jsonl(path: Path, rows: list[dict]) -> str:
     path.write_text(
         "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
@@ -106,15 +93,15 @@ def test_cli_resume_rejects_a_different_actor_plugin(tmp_path: Path, monkeypatch
         "--expected-gold-sha256", gold_hash,
         "--run-dir", str(tmp_path / "run"),
         "--isolated-home", str(tmp_path / "isolated-home"),
-        "--actor", "tests.evaluation.test_proactive_eval_fingerprint:_actor",
-        "--scorer", "tests.evaluation.test_proactive_eval_fingerprint:_scorer",
+        "--actor", "tests.evaluation.proactive_plugin_fixtures:_actor",
+        "--scorer", "tests.evaluation.proactive_plugin_fixtures:_scorer",
     ]
 
     assert proactive_eval_main(args) == 0
     capsys.readouterr()
 
     args[args.index("--actor") + 1] = (
-        "tests.evaluation.test_proactive_eval_fingerprint:_different_actor"
+        "tests.evaluation.proactive_plugin_fixtures:_different_actor"
     )
     args.append("--resume")
     assert proactive_eval_main(args) == 2
