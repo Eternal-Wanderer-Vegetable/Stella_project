@@ -2435,7 +2435,7 @@
         },
         {
           "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
-          "result": "Full pairing expansion checkpoint: isolated workdir /tmp/stella-pr130-b05-pairing-qwen38-72pairs; after two 200-call budget rounds, 212/216 condition rows are checkpointed (T0 71/72, T3 71/72, T0_GUARD 70/72). Both reports are PARTIAL_BUDGET, SHA-256 56a21c86e2dc990dfd4c0f5830eb314749fdd791bc38654b61cc7ce36e3a2eaa and 28a5af90a329aab8bda06a65f4ab13c5d13bb9d9086554162b23e851ce3bb355. A third resume failed during model preflight because 127.0.0.1:8081 was unavailable and made no model calls. Resume with the identical fingerprint when the endpoint is restored; this partial is not full-sample evidence and benchmark remains NOT READY."
+          "result": "Full pairing expansion completed in isolated workdir /tmp/stella-pr130-b05-pairing-qwen38-72pairs after the endpoint was restored. Final report status MEASURED_IN_SCOPE / COMPLETE, 216 condition rows, 0 errors, no truncations; final report SHA-256 6a5a891725c0242e96de46730203db804750f571505721f9411c1b907160e938. Total 409 completions (reply 243 / judge 166). Correct verdict: T0 18/72, T3 15/72, T0_GUARD 11/72; unscored: 17, 17, 16. Paired deltas use 55 scoreable items across 20 clusters: T3-T0 -0.0545, 95% CI [-0.1321, 0.0192]; guard-T0 -0.1273, CI [-0.2000, -0.0435]. Two PARTIAL_BUDGET reports caused by the temporary outage remain preserved with their hashes in the B05 report. Full B05, B06/B08 and product acceptance remain NOT READY."
         }
       ]
     }
