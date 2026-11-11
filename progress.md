@@ -1,6 +1,6 @@
 ## 2026-11-11 — 主动参与与记忆 Benchmark B05
 
-- Scope / Current State：继续 PR #130 的 B05 包：MemUse/ChMap 自然记忆使用、检索排名与 pack 边界、T3/guard 配对。B05 runner 与离线 rank/boundary 完成；模型任务、总体产品效果仍 NOT READY，`AOEDE-MNEME-BENCH-IMPL` 继续为唯一 `in_progress` feature。
+- Scope / Current State：PR #130 的 B05 包（MemUse/ChMap 自然记忆使用、检索排名、pack 边界、T3/guard 配对）已实现并推送，提交 `09cf14d62cf9131ac15f98b1cd66e4f8b8892390`；双语 PR 评论 `6792553536`。离线 rank/boundary 完成；模型任务、总体产品效果仍 NOT READY，`AOEDE-MNEME-BENCH-IMPL` 继续为唯一 `in_progress` feature。
 - What's Done：完成 `proactive_eval/b05.py` runner、数据适配/配对 bootstrap、模型与 embedding 显式配置和 `/models` ID 预检、isolated `STELLA_HOME`/续跑指纹、结构化 schema 报告和原子写入；按 MemUse actor user ID 限定生产检索，pairing 不向 actor 传 scorer gold；B05 reply/judge memory/data 输入提示隔离。未改生产 retrieval、prompt renderer、FTS 写入器。
 - Evaluation：离线运行 `rank,boundary`，报告 `MEASURED_IN_SCOPE` 仅对应这两项，JSON schema PASS / SHA `b465421aa511b9059cb8312c2a6f83ebb3584fee363bc68d05d246ad6a3e505a`。ChMap topic_rank 149 条（113 可评分，36 gold 缺候选）：rule/FTS MRR 0.1230/0.1301；MemUse 每通道 72 个正例边界检查，M3/M4/M5/重复 pack 违规 0。运行 28.961 秒、模型/embedding 调用 0，隔离工作区 `/tmp/stella-pr130-b05-offline-final`。
 - Verification：B05 + memory_eval 定向 21 passed；全量 `pytest tests -q` 4,399 passed / 34 skipped / 3 warnings（2 FastAPI 重复 Operation ID、1 pytest fixture 弃用），412.92 秒；Ruff PASS；`python3 scripts/check_docs.py` 127 files / 1,365 links / 577 anchors / 0 errors；`git diff --check` PASS。模型任务未运行。
