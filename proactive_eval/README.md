@@ -45,6 +45,22 @@ python -m proactive_eval.b03
 
 The ignored output is written to `memory/benchmark/_public/proactive_eval/runs/B03/pitch-window-audit.json`. It preserves all 384 candidate IDs and timing outcomes, reports intersection, union, within-group, and `do_not_surface` views, and never sends candidate text or window labels to an actor. Synthetic seconds exercise debounce/TTL ordering only; they are not converted into PITCH elapsed-time labels. The run records the effective debounce, TTL, cooldown, and verification-window constants.
 
+## B05 MemUse / ChMap memory-use benchmark
+
+Raw public files are read from the gitignored `memory/benchmark/_public/proactive_eval/raw/` cache and verified against `dataset-registry.json`. Keep `--workdir` outside the checkout; it contains the isolated `STELLA_HOME`, SQLite stores, checkpoints, and (by default) the report. The model-free retrieval and pack-boundary checks are:
+
+```powershell
+python -m proactive_eval.b05 `
+  --workdir D:\stella-runs\b05-offline `
+  --tasks rank,boundary `
+  --rank-channels rule,fts `
+  --max-runtime-seconds 1800
+```
+
+`rank` evaluates ChMap topic ranking. `boundary` checks MemUse M3 archived/expired, M4 scope/visibility, and M5 observing-candidate exclusion at the production retrieval boundary. Model tasks (`joint`, `pairing`, `m6`) require explicit `--channel`, `--llm-base-url` ending in `/v1`, and `--llm-model`; no historical endpoint or model is selected automatically. `embedding` and `hybrid` also require an explicit embedding endpoint without a `/v1` suffix and an embedding model. `m6` additionally requires explicit `--memory-base-url` and `--memory-model`. A metadata-only `/models` request validates the requested IDs before any model task starts. Set bounded `--max-calls` and `--max-runtime-seconds`; `--resume` requires the exact fingerprint and the same workdir.
+
+The model tasks measure fixed-decision reply content: this branch's participation manager does not read memory content when deciding whether to speak. M1 is an oracle upper-bound condition; MS uses only that MemUse user's earlier-session summaries. These measurements do not certify product behavior or replace B06 blind review and B08 platform acceptance.
+
 ## Readiness
 
 B00 freezes the offline protocol and data fingerprints. It does not certify model behavior, real QQ/WebChat delivery, release payloads, or Windows installation. See the date-stamped B00 report and the task state in `progress.md` for the exact run evidence and remaining gates.

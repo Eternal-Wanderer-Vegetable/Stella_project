@@ -1,3 +1,13 @@
+## 2026-11-11 — 主动参与与记忆 Benchmark B05
+
+- Scope / Current State：继续 PR #130 的 B05 包：MemUse/ChMap 自然记忆使用、检索排名与 pack 边界、T3/guard 配对。B05 runner 与离线 rank/boundary 完成；模型任务、总体产品效果仍 NOT READY，`AOEDE-MNEME-BENCH-IMPL` 继续为唯一 `in_progress` feature。
+- What's Done：完成 `proactive_eval/b05.py` runner、数据适配/配对 bootstrap、模型与 embedding 显式配置和 `/models` ID 预检、isolated `STELLA_HOME`/续跑指纹、结构化 schema 报告和原子写入；按 MemUse actor user ID 限定生产检索，pairing 不向 actor 传 scorer gold；B05 reply/judge memory/data 输入提示隔离。未改生产 retrieval、prompt renderer、FTS 写入器。
+- Evaluation：离线运行 `rank,boundary`，报告 `MEASURED_IN_SCOPE` 仅对应这两项，JSON schema PASS / SHA `b465421aa511b9059cb8312c2a6f83ebb3584fee363bc68d05d246ad6a3e505a`。ChMap topic_rank 149 条（113 可评分，36 gold 缺候选）：rule/FTS MRR 0.1230/0.1301；MemUse 每通道 72 个正例边界检查，M3/M4/M5/重复 pack 违规 0。运行 28.961 秒、模型/embedding 调用 0，隔离工作区 `/tmp/stella-pr130-b05-offline-final`。
+- Verification：B05 + memory_eval 定向 21 passed；全量 `pytest tests -q` 4,399 passed / 34 skipped / 3 warnings（2 FastAPI 重复 Operation ID、1 pytest fixture 弃用），412.92 秒；Ruff PASS；`python3 scripts/check_docs.py` 127 files / 1,365 links / 577 anchors / 0 errors；`git diff --check` PASS。模型任务未运行。
+- GitNexus：pre-edit `run` LOW（通用调用点下界，存在未解析 receiver）；`answer_question` LOW（3 direct / 2 processes）；`_run_track` LOW；`retrieve_memories` CRITICAL（9 direct / 4 processes）、`retrieve_memories_emb` HIGH（4 / 2）、`build_v2_named_sections` CRITICAL（5 / 3）、`_upsert_fts_record` HIGH（4 / 1）。`compose_answer_prompt` 上游 HIGH（8 impacted / 1 direct / 2 processes，riskSharedAxes=LOW 未作豁免）；因此不改通用 helper，guard 留在 B05 本地 wrapper。其他高风险生产 helper 均只读未改。提交前 all：12 files / 151 symbols / 5 flows / MEDIUM；列出的流程均从 B05 `run` 进入数据校验/加载。compare main：累计 364 files / 3,278 symbols / 118 flows / CRITICAL，changed-symbol list capped，保留为本分支累计风险，不作豁免。索引在本轮起点刷新；entry candidate、callee、depth 有截断，图中零调用不等于未使用，源码与 `rg` 已补证。
+- Blockers / Next：`joint`、`pairing`、`m6` 尚需本轮明确的 reply/judge endpoint + model ID；`m6` 还需 memory endpoint + model ID，尚未发出任何真实模型请求。B06 人工盲评与 B08 平台准入未完成，整体验收保留 NOT READY。
+- Files：`proactive_eval/b05.py`、`b05_data.py`、`b05_prompts.py`、B05 report schema/使用说明、`memory_eval/answer.py` user-scoped retrieval 可选参数、B05 与 answer scope tests、B05 离线报告。保留既有无关未跟踪 `.claude/settings.local.json`、`.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`、`docs/reports/2026-11-07-capability-tool-reply-delivery-rejected.md`。
+
 ## 2026-11-11 — 主动参与与记忆 Benchmark B04
 
 - Scope / Current State：B04 双轨记忆评测完成并推送（`4d24a08` + `c022783`，PR #130 双语评论 `6779320449`）；`AOEDE-MNEME-BENCH-IMPL` 仍是唯一 `in_progress` feature；整体 benchmark 与产品效果仍 NOT READY。生产引擎 Strata（8081，qwen3.8-flash-next-iq2_xs）首次承载全链路写侧评测。

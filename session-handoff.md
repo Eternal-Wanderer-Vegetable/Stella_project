@@ -1,4 +1,13 @@
-## Current Handoff — proactive / memory benchmark B04 (2026-11-11)
+## Current Handoff — proactive / memory benchmark B05 (2026-11-11)
+
+- Current Objective：PR #130 继续进入 B05。runner、report contract、offline rank/boundary 已实现并实跑；仅这两项 `MEASURED_IN_SCOPE`，B05 真实模型任务及总体 benchmark 仍 NOT READY。B06 人工盲评、B08 平台验收仍在后续 scope。
+- Files：`proactive_eval/b05.py`、`b05_data.py`、`b05_prompts.py`、`proactive_eval/schemas/stella-proactive-b05-report-1.schema.json`、`proactive_eval/README.md`、`memory_eval/answer.py`（可选 user_id/memory_guard）、`tests/evaluation/test_proactive_b05.py`、`tests/test_memory_eval.py`、[B05 报告](docs/reports/2026-11-11-proactive-memory-benchmark-b05.md)、feature/progress 状态文件。
+- Verification Evidence：离线命令 `python -m proactive_eval.b05 --workdir /tmp/stella-pr130-b05-offline-final --tasks rank,boundary --rank-channels rule,fts --max-runtime-seconds 1800`：exit 0、28.961 s、298 rank rows / 144 boundary rows，报告 schema PASS / SHA `b465421aa511b9059cb8312c2a6f83ebb3584fee363bc68d05d246ad6a3e505a`。ChMap 149 items（113 scoreable、36 gold absent），MRR rule 0.1230 / FTS 0.1301；boundary 两通道均 0 violations。B05 + memory_eval targeted 21 passed；全量 Python 4,399 passed / 34 skipped / 3 warnings；Ruff PASS；docs 127/1365/577/0。GitNexus all 12 files / 151 symbols / 5 flows / MEDIUM；compare main cumulative 364 / 3,278 / 118 / CRITICAL（symbol list capped）。
+- Recovery Notes：运行工件只在 `/tmp/stella-pr130-b05-offline-final`，raw public data 仍为 gitignored cache。离线命令可复跑，但续跑指纹含 code/data/backend identity，换代码或数据请用新 workdir。`joint,pairing,m6` 需明确 `--llm-base-url .../v1 --llm-model ... --channel ...`；embedding/hybrid 还要 embedding endpoint/model，M6 另要 memory endpoint/model。不得使用 B04 历史模型身份自动推断。
+- Blockers：本轮没有显式模型/endpoint 配置，因此 joint natural reply、T0/T3/guard、M6 写侧 smoke 均 NOT RUN；没有任何真实模型请求。B06 标注人员/排期未定，B08 scope/目标/同意/模型/窗口/回滚未准入。功能代码完成不等于模型行为达标。
+- Preserve：不要触碰既有无关未跟踪 `.claude/settings.local.json`、`.zcode/plans/plan-session_336c42cadee7b4396161f4d29c54c8fa.md`、`debug.log`、`extensions/ligamina_bridge/`、`scripts/start_managed_stella.ps1`、`docs/reports/2026-11-07-capability-tool-reply-delivery-rejected.md`。
+
+## Previous Handoff — proactive / memory benchmark B04 (2026-11-11)
 
 - Current Objective：B04 双轨记忆评测已完成并推送到 `codex/proactive-memory-benchmark-implementation`，提交 `4d24a08`（+ 夹具修复 `c022783`）；PR #130 双语评测评论 ID `6779320449`。10/10 LoCoMo 场景 × 受控/生产等价两轨，生产引擎 Strata qwen3.8-flash-next-iq2_xs@8081。整体行为效果仍 NOT READY。下一步按依赖进入 B05：MemUse/ChMap、`proactive_eval` 联合条件与内容评分、T3/guard 单变量配对（不得无批准重写生产 prompt）。
 - Files：`memory_eval/b04.py`、`b04_ingress.py`、`b04_lineage.py`、`llm.py`（reasoning_effort）、`memory_eval/schemas/memory-eval-report-2.schema.json`、`tests/evaluation/test_proactive_b04.py`、`tests/evaluation/proactive_plugin_fixtures.py`、[B04 报告](docs/reports/2026-11-04-proactive-memory-benchmark-b04.md)，以及计划/progress/feature 状态。

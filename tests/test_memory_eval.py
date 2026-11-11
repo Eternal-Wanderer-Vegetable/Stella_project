@@ -309,6 +309,38 @@ async def test_answer_question_empty_pack(tmp_path, scenario):
         assert "未召回任何长期记忆" in llm.prompts[0]
 
 
+async def test_answer_question_scopes_retrieval_to_requested_user(tmp_path, scenario):
+    env = ReplayEnv(tmp_path / "env", scenario)
+    with env.session():
+        import sqlite3
+
+        from config.spaces import resolve_space
+
+        space = resolve_space(int(scenario["group_id"]))
+        conn = sqlite3.connect(env.db_path)
+        try:
+            conn.executemany(
+                "INSERT INTO memories (id, group_shared_space, user_id, type, content, "
+                "status, confidence, importance, visibility) VALUES "
+                "(?, ?, ?, 'FACT', ?, 'active', 0.9, 0.5, 'OPEN')",
+                [
+                    ("m1", space, "9190001", "Alice lives in Springfield"),
+                    ("m2", space, "9190002", "Alice lives in Shelbyville"),
+                ],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        llm = FakeLLM(["Alice lives in Springfield."])
+        record = await answer_question(
+            env, scenario, scenario["qa"][0], channel="rule", llm=llm,
+            user_id="9190001",
+        )
+        assert record["retrieved_ids"] == ["m1"]
+        assert "Shelbyville" not in llm.prompts[0]
+
+
 # ── judge / 抽样 / 指标 ───────────────────────────────────────
 
 

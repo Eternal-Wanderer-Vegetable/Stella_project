@@ -100,6 +100,7 @@ async def answer_question(
     strict: bool = False,
     pack_level: str = "T0",
     sufficiency_guard: bool = False,
+    user_id: str | int | None = None,
 ) -> dict[str, Any]:
     """``sufficiency_guard=True`` 为 MBENCH-004 P3 B3/B4：LLM 充分性验证器前置，
     INSUFFICIENT → 强制弃答（不调用作答模型）；AMBIGUOUS → strict 作答。"""
@@ -126,12 +127,12 @@ async def answer_question(
         retrieval_v2._CACHE.clear()
         if use_embedding:
             result = await retrieval_v2.retrieve_memories_emb(
-                space, None, qa["question"], trigger="reply", service=service,
+                space, user_id, qa["question"], trigger="reply", service=service,
                 mode=pack_mode,
             )
         else:
             result = retrieval_v2.retrieve_memories(
-                space, None, qa["question"], trigger="reply", mode=pack_mode
+                space, user_id, qa["question"], trigger="reply", mode=pack_mode
             )
     finally:
         retrieval_v2.RAG_ENABLED, retrieval_v2.MEMORY_V2_ENABLED = old
