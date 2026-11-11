@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-04",
-  "active_feature": "AOEDE-MNEME-IMPL",
+  "updated_at": "2026-11-11",
+  "active_feature": "AOEDE-MNEME-BENCH-IMPL",
   "features": [
     {
       "id": "XPLAT-PLAN",
@@ -2304,7 +2304,7 @@
       "id": "AOEDE-MNEME-IMPL",
       "name": "Aoede / Mneme 子系统拆分与主动发言改造实施",
       "description": "按 2026-11-03 计划两阶段实施：S1 行为等价拆分（aoede/mneme 包 + 兼容层 + 发布），S2 上下文优先参与、一次性求证持久生命周期与统一预算。",
-      "status": "in_progress",
+      "status": "blocked",
       "dependencies": [
         "AOEDE-MNEME-PLAN"
       ],
@@ -2343,7 +2343,111 @@
         },
         {
           "report": "https://github.com/Eternal-Wanderer-Vegetable/Stella_project/pull/129",
-          "result": "2026-11-04 Rust/Mneme binding and documentation audit: Python source, Rust contract constants, and local Windows memory_rust._native exports agree at backend API 4/schema 24; mneme.retrieval_v2 routes through memory_rust.selector and mneme.memory_manager owns promotion policy while delegating the bounded transaction. Focused selector/promotion/Mneme compatibility tests: 22 passed, 1 deprecation warning; scripts/validate_rust_fullchain.py passed on temporary databases with native retrieval smoke and Python/native promotion differ=false. Synchronized 7 bilingual documentation pairs and updated current source-contract references; python scripts/check_docs.py passed (127 files / 1358 local links / 577 anchors / 0 errors), git diff --check passed. Commit 1d6e62c was pushed; all 14 hosted CI checks passed and PR #129 was marked ready for review (open/unmerged). Release-payload/clean Windows VM, model/QQ rollout, and behavior-rubric acceptance remain NOT READY; feature stays in_progress."
+          "result": "2026-11-04 Rust/Mneme binding and documentation audit: Python source, Rust contract constants, and local Windows memory_rust._native exports agree at backend API 4/schema 24; mneme.retrieval_v2 routes through memory_rust.selector and mneme.memory_manager owns promotion policy while delegating the bounded transaction. Focused selector/promotion/Mneme compatibility tests: 22 passed, 1 deprecation warning; scripts/validate_rust_fullchain.py passed on temporary databases with native retrieval smoke and Python/native promotion differ=false. Synchronized 7 bilingual documentation pairs and updated current source-contract references; python scripts/check_docs.py passed (127 files / 1358 local links / 577 anchors / 0 errors), git diff --check passed. Commit 1d6e62c was pushed; all 14 hosted CI checks passed and PR #129 was marked ready for review (open/unmerged). Release-payload/clean Windows VM, model/QQ rollout, and behavior-rubric acceptance remain NOT READY; implementation follow-up is blocked while the proactive benchmark is the sole active feature."
+        }
+      ]
+    },
+    {
+      "id": "AOEDE-MNEME-BENCH-PLAN",
+      "name": "Stella 主动参与与记忆系统联合 Benchmark 全面规划",
+      "description": "根据分享资料、一手数据与当前源码，制定 Aoede、Mneme 与联合行为的可复现评测计划；仅规划与状态记录。",
+      "status": "done",
+      "dependencies": [
+        "AOEDE-MNEME-PLAN"
+      ],
+      "scope": [
+        "docs/plans/2026-11-04-proactive-memory-benchmark-plan.md",
+        "feature_list.json / progress.md / session-handoff.md"
+      ],
+      "done_criteria": [
+        "数据集的一手来源、规模单位、标签语义、许可和防泄漏边界明确",
+        "主动决策/时机、记忆写入/检索/使用、联合求证分别有指标分母与基线",
+        "B00-B08 工作包具备依赖、交付、验收、预算和逐包提交/回滚检查点",
+        "中文标注、统计区间、真实模型/QQ 与发布VM边界明确；文档及图门禁记录"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-11-04-proactive-memory-benchmark-plan.md",
+          "result": "Plan drafted against cbcd6f9d3b725f73aee02a4e4c4ca7f5280d52bd. Source-native/persona tracks, causal timing, dual ingestion, lineage, budgets, annotation and finite hard-zero gates specified. Implementation and runtime acceptance NOT RUN."
+        },
+        {
+          "command": "python scripts/check_docs.py; explicit dated-plan local-link/anchor check; feature JSON validation; git diff --cached --check; GitNexus detect-changes all/compare main",
+          "result": "Maintained docs PASS: 127 files / 1360 links / 577 anchors / 0 errors. Dated plan checked separately: 315 lines / 8 local links and anchors / 0 errors; 17 source links registered. Feature IDs unique, original active_feature retained. GitNexus all: 4 files / 3 symbols / 0 processes / LOW; compare main cumulative: 312 files / 461 symbols / 794 processes / CRITICAL, retained without waiver. Only plan and state files changed; model/runtime/platform/VM checks NOT RUN."
+        }
+      ]
+    },
+    {
+      "id": "AOEDE-MNEME-BENCH-IMPL",
+      "name": "Stella 主动参与与记忆系统 Benchmark 实施与验收",
+      "description": "按 B00-B08 顺序建立公开数据与中文联合评测，保留组件/生产等价/真实模型/平台验收边界。",
+      "status": "in_progress",
+      "dependencies": [
+        "AOEDE-MNEME-BENCH-PLAN"
+      ],
+      "scope": [
+        "proactive_eval/ 及 core/evaluation/ 扩展",
+        "memory_eval/ 多数据集、双摄入轨、lineage 与续跑合同",
+        "公开数据manifest、中文标注、tests/aoede 与 tests/evaluation",
+        "日期化报告、CI轻量门禁与受控平台验收"
+      ],
+      "done_criteria": [
+        "B00 冻结数据/协议/主终点与原样基线，每包独立提交",
+        "G0-G6 有对应完成/失败/跳过证据，不用oracle/fixture替代生产等价或模型验收",
+        "B08 仅在明确scope授权下执行真实平台试验，QQ/WebChat 与 Windows 发布VM各自签收",
+        "所有未运行/partial/数据或标注阻塞项明确；未达行为门槛保留 NOT READY"
+      ],
+      "evidence": [
+        {
+          "report": "docs/plans/2026-11-04-proactive-memory-benchmark-plan.md",
+          "result": "Planned only. B00-B08 not started; original AOEDE-MNEME-IMPL remains the sole active feature. No model, Bot, production data/configuration or service operations performed."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b00.md",
+          "result": "B00 complete on codex/proactive-memory-benchmark-implementation. Frozen 14-source registry, actor/scorer/report schemas, endpoints, G0-G7 preregistered targets, annotation and call budgets, and a partial PersonaMem baseline. Both rule and FTS reruns completed 5000/5000 with 33.4% memory precision, 100% retrieval recall, 66.6% pollution, 98.1% mode accuracy, and 0/1558 forbidden activation. Embedding/hybrid and new LoCoMo judge run NOT RUN because fixture/service was not available or authorized. All six schemas and registry validated; actor gold leakage and scored zero denominator were rejected. G0 runner replay/resume checks remain for B01; implementation and product acceptance NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b01.md",
+          "result": "B01 complete on codex/proactive-memory-benchmark-implementation. Five isolated evaluation suites: 40 passed (pytest-asyncio loop-scope deprecation warning); synthetic CLI validate/run passed with wrong gold hash rejected before worker startup, separate actor/scorer subprocesses each completed 1/1. Ruff and docs passed. Only generic JSONL contracts were exercised; When2Speak/Social source adapters, public data, models, product outcomes and platform acceptance remain NOT RUN / NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b01.md",
+          "result": "B01 follow-up hardening: actor plugin path is now included in the actor resume fingerprint. CLI regression verifies a different actor plugin is rejected before it can produce a result. Five isolated evaluation suites: 41 passed (pytest-asyncio loop-scope deprecation warning); Ruff and docs passed. Commit and bilingual PR comment recorded separately."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b02.md",
+          "result": "B02 completed on fixed public When2Speak and Social AI Ambient test revisions. Three deterministic no-memory baselines each scored 21,687/21,687 and 16,222/16,222 rows; all six reports passed schema validation with zero actor/scorer failures. Model calls, memory inputs, and generated outputs were zero. B02 tests 9 passed and Ruff passed. Source labels remain separate from Stella Chinese-persona labels; product behavior, timing, memory, model, and platform acceptance remain NOT READY. Commit e9738e9 is pushed and bilingual PR comment 6629116706 is recorded."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b03.md",
+          "result": "B03 offline PITCH timing and virtual-time mechanism evaluation completed. Fixed PITCH revision 6413b59ac9eca1e056c192a786f059076f91cb74 / SHA-256 02684a4355eb3bf716fe157a66330d2241233504ebe630b8870f263e08a14471; all 384 candidates, 35 conversations, and 1,091 annotations retained; 329 official intersections and 55 conflicts. Segment-start hits 4/329; always-silent misses 329; oracle is non-causal only. Full 384-row report schema PASS (SHA-256 b259f3311549b3477b91b207e88606472591f588a7c42bb04badd90b411157f1). Targeted tests 44 passed with one Python 3.14 asyncio deprecation warning; Ruff and docs passed (127 files / 1,360 links / 577 anchors / 0 errors). No model, Bot, production data/configuration, or platform execution. Commit 152e7e6 is pushed; bilingual PR comment 6630358374 is recorded. Overall benchmark remains NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-11-04-proactive-memory-benchmark-b04.md",
+          "result": "B04 dual-track memory evaluation completed on the production Strata engine (qwen3.8-flash-next-iq2_xs, 8081). The 10/10 LoCoMo scenario matrix ran on both ingestion tracks: controlled (ReplayEnv direct insert, CaptureGate omitted, batch constants overridden, oracle consolidation) and production-equivalent (real AdmissionPolicy, CaptureGate default probe with explicit lease renewal, record_message writer, unmodified batch thresholds, live backend_for roles). Primary run (1600-call budget): 919 calls (consolidation 604 / extract 177 / probe 118 / answer+judge 20), 8,748 s, report MEASURED_IN_SCOPE with 0 errors and schema PASS (SHA-256 f93a3086e6e5e4e6fe9b9c4a1fc677c3cea5aeeef8a1c2a77efa4b78727e4230). An earlier 800-budget run fail-closed at production conv-50 with the error recorded (SHA-256 68fe16b4acfe72a9883d2744e94be60e1d2e381fb8bffb2073a17a096e39ea9d). Findings: the production write side yielded 828 candidates with evidence/claim lineage — all OBSERVING, zero promotions, memories table 0, retrieval empty; 71% consolidation and 99% extract generations truncated at the production 1200-token cap on the thinking engine (batch-ladder retries); answerable QA ~0 with correct adversarial abstention — an empty-retrieval honest lower bound, not a memory capability conclusion. PersonaMem adapter 200/200 ok, forbidden 0, cross-scope leak 0. Lifecycle matrix (edit supersede, delete source_unavailable, expiry REJECTED, idempotent replay, resume fingerprint) is test-covered. B04 fixes included: subprocess plugin fixtures moved to a stdlib-only module (B01 plugin tests green on user-site hosts), budget metering extended to the RoleBackend generate_single_attempt path, and reasoning_effort=none recorded for eval answer/judge calls. Targeted tests 13 B04 / 70 evaluation-dir passed; Ruff and docs gates passed. Embedding/hybrid, LongMemEval, platform and product acceptance remain NOT RUN / NOT READY. Commits c022783 (plugin fixtures) and 4d24a08 (B04 package) are pushed; bilingual PR comment 6779320449 is recorded."
+        },
+        {
+          "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
+          "result": "B05 runner implementation and offline checks completed for rank/boundary only. Pinned MemUse and ChMap inputs verified. ChMap topic_rank: 149 rows (113 scoreable, 36 gold absent), MRR rule 0.1230 / FTS 0.1301; MemUse: 72 positive boundary cases per channel, 0 M3/M4/M5 or duplicate-pack violations. B05 report schema PASS, SHA-256 b465421aa511b9059cb8312c2a6f83ebb3584fee363bc68d05d246ad6a3e505a. Targeted 21 passed; full Python suite 4,399 passed / 34 skipped / 3 existing warnings; Ruff and docs passed (127 files / 1,365 links / 577 anchors / 0 errors). Model tasks joint/pairing/M6 NOT RUN because this run had no explicit endpoint/model identity; overall benchmark remains NOT READY. Commit 09cf14d62cf9131ac15f98b1cd66e4f8b8892390 pushed; bilingual PR comment 6792553536 recorded."
+        },
+        {
+          "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
+          "result": "2026-11-11 bounded real-model B05 samples used the user-provided endpoint http://127.0.0.1:8081/; /v1/models returned qwen3.8-flash-next-iq2_xs and all preflights passed. Isolated reports: joint 12/72 MemUse pairs + 15 ChMap points, 105 rows, 210 cumulative completions; pairing 33/72 pairs, 99 rows, 217 completions; M6 one shortest-history pair, 13 calls, 10 candidates all OBSERVING and zero active memories. All three final reports are MEASURED_IN_SCOPE, schema PASS, zero errors; first-run budget partials were resumed and retained. These sample results do not complete the full benchmark; judge used the same model as reply and M6 had no active retrieval. The 22 earlier one-pair smoke completions bring this session total to 462 model completions. B06/B08 and overall product acceptance remain NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
+          "result": "Full pairing expansion completed in isolated workdir /tmp/stella-pr130-b05-pairing-qwen38-72pairs after the endpoint was restored. Final report status MEASURED_IN_SCOPE / COMPLETE, 216 condition rows, 0 errors, no truncations; final report SHA-256 6a5a891725c0242e96de46730203db804750f571505721f9411c1b907160e938. Total 409 completions (reply 243 / judge 166). Correct verdict: T0 18/72, T3 15/72, T0_GUARD 11/72; unscored: 17, 17, 16. Paired deltas use 55 scoreable items across 20 clusters: T3-T0 -0.0545, 95% CI [-0.1321, 0.0192]; guard-T0 -0.1273, CI [-0.2000, -0.0435]. Two PARTIAL_BUDGET reports caused by the temporary outage remain preserved with their hashes in the B05 report. Full B05, B06/B08 and product acceptance remain NOT READY."
+        },
+        {
+          "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
+          "result": "Full joint expansion completed in isolated workdir /tmp/stella-pr130-b05-joint-qwen38-full on qwen3.8-flash-next-iq2_xs via the user-provided 8081 endpoint. Final report is MEASURED_IN_SCOPE / COMPLETE, 0 errors, no truncations, 828 rows (360 MemUse + 468 ChMap) and SHA-256 846f35f1be8ec493c28fb43802fcb22b58d33b62508ae14134dcfaa85a72cb02. The run used all 72 MemUse pairs and all record indices, which expanded to 156/417 ChMap topic points; 8 partial budgets of 200 calls each were resumed, then 56 calls completed the final report (1,656 total; 828 reply / 828 judge). MemUse integration deltas: M1-M0 +0.4085 (95% CI [0.3000, 0.5303]), MS-M0 +0.2083 ([0.1000, 0.3448]); negative overuse MS-M0 +0.0278 ([-0.0625, 0.1081]). ChMap label_yes callback M1-M0 +0.3939 ([0.2828, 0.4949]); label_no premature callback +0.2807 ([0.1579, 0.4035]); M2 irrelevant-topic intrusion 24/99, delta +0.2078 ([0.1503, 0.2710]). Reply and judge used the same model; M1 is an oracle upper bound. ChMap's remaining 261 points, M6 expansion, embedding/hybrid, B06 blind review, B08 platform acceptance and overall product outcome remain NOT READY. Cumulative B05 real-model completions are 2,527."
+        },
+        {
+          "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
+          "result": "M6 five-pair bounded expansion completed in isolated workdir /tmp/stella-pr130-b05-m6-qwen38-5pairs. It covered the five shortest pairs (10 items, 40 sessions, 390 messages) in 62 model calls / 322.626 seconds; report MEASURED_IN_SCOPE / COMPLETE, 0 errors, 10 judged rows, SHA-256 3d5e24f53ca948c9052ab417f01a024a3dc8409f64d4335172594af4eeb9fb45. The production-equivalent write path yielded 48 candidates, all OBSERVING, zero active memories; positive integration 0/5, negative overuse 1/5 and fabricated recall 1/5. Consolidation/extract truncations were 8/10; extract followed the production fallback. This sample does not prove write-after-read retrieval."
+        },
+        {
+          "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
+          "result": "An isolated M6 full72 attempt in /tmp/stella-pr130-b05-m6-qwen38-full72 stopped at its single 200-call budget (1,597.847 seconds; configured runtime cap 1,800 seconds). It is PARTIAL / PARTIAL_BUDGET with seven positive M6 judge rows from seven pair IDs and no negative rows or paired estimate; role calls: capture_gate_probe 25, consolidation 101, extract 60, reply 7, judge 7. Consolidation/extract truncations: 41/60. The report contains one BudgetExceededError and no other errors, passes the report schema, and has SHA-256 a492903defec0833b9f82d65ba1bee21a5d315f76002e1a705eece09008e2805. The M6 write-side aggregate is absent because the budget exception occurred before run_m6 returned; per-item rows and isolated database/checkpoint remain available for resume. A separate cumulative budget is required before continuing the full dataset. Cumulative B05 model calls are 2,789; the feature stays in_progress and product acceptance remains NOT READY."
         }
       ]
     }

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stella.invalid/schemas/memory-eval-report-2.schema.json",
+  "title": "Stella B04 Memory Evaluation Report",
+  "type": "object",
+  "required": [
+    "report_schema",
+    "generated_at",
+    "run_fingerprint",
+    "fingerprint_inputs",
+    "stage",
+    "status",
+    "errors",
+    "budget",
+    "datasets",
+    "tracks",
+    "limitations"
+  ],
+  "properties": {
+    "report_schema": { "const": "memory-eval-report/2" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "git_head": { "type": ["string", "null"] },
+    "run_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "fingerprint_inputs": { "type": "object" },
+    "stage": { "enum": ["ingest", "qa", "all"] },
+    "status": { "enum": ["NOT_READY", "MEASURED_IN_SCOPE"] },
+    "errors": { "type": "array", "items": { "type": "object" } },
+    "budget": { "type": "object" },
+    "answer_model": { "type": ["object", "null"] },
+    "judge_model": { "type": ["object", "null"] },
+    "datasets": { "type": "object" },
+    "tracks": { "type": "array", "items": { "type": "object" } },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

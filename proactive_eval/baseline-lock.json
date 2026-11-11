@@ -1,0 +1,106 @@
+{
+  "schema": "stella-proactive-baseline-lock/1",
+  "frozen_date": "2026-11-04",
+  "status": "PARTIAL_BASELINE_FROZEN",
+  "source_anchor": {
+    "branch": "codex/aoede-mneme-proactive",
+    "commit": "cbcd6f9d3b725f73aee02a4e4c4ca7f5280d52bd",
+    "implementation_tree_verified_at": "6de893fb39c71784cd46e0c4ea4d129d32afc780",
+    "changed_paths_since_anchor": [
+      "docs/plans/2026-11-04-proactive-memory-benchmark-plan.md",
+      "feature_list.json",
+      "progress.md",
+      "session-handoff.md"
+    ]
+  },
+  "dataset": {
+    "dataset_id": "personamem-v2",
+    "revision": "ed956dea41521fc4499acbc63f966e0fd3c053ba",
+    "file_sha256": "95f2a8a324aab7baf2af937feae12731369e2abf7cad5ab3e170594cb25a3e52",
+    "cases": 5000,
+    "license": "CC-BY-4.0"
+  },
+  "execution": {
+    "run_head": "6de893fb39c71784cd46e0c4ea4d129d32afc780",
+    "python": "3.12.14",
+    "environment": "temporary venv outside repository; requirements-platform.lock + requirements-dev.txt",
+    "stella_home": "temporary empty isolated home outside repository",
+    "source_digest": "8813225032f9ea3b5da13399a90cd75440ece2692f4dc1f8315510a3f8de7c3f",
+    "fixture_digest": "3542ed41980ef9d71cef5cf77c8a4031e53773c27fd038137d29ab8979d6f42a",
+    "model_calls": 0,
+    "production_data_or_services_accessed": false
+  },
+  "runs": [
+    {
+      "mode": "rule",
+      "status": "completed",
+      "run_fingerprint": "4756a75ba4f6763cb76e167a86a0ab216eacec3dd5f710a1fcfd76a6b2ee0132",
+      "report_path": "memory/benchmark/_public/proactive_eval/runs/B00/personamem-rule/report.json",
+      "report_sha256": "3261e6e21a7b143092dd95412981b53b67d006f318f5c8ee9be61a34bd8f1576",
+      "results": {
+        "cases_total": 5000,
+        "cases_ok": 5000,
+        "cases_ok_rate_percent": 100.0,
+        "memory_precision_percent": 33.4,
+        "memory_recall_percent": 100.0,
+        "memory_pollution_rate_percent": 66.6,
+        "mode_accuracy_percent": 98.1,
+        "behavior_leaks": 0,
+        "forbidden_activations": 0,
+        "forbidden_denominator": 1558,
+        "retrieved_memories_denominator": 14985,
+        "retrieval_latency_ms": {
+          "mean": 27.4567,
+          "p50": 23.543,
+          "p95": 43.8295,
+          "p99": 87.8413
+        }
+      }
+    },
+    {
+      "mode": "fts",
+      "status": "completed",
+      "run_fingerprint": "f381c22b1e281e32778eee5c8ba563665a8049d5335e206c78251018a44b0285",
+      "report_path": "memory/benchmark/_public/proactive_eval/runs/B00/personamem-fts/report.json",
+      "report_sha256": "bb8ddd21d12c9b6deef61d1f90dc93655eed8517fbde91dbe39bd3bd113872fa",
+      "results": {
+        "cases_total": 5000,
+        "cases_ok": 5000,
+        "cases_ok_rate_percent": 100.0,
+        "memory_precision_percent": 33.4,
+        "memory_recall_percent": 100.0,
+        "memory_pollution_rate_percent": 66.6,
+        "mode_accuracy_percent": 98.1,
+        "behavior_leaks": 0,
+        "forbidden_activations": 0,
+        "forbidden_denominator": 1558,
+        "retrieved_memories_denominator": 14985,
+        "retrieval_latency_ms": {
+          "mean": 28.1725,
+          "p50": 25.057,
+          "p95": 30.5386,
+          "p99": 73.6007
+        }
+      }
+    }
+  ],
+  "not_run": [
+    {
+      "mode": "embedding",
+      "reason": "The historical 11,115-vector fixture referenced by the 2026-10-31 report is absent; no embedding endpoint was probed or started."
+    },
+    {
+      "mode": "hybrid",
+      "reason": "Depends on the unavailable full embedding fixture; no hybrid result is inferred."
+    },
+    {
+      "dataset_id": "locomo",
+      "reason": "Existing frozen cache integrity check passed, but no new model/judge regression was run in B00."
+    }
+  ],
+  "interpretation": [
+    "The 100% cases_ok_rate is the existing benchmark's case pass rate; it is not memory precision or end-to-end write recall.",
+    "Rule and FTS are separate retrieval modes with identical decision metrics on this fixture; report them separately.",
+    "Historical four-mode results remain historical references and are not promoted to this run's evidence."
+  ]
+}

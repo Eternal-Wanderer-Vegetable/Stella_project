@@ -70,6 +70,7 @@ class EvalLLM:
         *,
         max_tokens: int = 512,
         temperature: float = 0.0,
+        reasoning_effort: str | None = None,
     ) -> dict[str, Any]:
         """一次补全；返回 {text, prompt_tokens, completion_tokens, latency}。"""
         messages: list[dict[str, str]] = []
@@ -83,6 +84,8 @@ class EvalLLM:
             "max_tokens": max_tokens,
             "stream": False,
         }
+        if reasoning_effort:
+            payload["reasoning_effort"] = reasoning_effort
         req = urllib.request.Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),

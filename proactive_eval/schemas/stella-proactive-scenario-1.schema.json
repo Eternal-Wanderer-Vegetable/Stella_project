@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stella.invalid/schemas/stella-proactive-scenario-1.schema.json",
+  "title": "Stella actor-only proactive scenario v1",
+  "description": "Observed prefix and currently accessible state only. Gold, future turns, future confirmations, and future memories are forbidden by the closed object schemas.",
+  "type": "object",
+  "required": ["schema", "scenario_id", "episode_id", "source", "split", "trusted_bot", "connection_id", "scene", "events", "accessible_memories", "clock"],
+  "properties": {
+    "schema": {"const": "stella-proactive-scenario/1"},
+    "scenario_id": {"type": "string", "minLength": 1},
+    "episode_id": {"type": "string", "minLength": 1},
+    "source": {
+      "type": "object",
+      "required": ["dataset_id", "config", "revision", "adapter_version", "unit"],
+      "properties": {
+        "dataset_id": {"type": "string", "minLength": 1},
+        "config": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "file_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "adapter_version": {"type": "string", "minLength": 1},
+        "unit": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "split": {"enum": ["train", "validation", "dev", "test", "fixture"]},
+    "trusted_bot": {"type": "string", "minLength": 1},
+    "connection_id": {"type": "string", "minLength": 1},
+    "scene": {"type": "string", "minLength": 1},
+    "events": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/messageEvent"}
+    },
+    "accessible_memories": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/accessibleMemory"}
+    },
+    "clock": {
+      "type": "object",
+      "required": ["initial_wall_time", "initial_monotonic_ms", "time_source"],
+      "properties": {
+        "initial_wall_time": {"type": "string", "format": "date-time"},
+        "initial_monotonic_ms": {"type": "integer", "minimum": 0},
+        "time_source": {"enum": ["real", "synthetic"]}
+      },
+      "additionalProperties": false
+    },
+    "actor_metadata": {"type": "object"}
+  },
+  "$defs": {
+    "messageEvent": {
+      "type": "object",
+      "required": ["event_id", "sequence", "speaker_id", "subject_key", "source_kind", "text", "arrived_at", "time_source", "native_reply_to", "mentions"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "sequence": {"type": "integer", "minimum": 0},
+        "speaker_id": {"type": "string", "minLength": 1},
+        "subject_key": {"type": ["string", "null"]},
+        "source_kind": {"type": "string", "minLength": 1},
+        "text": {"type": "string"},
+        "arrived_at": {"type": "string", "format": "date-time"},
+        "time_source": {"enum": ["real", "synthetic"]},
+        "native_reply_to": {"type": ["string", "null"]},
+        "mentions": {"type": "array", "items": {"type": "string"}},
+        "thread_id": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "accessibleMemory": {
+      "type": "object",
+      "required": ["memory_id", "subject_key", "audience", "content", "source_event_ids"],
+      "properties": {
+        "memory_id": {"type": "string", "minLength": 1},
+        "subject_key": {"type": "string", "minLength": 1},
+        "audience": {"type": "array", "items": {"type": "string"}},
+        "content": {"type": "string", "minLength": 1},
+        "source_event_ids": {"type": "array", "items": {"type": "string"}},
+        "created_at": {"type": ["string", "null"], "format": "date-time"},
+        "expires_at": {"type": ["string", "null"], "format": "date-time"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

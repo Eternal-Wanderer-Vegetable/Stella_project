@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stella.invalid/schemas/dataset-registry-1.schema.json",
+  "title": "Stella evaluation dataset registry v1",
+  "type": "object",
+  "required": ["schema", "frozen_date", "raw_data_root", "distribution_policy", "datasets"],
+  "properties": {
+    "schema": {"const": "stella-dataset-registry/1"},
+    "frozen_date": {"type": "string", "format": "date"},
+    "raw_data_root": {"type": "string", "minLength": 1},
+    "distribution_policy": {"type": "string", "minLength": 1},
+    "datasets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["dataset_id", "priority", "status", "source", "license", "unit"],
+        "properties": {
+          "dataset_id": {"type": "string", "minLength": 1},
+          "priority": {"type": "string", "pattern": "^P[0-3]"},
+          "status": {"type": "string", "minLength": 1},
+          "source": {
+            "type": "object",
+            "required": ["repository", "url"],
+            "properties": {
+              "repository": {"type": "string", "minLength": 1},
+              "revision": {"type": "string"},
+              "url": {"type": "string", "format": "uri"}
+            },
+            "additionalProperties": true
+          },
+          "license": {"type": "string", "minLength": 1},
+          "unit": {"type": "string", "minLength": 1},
+          "files": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/artifact"}
+          },
+          "configurations": {"type": "array"},
+          "configs": {"type": "array"},
+          "limitations": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "bytes": {"type": "integer", "minimum": 0},
+        "records": {"type": "integer", "minimum": 0},
+        "verified_by": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

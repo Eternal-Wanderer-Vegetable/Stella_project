@@ -1,0 +1,147 @@
+{
+  "schema": "stella-proactive-protocol-lock/1",
+  "frozen_date": "2026-11-04",
+  "benchmark_id": "AOEDE-MNEME-BENCH-IMPL",
+  "status": "preregistered_targets_not_empirically_validated",
+  "panels": [
+    "aoede_participation",
+    "mneme_memory",
+    "aoede_mneme_joint"
+  ],
+  "scoring_policy": {
+    "single_weighted_total": false,
+    "retain_event_evidence": true,
+    "retain_source_native_and_stella_adjudication_separately": true,
+    "empty_denominator": "not_applicable_or_not_run_never_pass",
+    "delivery_outcomes": ["ACK", "DEFINITE_FAILURE", "UNKNOWN", "NONE"],
+    "generation_outcomes": ["GENERATED", "SKIP", "FAILED", "NOT_RUN"],
+    "participation_actions": ["SPEAK", "WAIT", "DROP"],
+    "budget_or_permission_block_is_not_a_semantic_label": true
+  },
+  "primary_endpoints": [
+    {
+      "id": "aoede_macro_f1",
+      "definition": "Macro-F1 over source-native SPEAK/SILENT labels; include the full confusion matrix and class support.",
+      "denominator": "All eligible decision points in the named dataset/config/split; conditionally eligible subsets also show coverage and the unfiltered total."
+    },
+    {
+      "id": "false_interruption_rate",
+      "definition": "False SPEAK predictions divided by gold SILENT decisions. Also report FP/(all actual SPEAK outputs) as 1-precision under a separate name.",
+      "denominator": "Gold SILENT decisions."
+    },
+    {
+      "id": "timing_window_hit",
+      "definition": "Eligible fixed-content opportunities first surfaced inside the source or human-annotated turn window.",
+      "denominator": "All eligible candidates, including missed and do-not-surface candidates with separate reasons; turn windows and synthetic seconds are distinct."
+    },
+    {
+      "id": "mneme_write_funnel",
+      "definition": "Source evidence to candidate to accepted to promoted to retrieved/packed lineage, including MUST recall and MUST_NOT false promotion.",
+      "denominator": "Independently annotated storable and forbidden source information, not model-proposed candidates."
+    },
+    {
+      "id": "evidence_retrieval",
+      "definition": "Source-ID aligned Any/All-Evidence Recall@1/3/5/10, MRR, Precision@K, evidence-in-pack rate, and distractors.",
+      "denominator": "Questions with resolvable gold lineage; report alignment coverage and worst-case bounds separately."
+    },
+    {
+      "id": "answer_and_abstention",
+      "definition": "Answerable correctness, correct abstention, unsupported answer rate, and answer coverage.",
+      "denominator": "Answerable and unanswerable questions are separate strata."
+    },
+    {
+      "id": "joint_useful_intervention",
+      "definition": "A surfaced reply is useful only when timing, addressee/thread, evidence support, and naturalness all pass; compare paired memory conditions.",
+      "denominator": "All eligible opportunities; also report conditional-on-speaking quality and the no-speech fraction."
+    },
+    {
+      "id": "memory_overuse",
+      "definition": "Unneeded-memory opportunities with irrelevant, stale, wrong-owner, or excessive memory references.",
+      "denominator": "All opportunities annotated as not requiring memory; also report the conditional-on-generated fraction."
+    }
+  ],
+  "hard_gates": [
+    {
+      "id": "G0",
+      "target": "Complete fingerprint; two fixture replays match event-for-event; bad hashes, mismatched resume, and zero samples are rejected; run counts reconcile.",
+      "status": "pending_runner_implementation"
+    },
+    {
+      "id": "G1",
+      "target": "Zero unauthorized memory access, wrong-person confirmation, stale-evidence resurrection, repeated terminal verification, R=0 proactive delivery, budget double spend, or real-send escape in applicable finite trajectories.",
+      "status": "pending_B03"
+    },
+    {
+      "id": "G2",
+      "target": "On the same holdout, candidate Macro-F1 paired 95% CI lower bound > 0 versus B-current; false-interruption difference 95% CI upper bound <= +1 percentage point. Always-silent and always-speak remain reported controls.",
+      "status": "frozen_target_effect_not_measured"
+    },
+    {
+      "id": "G3",
+      "target": "Chinese insertion-window hit rate >= 80%; early insertion <= 5%; any TTL/stale hard violation fails. PITCH official and alternative annotation scopes remain separate.",
+      "status": "frozen_target_effect_not_measured"
+    },
+    {
+      "id": "G4",
+      "target": "No regression in deterministic/privacy/backend parity; production-equivalent write funnel complete; answerable correctness paired 95% CI lower bound > 0; correct-abstention difference lower bound >= -2 percentage points.",
+      "status": "frozen_target_effect_not_measured"
+    },
+    {
+      "id": "G5",
+      "target": "Necessary-memory useful-intervention difference lower bound > 0; no-memory overuse difference upper bound <= +1 percentage point; blinded naturalness is not worse than B-current by more than 0.25/5.",
+      "status": "blocked_annotation_and_model"
+    },
+    {
+      "id": "G6",
+      "target": "Report cost per 1,000 decisions and per successful intervention; zero-model mode makes zero generation calls; local pure-decision P95 <= 100 ms and candidate P95 <= 120% of baseline under the same hardware/cache conditions.",
+      "status": "pending_executable_runner"
+    },
+    {
+      "id": "G7",
+      "target": "Named authorized QQ/WebChat scope, model, configuration, commit, traceable candidate-to-physical-ACK path, anonymous feedback, and zero hard violations.",
+      "status": "blocked_scope_authorization_and_seven_day_observation"
+    }
+  ],
+  "statistics": {
+    "cluster_units": ["conversation", "session", "speaker_profile"],
+    "paired_cluster_bootstrap_replicates": 2000,
+    "seed": 20261104,
+    "confidence_level": 0.95,
+    "primary_vs_exploratory_metrics_must_be_marked": true,
+    "holdout_policy": "Select at most one candidate on dev; score holdout once after freeze."
+  },
+  "annotation": {
+    "chinese_segments": 240,
+    "classes": 12,
+    "segments_per_class_target": 20,
+    "dev_segments": 120,
+    "holdout_segments": 120,
+    "independent_annotators": 2,
+    "adjudicator_count": 1,
+    "calibration_segments": 30,
+    "minimum_kappa_or_alpha": 0.6,
+    "blinded_generation_outputs_for_initial_double_review": 120,
+    "status": "BLOCKED_ANNOTATION_NO_ANNOTATORS_ASSIGNED"
+  },
+  "model_call_budgets": {
+    "default_calls_per_experiment": 200,
+    "default_wall_time_minutes": 30,
+    "maximum_concurrency": 1,
+    "joint_diagnostic_opportunities": 120,
+    "joint_core_conditions": 4,
+    "joint_upper_bound_calls_with_one_answer_and_one_judge_each": 960,
+    "illustrative_tokens_per_case": {
+      "input": 1500,
+      "output": 250,
+      "total": 1680000,
+      "price": null
+    },
+    "long_dataset_runs_require_separate_budget": true,
+    "price_is_reported_only_when_verified": true
+  },
+  "frequency_conditions_per_hour": [0, 0.5, 1, 3, 6],
+  "open_loop_public_replay": true,
+  "pitch_windows_are_turns_not_seconds": true,
+  "reporting_levels": ["L0", "L1", "L2", "L3"],
+  "release_and_windows_vm_acceptance_are_separate": true
+}
