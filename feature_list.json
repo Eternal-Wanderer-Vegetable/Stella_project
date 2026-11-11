@@ -2428,6 +2428,10 @@
         {
           "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
           "result": "B05 runner implementation and offline checks completed for rank/boundary only. Pinned MemUse and ChMap inputs verified. ChMap topic_rank: 149 rows (113 scoreable, 36 gold absent), MRR rule 0.1230 / FTS 0.1301; MemUse: 72 positive boundary cases per channel, 0 M3/M4/M5 or duplicate-pack violations. B05 report schema PASS, SHA-256 b465421aa511b9059cb8312c2a6f83ebb3584fee363bc68d05d246ad6a3e505a. Targeted 21 passed; full Python suite 4,399 passed / 34 skipped / 3 existing warnings; Ruff and docs passed (127 files / 1,365 links / 577 anchors / 0 errors). Model tasks joint/pairing/M6 NOT RUN because this run had no explicit endpoint/model identity; overall benchmark remains NOT READY. Commit 09cf14d62cf9131ac15f98b1cd66e4f8b8892390 pushed; bilingual PR comment 6792553536 recorded."
+        },
+        {
+          "report": "docs/reports/2026-11-11-proactive-memory-benchmark-b05.md",
+          "result": "2026-11-11 bounded real-model B05 samples used the user-provided endpoint http://127.0.0.1:8081/; /v1/models returned qwen3.8-flash-next-iq2_xs and all preflights passed. Isolated reports: joint 12/72 MemUse pairs + 15 ChMap points, 105 rows, 210 cumulative completions; pairing 33/72 pairs, 99 rows, 217 completions; M6 one shortest-history pair, 13 calls, 10 candidates all OBSERVING and zero active memories. All three final reports are MEASURED_IN_SCOPE, schema PASS, zero errors; first-run budget partials were resumed and retained. These sample results do not complete the full benchmark; judge used the same model as reply and M6 had no active retrieval. The 22 earlier one-pair smoke completions bring this session total to 462 model completions. B06/B08 and overall product acceptance remain NOT READY."
         }
       ]
     }
